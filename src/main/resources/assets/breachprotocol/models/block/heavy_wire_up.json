@@ -1,0 +1,40 @@
+{
+  "textures": {
+    "wire": "breachprotocol:block/heavy_wire",
+    "particle": "breachprotocol:block/heavy_wire"
+  },
+  "elements": [
+    {
+      "from": [
+        5,
+        11,
+        5
+      ],
+      "to": [
+        11,
+        16,
+        11
+      ],
+      "faces": {
+        "north": {
+          "texture": "#wire"
+        },
+        "south": {
+          "texture": "#wire"
+        },
+        "east": {
+          "texture": "#wire"
+        },
+        "west": {
+          "texture": "#wire"
+        },
+        "up": {
+          "texture": "#wire"
+        },
+        "down": {
+          "texture": "#wire"
+        }
+      }
+    }
+  ]
+}

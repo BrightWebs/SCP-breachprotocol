@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/carpet",
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "wool": "breachprotocol:block/corrosion",
+    "particle": "breachprotocol:block/corrosion"
+  }
+}

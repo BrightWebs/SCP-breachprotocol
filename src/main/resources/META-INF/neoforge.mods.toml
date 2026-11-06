@@ -1,0 +1,32 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+
+[[mods]]
+modId = "${mod_id}"
+version = "${mod_version}"
+displayName = "${mod_name}"
+authors = "${mod_authors}"
+logoFile = "breachprotocol.png"
+credits = "SCP concepts are from the SCP Foundation wiki (scp-wiki.wikidot.com), licensed CC BY-SA 3.0. All models, textures and sounds in this mod are original."
+description = '''${mod_description}
+
+Original Breach Protocol mechanics:
+ - Blink meter (SCP-173 can only move while you blink)
+ - Containment Field Generators that hold anomalies in place, and trigger a site-wide breach alarm when power is cut
+ - Clearance keycards and programmable keycard readers
+ - SCP-096 face trigger, SCP-049's cure, SCP-106's corrosion and ambush'''
+
+[[dependencies.${mod_id}]]
+modId = "neoforge"
+type = "required"
+versionRange = "${neo_version_range}"
+ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "minecraft"
+type = "required"
+versionRange = "${minecraft_version_range}"
+ordering = "NONE"
+side = "BOTH"

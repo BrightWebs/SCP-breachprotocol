@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "breachprotocol:item/depleted_fuel_rod"
+  }
+}

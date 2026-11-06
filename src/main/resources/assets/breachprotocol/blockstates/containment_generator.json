@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "active=false": {
+      "model": "breachprotocol:block/containment_generator"
+    },
+    "active=true": {
+      "model": "breachprotocol:block/containment_generator_on"
+    }
+  }
+}

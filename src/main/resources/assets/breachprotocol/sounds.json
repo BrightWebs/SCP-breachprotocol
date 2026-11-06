@@ -1,0 +1,99 @@
+{
+  "scp173.scrape": {
+    "subtitle": "subtitles.breachprotocol.scp173.scrape",
+    "sounds": [
+      "breachprotocol:scp173/scrape1",
+      "breachprotocol:scp173/scrape2"
+    ]
+  },
+  "scp173.snap": {
+    "subtitle": "subtitles.breachprotocol.scp173.snap",
+    "sounds": [
+      "breachprotocol:scp173/snap"
+    ]
+  },
+  "scp096.cry": {
+    "subtitle": "subtitles.breachprotocol.scp096.cry",
+    "sounds": [
+      "breachprotocol:scp096/cry"
+    ]
+  },
+  "scp096.scream": {
+    "subtitle": "subtitles.breachprotocol.scp096.scream",
+    "sounds": [
+      "breachprotocol:scp096/scream"
+    ]
+  },
+  "scp049.ambient": {
+    "subtitle": "subtitles.breachprotocol.scp049.ambient",
+    "sounds": [
+      "breachprotocol:scp049/ambient"
+    ]
+  },
+  "scp106.emerge": {
+    "subtitle": "subtitles.breachprotocol.scp106.emerge",
+    "sounds": [
+      "breachprotocol:scp106/emerge"
+    ]
+  },
+  "scp106.laugh": {
+    "subtitle": "subtitles.breachprotocol.scp106.laugh",
+    "sounds": [
+      "breachprotocol:scp106/laugh"
+    ]
+  },
+  "scp999.giggle": {
+    "subtitle": "subtitles.breachprotocol.scp999.giggle",
+    "sounds": [
+      "breachprotocol:scp999/giggle"
+    ]
+  },
+  "breach.alarm": {
+    "subtitle": "subtitles.breachprotocol.breach.alarm",
+    "sounds": [
+      "breachprotocol:breach/alarm"
+    ]
+  },
+  "keycard.accept": {
+    "subtitle": "subtitles.breachprotocol.keycard.accept",
+    "sounds": [
+      "breachprotocol:keycard/accept"
+    ]
+  },
+  "keycard.deny": {
+    "subtitle": "subtitles.breachprotocol.keycard.deny",
+    "sounds": [
+      "breachprotocol:keycard/deny"
+    ]
+  },
+  "field.hum": {
+    "subtitle": "subtitles.breachprotocol.field.hum",
+    "sounds": [
+      "breachprotocol:field/hum"
+    ]
+  },
+  "phone.ring": {
+    "subtitle": "subtitles.breachprotocol.phone.ring",
+    "sounds": [
+      "breachprotocol:phone/ring"
+    ]
+  },
+  "phone.message": {
+    "subtitle": "subtitles.breachprotocol.phone.message",
+    "sounds": [
+      "breachprotocol:phone/message"
+    ]
+  },
+  "ascension": {
+    "subtitle": "subtitles.breachprotocol.ascension",
+    "sounds": [
+      "breachprotocol:ascension"
+    ]
+  },
+  "guardian.voice": {
+    "subtitle": "subtitles.breachprotocol.guardian.voice",
+    "sounds": [
+      "breachprotocol:guardian/voice"
+    ]
+  }
+}

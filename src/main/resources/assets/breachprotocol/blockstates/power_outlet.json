@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "powered=false": {
+      "model": "breachprotocol:block/power_outlet"
+    },
+    "powered=true": {
+      "model": "breachprotocol:block/power_outlet_on"
+    }
+  }
+}

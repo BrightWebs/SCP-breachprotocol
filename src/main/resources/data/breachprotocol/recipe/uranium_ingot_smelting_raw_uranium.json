@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:smelting",
+  "category": "misc",
+  "ingredient": {
+    "item": "breachprotocol:raw_uranium"
+  },
+  "result": {
+    "id": "breachprotocol:uranium_ingot"
+  },
+  "experience": 1.0,
+  "cookingtime": 200
+}

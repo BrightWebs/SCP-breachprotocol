@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "GPG",
+    "PBP",
+    "GPG"
+  ],
+  "key": {
+    "G": {
+      "item": "minecraft:glass"
+    },
+    "P": {
+      "item": "minecraft:packed_ice"
+    },
+    "B": {
+      "item": "minecraft:blue_ice"
+    }
+  },
+  "result": {
+    "id": "breachprotocol:coolant_cell",
+    "count": 2
+  }
+}

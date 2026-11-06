@@ -1,0 +1,11 @@
+{
+  "replace": false,
+  "values": [
+    "breachprotocol:keycard_reader",
+    "breachprotocol:containment_generator",
+    "breachprotocol:containment_wall",
+    "breachprotocol:fission_reactor",
+    "breachprotocol:uranium_ore",
+    "breachprotocol:deepslate_uranium_ore"
+  ]
+}

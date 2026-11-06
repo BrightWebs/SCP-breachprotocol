@@ -1,0 +1,16 @@
+{
+  "variants": {
+    "heat=0": {
+      "model": "breachprotocol:block/fission_reactor_0"
+    },
+    "heat=1": {
+      "model": "breachprotocol:block/fission_reactor_1"
+    },
+    "heat=2": {
+      "model": "breachprotocol:block/fission_reactor_2"
+    },
+    "heat=3": {
+      "model": "breachprotocol:block/fission_reactor_3"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "breachprotocol:block/battery_top",
+    "north": "breachprotocol:block/battery_output",
+    "south": "breachprotocol:block/battery_side_4",
+    "east": "breachprotocol:block/battery_side_4",
+    "west": "breachprotocol:block/battery_side_4",
+    "up": "breachprotocol:block/battery_top",
+    "down": "breachprotocol:block/battery_top"
+  }
+}

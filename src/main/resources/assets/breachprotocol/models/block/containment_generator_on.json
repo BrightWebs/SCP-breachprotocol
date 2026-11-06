@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/cube_bottom_top",
+  "textures": {
+    "side": "breachprotocol:block/containment_generator_side_on",
+    "top": "breachprotocol:block/containment_generator_top_on",
+    "bottom": "breachprotocol:block/containment_wall"
+  }
+}
