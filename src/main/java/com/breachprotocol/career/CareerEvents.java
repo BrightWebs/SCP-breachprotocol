@@ -179,7 +179,7 @@ public final class CareerEvents {
      * Gate Guardian smite, SCP-682, ...). If an anomaly just went for SCP-Omega, the death doesn't happen.
      */
     @SubscribeEvent
-    public static void onDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+    public static void onAscendedDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer p) || !Career.isAscended(p)) return;
         net.minecraft.world.entity.Entity src = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
         boolean anomalous = src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src) || com.breachprotocol.compat.UnleashedApi.isRift(src));
