@@ -72,8 +72,8 @@ public final class Calls {
                 "I want to station Epsilon-11 'Nine-Tailed Fox' at your location permanently. It's expensive.",
                 List.of(
                         opt("Approve", (p, d) -> {
-                            Directives.spawnMtf(p, 2, "MTF Epsilon-11 \"Nine-Tailed Fox\"", false);
-                            return stab(p, 3, "They're already on site. Don't get in their way.");
+                            com.breachprotocol.compat.UnleashedApi.deployMtfNow(p, "Volatile");
+                            return stab(p, 3, "An Epsilon-11 Squad is inbound to you. Don't get in their way.");
                         }),
                         opt("Deny", (p, d) -> stab(p, -2, "Your funeral. Possibly literally.")))), true);
 
@@ -202,8 +202,8 @@ public final class Calls {
                             return stab(p, -4, "They're handling it. Badly, but they're handling it.");
                         }),
                         opt("Send Alpha-1", (p, d) -> {
-                            Directives.spawnMtf(p, 2, "MTF Alpha-1 \"Red Right Hand\"", true);
-                            return stab(p, 3, "The Red Right Hand is moving. Two are assigned to you.");
+                            com.breachprotocol.compat.UnleashedApi.deployMtfNow(p, "Abyssal");
+                            return stab(p, 3, "The Red Right Hand is moving. The Alpha-1 Detachment is coming to you.");
                         }))), true);
     }
 
