@@ -1,0 +1,168 @@
+{
+ "format_version": "1.8.0",
+ "animations": {
+  "animation.scp_173.pose0": {
+   "loop": true,
+   "animation_length": 1.0,
+   "bones": {}
+  },
+  "animation.scp_173.pose1": {
+   "loop": true,
+   "animation_length": 1.0,
+   "bones": {
+    "arm_l": {
+     "rotation": [
+      -75,
+      0,
+      10
+     ]
+    },
+    "arm_r": {
+     "rotation": [
+      -68,
+      0,
+      -12
+     ]
+    },
+    "forearm_l": {
+     "rotation": [
+      -20,
+      0,
+      0
+     ]
+    },
+    "forearm_r": {
+     "rotation": [
+      -15,
+      0,
+      0
+     ]
+    },
+    "head": {
+     "rotation": [
+      12,
+      0,
+      -8
+     ]
+    },
+    "torso": {
+     "rotation": [
+      10,
+      0,
+      0
+     ]
+    }
+   }
+  },
+  "animation.scp_173.pose2": {
+   "loop": true,
+   "animation_length": 1.0,
+   "bones": {
+    "head": {
+     "rotation": [
+      0,
+      50,
+      12
+     ]
+    },
+    "neck": {
+     "rotation": [
+      0,
+      15,
+      0
+     ]
+    },
+    "arm_r": {
+     "rotation": [
+      -150,
+      0,
+      -15
+     ]
+    },
+    "forearm_r": {
+     "rotation": [
+      -35,
+      0,
+      0
+     ]
+    },
+    "torso": {
+     "rotation": [
+      0,
+      -12,
+      0
+     ]
+    },
+    "arm_l": {
+     "rotation": [
+      10,
+      0,
+      15
+     ]
+    }
+   }
+  },
+  "animation.scp_173.pose3": {
+   "loop": true,
+   "animation_length": 1.0,
+   "bones": {
+    "torso": {
+     "rotation": [
+      28,
+      0,
+      0
+     ]
+    },
+    "head": {
+     "rotation": [
+      -25,
+      0,
+      0
+     ]
+    },
+    "leg_l": {
+     "rotation": [
+      -25,
+      0,
+      0
+     ]
+    },
+    "leg_r": {
+     "rotation": [
+      18,
+      0,
+      0
+     ]
+    },
+    "arm_l": {
+     "rotation": [
+      -55,
+      0,
+      5
+     ]
+    },
+    "arm_r": {
+     "rotation": [
+      -40,
+      0,
+      -5
+     ]
+    },
+    "forearm_l": {
+     "rotation": [
+      -30,
+      0,
+      0
+     ]
+    },
+    "forearm_r": {
+     "rotation": [
+      -30,
+      0,
+      0
+     ]
+    }
+   }
+  }
+ }
+}

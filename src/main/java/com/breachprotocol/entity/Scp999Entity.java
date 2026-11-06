@@ -30,7 +30,15 @@ import net.minecraft.world.level.Level;
  * SCP-999, the tickle monster. Follows people around, soothes them, and its hugs heal.
  * Standing near it slowly regenerates you and scrubs off SCP-106's corrosion. Loves sweets.
  */
-public class Scp999Entity extends PathfinderMob implements Anomaly {
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.animation.AnimatableManager;
+import software.bernie.geckolib.animation.AnimationController;
+import software.bernie.geckolib.animation.PlayState;
+import software.bernie.geckolib.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;
+
+public class Scp999Entity extends PathfinderMob implements Anomaly , GeoEntity {
     private static final EntityDataAccessor<Integer> HUG = SynchedEntityData.defineId(Scp999Entity.class, EntityDataSerializers.INT);
     private int hugCooldown;
 
@@ -182,5 +190,25 @@ public class Scp999Entity extends PathfinderMob implements Anomaly {
             target = null;
             mob.getNavigation().stop();
         }
+    }
+
+    // ---------------------------------------------------------------- GeckoLib
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
+    }
+
+    private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("animation.scp_999.idle");
+    private static final RawAnimation HOP_ANIM = RawAnimation.begin().thenLoop("animation.scp_999.hop");
+    private static final RawAnimation HUG_ANIM = RawAnimation.begin().thenLoop("animation.scp_999.hug");
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "main", 4, state -> {
+            if (isHugging()) return state.setAndContinue(HUG_ANIM);
+            return state.setAndContinue(state.isMoving() ? HOP_ANIM : IDLE_ANIM);
+        }));
     }
 }

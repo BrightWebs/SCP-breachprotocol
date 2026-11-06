@@ -35,6 +35,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.animation.AnimatableManager;
+import software.bernie.geckolib.animation.AnimationController;
+import software.bernie.geckolib.animation.PlayState;
+import software.bernie.geckolib.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;
 import java.util.*;
 
 /**
@@ -42,7 +49,7 @@ import java.util.*;
  * and it will cross any distance and tear through doors, glass and wood to reach everyone who
  * looked. It ignores everyone else. Carved pumpkins on your head and closed eyes keep you safe.
  */
-public class Scp096Entity extends Monster implements Anomaly {
+public class Scp096Entity extends Monster implements Anomaly , GeoEntity {
     public static final int CALM = 0, TRIGGERED = 1, RAGE = 2;
     private static final EntityDataAccessor<Integer> STATE = SynchedEntityData.defineId(Scp096Entity.class, EntityDataSerializers.INT);
     private static final int WINDUP_TICKS = 110;
@@ -308,5 +315,27 @@ public class Scp096Entity extends Monster implements Anomaly {
             case RAGE -> Component.translatable("message.breachprotocol.terminal.096_rage", targets.size()).withStyle(ChatFormatting.DARK_RED);
             default -> Component.translatable("message.breachprotocol.terminal.096_calm").withStyle(ChatFormatting.GRAY);
         };
+    }
+
+    // ---------------------------------------------------------------- GeckoLib
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
+    }
+
+    private static final RawAnimation CRY_ANIM = RawAnimation.begin().thenLoop("animation.scp_096.cry");
+    private static final RawAnimation WALK_ANIM = RawAnimation.begin().thenLoop("animation.scp_096.walk");
+    private static final RawAnimation TRIGGER_ANIM = RawAnimation.begin().thenLoop("animation.scp_096.triggered");
+    private static final RawAnimation RAGE_ANIM = RawAnimation.begin().thenLoop("animation.scp_096.rage");
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "main", 6, state -> switch (getRageState()) {
+            case TRIGGERED -> state.setAndContinue(TRIGGER_ANIM);
+            case RAGE -> state.setAndContinue(RAGE_ANIM);
+            default -> state.setAndContinue(state.isMoving() ? WALK_ANIM : CRY_ANIM);
+        }));
     }
 }

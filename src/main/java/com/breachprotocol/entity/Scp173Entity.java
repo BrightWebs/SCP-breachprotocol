@@ -31,8 +31,17 @@ import net.minecraft.world.phys.Vec3;
  * SCP-173. Cannot move while any player is watching it. The moment nobody is (blinking,
  * looking away, lights out) it closes distance in a lunge and snaps necks.
  */
-public class Scp173Entity extends Monster implements Anomaly {
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.animation.AnimatableManager;
+import software.bernie.geckolib.animation.AnimationController;
+import software.bernie.geckolib.animation.PlayState;
+import software.bernie.geckolib.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;
+
+public class Scp173Entity extends Monster implements Anomaly , GeoEntity {
     private static final EntityDataAccessor<Boolean> FROZEN = SynchedEntityData.defineId(Scp173Entity.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> STATUE_POSE = SynchedEntityData.defineId(Scp173Entity.class, EntityDataSerializers.INT);
     private static final double OBSERVE_RANGE = 64;
     private float lockedYaw;
     private boolean wasFrozen = false;
@@ -60,6 +69,7 @@ public class Scp173Entity extends Monster implements Anomaly {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(FROZEN, true);
+        builder.define(STATUE_POSE, 0);
     }
 
     @Override
@@ -68,6 +78,10 @@ public class Scp173Entity extends Monster implements Anomaly {
         this.goalSelector.addGoal(7, new WaterAvoidingRandomStrollGoal(this, 0.6));
         this.targetSelector.addGoal(1, new HurtByTargetGoal(this));
         this.targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, false));
+    }
+
+    public int getStatuePose() {
+        return this.entityData.get(STATUE_POSE);
     }
 
     public boolean isFrozen() {
@@ -94,6 +108,7 @@ public class Scp173Entity extends Monster implements Anomaly {
                 getNavigation().stop();
                 setDeltaMovement(0, Math.min(0, getDeltaMovement().y), 0);
             } else if (wasFrozen) {
+                this.entityData.set(STATUE_POSE, (getStatuePose() + 1 + random.nextInt(3)) % 4);
                 lunge();
             }
             wasFrozen = frozen;
@@ -193,5 +208,23 @@ public class Scp173Entity extends Monster implements Anomaly {
     public net.minecraft.network.chat.Component statusNote() {
         return net.minecraft.network.chat.Component.translatable(isFrozen()
                 ? "message.breachprotocol.terminal.173_observed" : "message.breachprotocol.terminal.173_unobserved");
+    }
+
+    // ---------------------------------------------------------------- GeckoLib
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
+    }
+
+    private static final RawAnimation[] POSES = {
+            RawAnimation.begin().thenLoop("animation.scp_173.pose0"), RawAnimation.begin().thenLoop("animation.scp_173.pose1"),
+            RawAnimation.begin().thenLoop("animation.scp_173.pose2"), RawAnimation.begin().thenLoop("animation.scp_173.pose3")};
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        // A statue doesn't move - it just *is* in a new pose every time you look back.
+        controllers.add(new AnimationController<>(this, "pose", 0, state -> state.setAndContinue(POSES[Math.floorMod(getStatuePose(), POSES.length)])));
     }
 }

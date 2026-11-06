@@ -504,9 +504,8 @@ def o5_texture():
 
 if __name__ == "__main__":
     os.makedirs(JAVA_DIR, exist_ok=True); os.makedirs(TEX_DIR, exist_ok=True)
-    for m in MODELS:
-        build(m)
-        print("built", m["cls"], m["tw"], "x", m["th"])
+    # The SCP models now live in gen_geo.py (GeckoLib). This script only paints the
+    # vanilla-humanoid textures (SCP-049-2 and the O5 Overseers).
     zombie_texture()
     o5_texture()
     print("built scp_049_2 + o5 textures")

@@ -27,7 +27,15 @@ import net.minecraft.world.level.Level;
  * Its touch withers. Anyone (player or villager) who dies by its hand is "cured" -
  * they rise again as SCP-049-2 and follow the doctor.
  */
-public class Scp049Entity extends Monster implements Anomaly {
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.animation.AnimatableManager;
+import software.bernie.geckolib.animation.AnimationController;
+import software.bernie.geckolib.animation.PlayState;
+import software.bernie.geckolib.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;
+
+public class Scp049Entity extends Monster implements Anomaly , GeoEntity {
     private static final int LINES = 6;
     private int speechCooldown = 60;
 
@@ -61,6 +69,7 @@ public class Scp049Entity extends Monster implements Anomaly {
 
     @Override
     public boolean doHurtTarget(Entity target) {
+        triggerAnim("attack", "attack");
         boolean hit = super.doHurtTarget(target);
         if (hit && target instanceof LivingEntity living) {
             living.addEffect(new MobEffectInstance(MobEffects.WITHER, 100, 1), this);
@@ -121,5 +130,23 @@ public class Scp049Entity extends Monster implements Anomaly {
     @Override
     public String objectClass() {
         return "Euclid";
+    }
+
+    // ---------------------------------------------------------------- GeckoLib
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
+    }
+
+    private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("animation.scp_049.idle");
+    private static final RawAnimation WALK_ANIM = RawAnimation.begin().thenLoop("animation.scp_049.walk");
+    private static final RawAnimation ATTACK_ANIM = RawAnimation.begin().thenPlay("animation.scp_049.attack");
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "main", 5, state -> state.setAndContinue(state.isMoving() ? WALK_ANIM : IDLE_ANIM)));
+        controllers.add(new AnimationController<>(this, "attack", 2, state -> PlayState.STOP).triggerableAnim("attack", ATTACK_ANIM));
     }
 }

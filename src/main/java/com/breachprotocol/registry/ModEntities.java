@@ -13,10 +13,10 @@ public final class ModEntities {
     public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, BreachProtocol.MODID);
 
     public static final DeferredHolder<EntityType<?>, EntityType<Scp173Entity>> SCP_173 = ENTITIES.register("scp_173",
-            () -> EntityType.Builder.of(Scp173Entity::new, MobCategory.MONSTER).sized(0.9F, 2.2F).fireImmune()
+            () -> EntityType.Builder.of(Scp173Entity::new, MobCategory.MONSTER).sized(0.9F, 2.4F).fireImmune()
                     .clientTrackingRange(10).build("scp_173"));
     public static final DeferredHolder<EntityType<?>, EntityType<Scp096Entity>> SCP_096 = ENTITIES.register("scp_096",
-            () -> EntityType.Builder.of(Scp096Entity::new, MobCategory.MONSTER).sized(0.7F, 2.4F)
+            () -> EntityType.Builder.of(Scp096Entity::new, MobCategory.MONSTER).sized(0.7F, 2.7F)
                     .clientTrackingRange(10).build("scp_096"));
     public static final DeferredHolder<EntityType<?>, EntityType<Scp049Entity>> SCP_049 = ENTITIES.register("scp_049",
             () -> EntityType.Builder.of(Scp049Entity::new, MobCategory.MONSTER).sized(0.6F, 1.95F)
@@ -28,7 +28,7 @@ public final class ModEntities {
             () -> EntityType.Builder.of(Scp106Entity::new, MobCategory.MONSTER).sized(0.6F, 1.9F).fireImmune()
                     .clientTrackingRange(10).build("scp_106"));
     public static final DeferredHolder<EntityType<?>, EntityType<Scp999Entity>> SCP_999 = ENTITIES.register("scp_999",
-            () -> EntityType.Builder.of(Scp999Entity::new, MobCategory.CREATURE).sized(0.9F, 0.85F)
+            () -> EntityType.Builder.of(Scp999Entity::new, MobCategory.CREATURE).sized(1.0F, 0.85F)
                     .clientTrackingRange(8).build("scp_999"));
 
     public static final DeferredHolder<EntityType<?>, EntityType<GateGuardianEntity>> GATE_GUARDIAN = ENTITIES.register("gate_guardian",

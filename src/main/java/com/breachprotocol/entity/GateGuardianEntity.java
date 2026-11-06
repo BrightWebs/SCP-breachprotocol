@@ -23,6 +23,13 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
+import software.bernie.geckolib.animatable.GeoEntity;
+import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
+import software.bernie.geckolib.animation.AnimatableManager;
+import software.bernie.geckolib.animation.AnimationController;
+import software.bernie.geckolib.animation.PlayState;
+import software.bernie.geckolib.animation.RawAnimation;
+import software.bernie.geckolib.util.GeckoLibUtil;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -32,7 +39,7 @@ import java.util.UUID;
  * It cannot be harmed. It warns trespassers once, then strikes them down. The Administrator
  * may pass. The Ascendant is its master, and it kneels.
  */
-public class GateGuardianEntity extends PathfinderMob implements Anomaly {
+public class GateGuardianEntity extends PathfinderMob implements Anomaly , GeoEntity {
     private static final EntityDataAccessor<Boolean> KNEEL = SynchedEntityData.defineId(GateGuardianEntity.class, EntityDataSerializers.BOOLEAN);
     private static final double WARN = 36, STRIKE = 16;
     private final Map<UUID, Long> lastSpoke = new HashMap<>();
@@ -159,5 +166,21 @@ public class GateGuardianEntity extends PathfinderMob implements Anomaly {
     @Override
     public Component statusNote() {
         return Component.literal(isKneeling() ? "(kneeling)" : "(guarding the Gate)").withStyle(ChatFormatting.GOLD);
+    }
+
+    // ---------------------------------------------------------------- GeckoLib
+    private final AnimatableInstanceCache geoCache = GeckoLibUtil.createInstanceCache(this);
+
+    @Override
+    public AnimatableInstanceCache getAnimatableInstanceCache() {
+        return geoCache;
+    }
+
+    private static final RawAnimation IDLE_ANIM = RawAnimation.begin().thenLoop("animation.gate_guardian.idle");
+    private static final RawAnimation KNEEL_ANIM = RawAnimation.begin().thenLoop("animation.gate_guardian.kneel");
+
+    @Override
+    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
+        controllers.add(new AnimationController<>(this, "main", 20, state -> state.setAndContinue(isKneeling() ? KNEEL_ANIM : IDLE_ANIM)));
     }
 }

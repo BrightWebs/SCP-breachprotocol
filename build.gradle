@@ -38,6 +38,24 @@ neoForge {
     }
 }
 
+repositories {
+    maven {
+        name = 'GeckoLib'
+        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content { includeGroupByRegex('software\\.bernie.*') }
+    }
+}
+
+dependencies {
+    // Animation library for entity models. Bundled inside our jar (jar-in-jar), so players need only one file.
+    jarJar(implementation("software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}")) {
+        version {
+            strictly "[${geckolib_version},4.8)"
+            prefer geckolib_version
+        }
+    }
+}
+
 tasks.withType(ProcessResources).configureEach {
     var replaceProperties = [
             minecraft_version      : minecraft_version,
