@@ -100,7 +100,7 @@ public final class CareerEvents {
         if (d.ritualTicks <= 0) ascend(p, d);
     }
 
-    private static void ascend(ServerPlayer p, CareerData d) {
+    public static void ascend(ServerPlayer p, CareerData d) {
         d.ascended = true;
         d.stability = 100;
         d.missions.clear();
