@@ -726,8 +726,9 @@ public class PhoneScreen extends Screen {
         g.blit(PhoneMap.TEXTURE, x, y, w, w, 0, 0, S, S, S, S);
         float k = w / (float) S;
         int cx = PhoneMap.centerX(), cz = PhoneMap.centerZ();
-        java.util.function.IntUnaryOperator toX = wx -> x + Math.round(((wx - cx) / zoom + S / 2F) * k);
-        java.util.function.IntUnaryOperator toY = wz -> y + Math.round(((wz - cz) / zoom + S / 2F) * k);
+        final int mapX = x, mapY = y;
+        java.util.function.IntUnaryOperator toX = wx -> mapX + Math.round(((wx - cx) / zoom + S / 2F) * k);
+        java.util.function.IntUnaryOperator toY = wz -> mapY + Math.round(((wz - cz) / zoom + S / 2F) * k);
         // grid every 64 blocks
         int half = (int) (S / 2F * zoom);
         for (int gx = Math.floorDiv(cx - half, 64) * 64; gx <= cx + half; gx += 64) {
@@ -878,7 +879,8 @@ public class PhoneScreen extends Screen {
             CompoundTag m = ms.getCompound(i);
             String type = m.getString("type");
             int chip = switch (type) {
-                case "RECOVER" -> RED; case "TERMINATE" -> 0xFF8E3BC4; case "CARE" -> 0xFFE58A2A; case "SUPPLY" -> 0xFF2F8FD8; default -> 0xFFB04FE0;
+                case "RECOVER" -> RED; case "TERMINATE" -> 0xFF8E3BC4; case "CARE" -> 0xFFE58A2A; case "SUPPLY" -> 0xFF2F8FD8;
+                case "EXPOSURE" -> 0xFFE5484D; case "DOCUMENT" -> 0xFF3FB8FF; case "FILES" -> 0xFFC8A030; default -> 0xFFB04FE0;
             };
             String desc = m.getString("desc");
             boolean trial = type.equals("FOUNDERS_TRIAL");
@@ -912,7 +914,7 @@ public class PhoneScreen extends Screen {
                 cy += 12;
             }
             final int idx = i;
-            if (type.equals("SUPPLY")) {
+            if (type.equals("SUPPLY") || type.equals("FILES")) {
                 int half = (iw - 4) / 2;
                 pill(g, x + pad, cy, half, 14, "Submit", 0xFF2E9E57, true, () -> send("submit", idx));
                 pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
@@ -1310,6 +1312,9 @@ public class PhoneScreen extends Screen {
         }
         y += 20;
         if (containTab == 1) return drawRifts(g, y, rifts);
+        String siteHere = t().getString("siteHere");
+        small(g, siteHere.isEmpty() ? "NOT AT A SITE  \u00B7  CELLS HERE DON'T COUNT" : "AT " + siteHere.toUpperCase(Locale.ROOT), SX + SW / 2, y - 2, siteHere.isEmpty() ? AMBER : 0xFF5BE36F);
+        y += 9;
         if (list.isEmpty()) { empty(g, y - 20, "All quiet", "No anomalies detected within 64m."); return y + 60; }
         for (Tag tg : list) {
             CompoundTag a = (CompoundTag) tg;
@@ -1324,7 +1329,7 @@ public class PhoneScreen extends Screen {
             int cc = cls.equals("Safe") ? 0xFF3AA860 : cls.equals("Euclid") ? 0xFFC8A030 : 0xFFC0383F;
             rrect(g, x + w - 8 - font.width(cls) - 6, y + 4, font.width(cls) + 6, 10, 4, cc);
             text(g, cls, x + w - 5 - font.width(cls) - 6, y + 5, 0xFFFFFFFF);
-            String status = contained ? (a.getString("n").isEmpty() ? "In cell" : a.getString("n")) : containable ? "Loose" : "Loose, stasis-immune";
+            String status = contained ? (a.getString("n").isEmpty() ? "In cell at " + a.getString("site") : a.getString("n")) : !a.getString("site").isEmpty() ? (containable ? "Loose inside " + a.getString("site") : "Loose, stasis-immune") : containable ? "Loose, outside any site" : "Loose, stasis-immune";
             small(g, status.toUpperCase(Locale.ROOT), x + 20 + (int) (font.width(status.toUpperCase(Locale.ROOT)) * 0.375F), y + 18, contained ? 0xFF7FD6FF : containable ? 0xFFFF7A7A : 0xFF9AA6B2);
             String dist = a.getInt("m") + "m" + vertical(playerDy(a.getInt("y")));
             small(g, dist, x + w - 8 - (int) (font.width(dist) * 0.375F), y + 18, Guide.guidingEntity(id) ? Terminal.BRIGHT : 0xFF7A8794);
@@ -1511,6 +1516,65 @@ public class PhoneScreen extends Screen {
         text(g, "Fused " + fused + " · carried " + carried + " · rank " + Math.min(5, rankClr) + (rankClr >= 6 ? "+" : ""), x + 8, y + 20, MUTED);
         text(g, "The highest one counts.", x + 8, y + 31, 0xFF6F7C88);
         y += 54;
+        // guide panel position: pick a spot on a little screen
+        label(g, "Guide arrow position", x + 2, y);
+        y += 12;
+        card(g, x, y, w, 62);
+        int gw = 72, gh = 44, gx0 = x + 8, gy0 = y + 9;
+        RAW = true;
+        rrect(g, gx0, gy0, gw, gh, 3, 0xFF2A7A44);
+        rrect(g, gx0 + 1, gy0 + 1, gw - 2, gh - 2, 2, 0xFF04100A);
+        RAW = false;
+        for (int a = 0; a < 9; a++) {
+            int cw2 = 18, ch2 = 10, ax = gx0 + 4 + (a % 3) * ((gw - 8 - cw2) / 2), ay = gy0 + 4 + (a / 3) * ((gh - 8 - ch2) / 2);
+            boolean sel = Guide.anchor() == a, hv = over(ax, ay, cw2, ch2);
+            rbox(g, ax, ay, cw2, ch2, 2, sel ? Terminal.SELECT : hv ? 0xFF1E6B3A : 0xFF08180E, sel || hv ? Terminal.SELECT : 0xFF163D24);
+            final int pick = a;
+            hit(ax, ay, cw2, ch2, () -> Guide.setAnchor(pick));
+        }
+        String[] where = {"Top left", "Top", "Top right", "Middle left", "Centre", "Middle right", "Bottom left", "Bottom", "Bottom right"};
+        text(g, where[Guide.anchor()], gx0 + gw + 8, gy0 + 8, 0xFFE8EEF4);
+        small(g, "WHERE THE ARROW SHOWS", gx0 + gw + 8 + (int) (font.width("WHERE THE ARROW SHOWS") * 0.375F), gy0 + 22, MUTED);
+        small(g, "ON YOUR SCREEN", gx0 + gw + 8 + (int) (font.width("ON YOUR SCREEN") * 0.375F), gy0 + 30, MUTED);
+        y += 68;
+
+        // Foundation sites
+        label(g, "Foundation sites", x + 2, y);
+        y += 12;
+        String here = t.getString("siteHere");
+        card(g, x, y, w, 30);
+        text(g, here.isEmpty() ? "Not on Foundation ground" : "You're at " + here, x + 8, y + 5, here.isEmpty() ? AMBER : 0xFF5BE36F);
+        small(g, here.isEmpty() ? "CELLS ONLY COUNT INSIDE A SITE" : "CELLS HERE COUNT AS CONTAINMENT", x + 8 + (int) (font.width(here.isEmpty() ? "CELLS ONLY COUNT INSIDE A SITE" : "CELLS HERE COUNT AS CONTAINMENT") * 0.375F), y + 18, MUTED);
+        y += 34;
+        ListTag siteList = t.getList("sites", Tag.TAG_COMPOUND);
+        for (Tag st0 : siteList) {
+            CompoundTag st = (CompoundTag) st0;
+            card(g, x, y, w, 24);
+            text(g, st.getString("n"), x + 8, y + 3, st.getBoolean("here") ? 0xFF5BE36F : 0xFFE8EEF4);
+            String info = st.getInt("r") + "m @ " + st.getInt("x") + ", " + st.getInt("z") + "  \u00B7  " + st.getString("on");
+            small(g, ellipsize(info, (int) ((w - 60) / 0.75F)), x + 8 + (int) (font.width(ellipsize(info, (int) ((w - 60) / 0.75F))) * 0.375F), y + 14, MUTED);
+            final int si = st.getInt("i");
+            if (st.getBoolean("mine") || rank() >= 6) pill(g, x + w - 46, y + 5, 40, 14, "Remove", RED, true, () -> send("site_remove", si));
+            y += 27;
+        }
+        if (here.isEmpty()) {
+            if (rank() >= 3 || t.getBoolean("ascended")) {
+                small(g, "DECLARE A SITE CENTRED HERE:", SX + SW / 2, y + 1, MUTED);
+                y += 10;
+                int bw2 = (w - 9) / 4;
+                int[] radii = {32, 48, 64, 96};
+                for (int ri = 0; ri < 4; ri++) {
+                    final int idx = ri;
+                    pill(g, x + ri * (bw2 + 3), y, bw2, 14, radii[ri] + "m", 0xFF2E9E57, true, () -> send("site_declare", idx));
+                }
+                y += 20;
+            } else {
+                small(g, "LEVEL 3 CAN DECLARE SITES", SX + SW / 2, y + 1, MUTED);
+                y += 12;
+            }
+        }
+        y += 4;
+
         // linked SCP Unleashed devices
         label(g, "Linked devices", x + 2, y);
         y += 12;

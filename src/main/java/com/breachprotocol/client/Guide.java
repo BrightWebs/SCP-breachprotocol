@@ -23,6 +23,36 @@ public final class Guide {
     private Guide() {}
 
     private static boolean active;
+
+    /** Where the panel sits: 0..8 on a 3x3 grid (0 top-left ... 8 bottom-right). Saved per client. */
+    private static int anchor = -1;
+
+    private static java.nio.file.Path configFile() {
+        return Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("breachprotocol-client.properties");
+    }
+
+    public static int anchor() {
+        if (anchor < 0) {
+            anchor = 5; // middle-right
+            try {
+                java.util.Properties pr = new java.util.Properties();
+                java.nio.file.Path f = configFile();
+                if (java.nio.file.Files.exists(f)) try (var in = java.nio.file.Files.newInputStream(f)) { pr.load(in); }
+                anchor = Mth.clamp(Integer.parseInt(pr.getProperty("guidePosition", "5")), 0, 8);
+            } catch (Exception ignored) {}
+        }
+        return anchor;
+    }
+
+    public static void setAnchor(int a) {
+        anchor = Mth.clamp(a, 0, 8);
+        try {
+            java.util.Properties pr = new java.util.Properties();
+            pr.setProperty("guidePosition", String.valueOf(anchor));
+            java.nio.file.Files.createDirectories(configFile().getParent());
+            try (var out = java.nio.file.Files.newOutputStream(configFile())) { pr.store(out, "Breach Protocol client settings"); }
+        } catch (Exception ignored) {}
+    }
     private static int tx, ty, tz;
     /** When guiding to a creature: its entity id, followed live while it's loaded. -1 = a fixed spot. */
     private static int entityId = -1;
@@ -89,7 +119,9 @@ public final class Guide {
             arrivedAt = 0;
         }
 
-        int w = 82, h = 90, x = g.guiWidth() - w - 6, y = g.guiHeight() / 2 - h / 2;
+        int w = 82, h = 90, a = anchor(), col = a % 3, row = a / 3;
+        int x = col == 0 ? 6 : col == 1 ? g.guiWidth() / 2 - w / 2 : g.guiWidth() - w - 6;
+        int y = row == 0 ? 6 : row == 1 ? g.guiHeight() / 2 - h / 2 : g.guiHeight() - h - 40;
         g.fill(x, y, x + w, y + h, 0xC0020804);
         Terminal.box(g, x, y, w, h, Terminal.MID);
         g.drawString(font, "GUIDE", x + 5, y + 4, Terminal.DIM, false);

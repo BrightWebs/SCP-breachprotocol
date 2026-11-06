@@ -242,6 +242,49 @@ public final class UnleashedApi {
         }
     }
 
+    // ------------------------------------------------------------------ stasis pods
+
+    /** Something SCP Unleashed's stasis pod captured: (level, player, creature). */
+    public interface StasisListener {
+        void captured(ServerLevel level, net.minecraft.world.entity.player.Player user, net.minecraft.world.entity.Mob target);
+    }
+
+    /**
+     * Registers with SCP Unleashed's public addon hook, StasisPods.addCaptureHook, so we hear the
+     * moment a creature is sealed in a stasis pod. Returns false if the hook isn't there.
+     */
+    public static boolean onStasisCapture(StasisListener listener) {
+        Class<?> hook = cls("stasis.StasisPods$CaptureHook");
+        Method add = hook == null ? null : method("stasis.StasisPods", "addCaptureHook", hook);
+        if (add == null) return false;
+        Object proxy = java.lang.reflect.Proxy.newProxyInstance(hook.getClassLoader(), new Class<?>[]{hook}, (obj, m, args) -> {
+            if (m.getName().equals("captured") && args != null && args.length >= 3
+                    && args[0] instanceof ServerLevel l && args[1] instanceof net.minecraft.world.entity.player.Player u && args[2] instanceof net.minecraft.world.entity.Mob t) {
+                try {
+                    listener.captured(l, u, t);
+                } catch (Throwable ex) {
+                    BreachProtocol.LOGGER.error("Stasis capture handling failed", ex);
+                }
+                return null;
+            }
+            return switch (m.getName()) {
+                case "hashCode" -> System.identityHashCode(obj);
+                case "equals" -> obj == args[0];
+                case "toString" -> "BreachProtocolStasisHook";
+                default -> null;
+            };
+        });
+        call(add, null, proxy);
+        return true;
+    }
+
+    /** The anomaly dossier an Anomaly Dossier item holds (its language key), or null. */
+    public static String dossierOf(ItemStack s) {
+        Object doc = call(method("archive.AnomalyDocumentItem", "lookup", ItemStack.class), null, s);
+        Object lang = doc == null ? null : call(method("archive.document.AnomalyDocument", "Lang"), doc);
+        return lang == null ? null : lang.toString();
+    }
+
     // ------------------------------------------------------------------ rifts
 
     /** SCP Unleashed rifts (anything implementing anomaly.Extractable). */

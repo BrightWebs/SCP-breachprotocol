@@ -28,12 +28,15 @@ public final class Photos {
         CareerData d = Career.data(p);
         Vec3 eye = p.getEyePosition(), look = p.getViewVector(1.0F);
         List<String> subjects = new ArrayList<>();
+        java.util.Set<String> types = new java.util.HashSet<>();
         Entity hazard = null;
         for (Entity e : p.level().getEntities(p, p.getBoundingBox().inflate(40), en -> en instanceof LivingEntity)) {
             Vec3 to = e.position().add(0, e.getBbHeight() * 0.7, 0).subtract(eye);
             if (to.length() > 40 || look.dot(to.normalize()) < 0.93 || !p.hasLineOfSight(e)) continue;
             String name = UnleashedApi.isDClass(e) ? UnleashedApi.dclassDesignation(e) : e.getName().getString();
             if (!subjects.contains(name)) subjects.add(name);
+            net.minecraft.resources.ResourceLocation tid = com.breachprotocol.compat.Unleashed.idOf(e);
+            if (tid != null) types.add(tid.getPath());
             if (hazard == null && UnleashedApi.isShyGuy(e) && !UnleashedApi.isBagged(e) && faceInShot(p, e)) hazard = e;
         }
         CareerData.Photo photo = new CareerData.Photo();
@@ -53,6 +56,7 @@ public final class Photos {
         if (photo.hazard) p.displayClientMessage(Component.literal("You saw its face through the lens.").withStyle(ChatFormatting.RED), true);
         // SCP Unleashed's dossier: viewing its face "directly, through a camera or in a photograph" triggers it.
         if (hazard != null && !Career.isAscended(p)) UnleashedApi.reportSighting(hazard, p);
+        Career.onPhoto(p, types);
     }
 
     /** SCP Unleashed's own geometry: 096's face (Scp096Sight.faceOf) turned towards the lens. */

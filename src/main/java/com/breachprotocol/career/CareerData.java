@@ -118,6 +118,14 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public double returnX, returnY, returnZ;
 
     public transient boolean dirty = true;
+    public int testCounter;
+    /** Next time the Council may add an assignment about an anomaly loose near you. */
+    public long nextContext;
+
+    public String nextTestNumber() {
+        dirty = true;
+        return "T-" + (1100 + testCounter++);
+    }
     /** Rifts this player's phone has already alerted them about (entity ids, this session). */
     public final transient java.util.Set<Integer> seenRifts = new java.util.HashSet<>();
 
@@ -168,6 +176,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         t.putBoolean("commendations", true);
         t.putBoolean("ascended", ascended);
         t.putInt("stability", stability);
+        t.putInt("tests", testCounter);
         ListTag msgs = new ListTag();
         for (Message m : messages) {
             CompoundTag mt = new CompoundTag();
@@ -221,6 +230,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         if (!t.getBoolean("commendations")) xp = Rank.values()[Math.max(0, Math.min(Rank.values().length - 1, t.getInt("rank")))].xpRequired; // old XP saves
         ascended = t.getBoolean("ascended");
         stability = t.contains("stability") ? t.getInt("stability") : 70;
+        testCounter = t.getInt("tests");
         messages.clear();
         for (Tag e : t.getList("messages", Tag.TAG_COMPOUND)) {
             CompoundTag mt = (CompoundTag) e;

@@ -24,6 +24,10 @@ public class BreachProtocol {
 
         modBus.addListener(ModEntities::registerAttributes);
         modBus.addListener(ModNetwork::register);
+        modBus.addListener((net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent e) -> e.enqueueWork(() -> {
+            boolean ok = com.breachprotocol.compat.UnleashedApi.onStasisCapture(com.breachprotocol.career.Career::onStasis);
+            LOGGER.info(ok ? "Hooked into SCP Unleashed stasis pods." : "SCP Unleashed stasis hook not found; pods won't count as containment.");
+        }));
         LOGGER.info("Breach Protocol (addon for SCP Unleashed) loaded. The Council is in session.");
     }
 

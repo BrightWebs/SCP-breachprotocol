@@ -4,7 +4,11 @@ import net.minecraft.nbt.CompoundTag;
 
 /** One assignment from the Council. */
 public class Mission {
-    public enum Type { RECOVER, TERMINATE, CARE, SUPPLY, FOUNDERS_TRIAL }
+    /**
+     * EXPOSURE: Class-D testing, stay near a live anomaly and survive. DOCUMENT: photograph it for
+     * its file. FILES: recover Anomaly Dossiers from an Archive Terminal and hand them in.
+     */
+    public enum Type { RECOVER, TERMINATE, CARE, SUPPLY, FOUNDERS_TRIAL, EXPOSURE, DOCUMENT, FILES }
 
     public Type type;
     public String description = "";

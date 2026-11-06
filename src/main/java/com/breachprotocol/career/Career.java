@@ -187,8 +187,51 @@ public final class Career {
 
     // ------------------------------------------------------------------ hooks from gameplay
 
+    /** SCP Unleashed's stasis pod sealed a creature (its capture hook). That's a recovery. */
+    public static void onStasis(ServerLevel level, net.minecraft.world.entity.player.Player user, Mob target) {
+        if (!(user instanceof ServerPlayer p) || !Unleashed.isAnomaly(target)) return;
+        CareerData d = data(p);
+        String designation = Unleashed.designation(target);
+        boolean any = false;
+        for (Mission m : d.missions) {
+            if (m.type == Mission.Type.RECOVER && !m.done() && (m.item.isEmpty() ? m.designation.equals(designation) : Unleashed.is(target, m.item))) {
+                m.progress = m.target;
+                any = true;
+            }
+        }
+        changeStability(p, any ? 4 : 2);
+        if (!any) message(p, O5.O5_6, designation + " sealed in stasis. Get it to a cell before the pod runs out.");
+        d.dirty = true;
+        completeFinished(p);
+        sync(p);
+    }
+
+    /** A phone photo caught these anomaly types: field documentation. */
+    public static void onPhoto(ServerPlayer p, java.util.Set<String> types) {
+        CareerData d = data(p);
+        for (Mission m : d.missions) {
+            if (m.type == Mission.Type.DOCUMENT && !m.done() && types.contains(m.item)) {
+                m.progress = m.target;
+                d.dirty = true;
+            }
+        }
+        completeFinished(p);
+    }
+
     /** Every 5 seconds: anomalies around the player that are now held in a cell. */
     public static void scanContainment(ServerPlayer p) {
+        // an anomaly loose near you, outside every site: the Council hands you something to do about it
+        CareerData cd = data(p);
+        long now = p.level().getGameTime();
+        if (!cd.ascended && cd.getRank() != Rank.ADMINISTRATOR && now >= cd.nextContext && cd.missions.size() <= MAX_MISSIONS && p.level().dimension() == Level.OVERWORLD) {
+            Mob loose = looseNear(p, 48);
+            if (loose != null) {
+                Rank r = cd.getRank();
+                Mission.Type type = r == Rank.CLASS_D || r == Rank.LEVEL_1 ? Mission.Type.EXPOSURE : r == Rank.LEVEL_2 ? Mission.Type.DOCUMENT : Mission.Type.RECOVER;
+                assign(p, type, loose);
+                cd.nextContext = now + 4 * MINUTE;
+            }
+        }
         // new rifts nearby: the phone tells you where
         CareerData d = data(p);
         if (Clearance.linked(p, "rifts")) for (net.minecraft.world.entity.Entity r : p.level().getEntities(p, p.getBoundingBox().inflate(96), UnleashedApi::isRift)) {
@@ -306,22 +349,153 @@ public final class Career {
         return list;
     }
 
+    /** Research materials Level 2 staff are asked to bring in (SCP Unleashed items, with sensible counts). */
+    private static final String[][] RESEARCH = {
+            {"scp_unleashed:energum_dust", "8"}, {"scp_unleashed:scp009_fragment", "2"}, {"scp_unleashed:scp002_specimen", "1"},
+            {"scp_unleashed:player_blood_sample", "2"}, {"scp_unleashed:unstable_fragment_faint", "2"}, {"scp_unleashed:energum_alloy_ingot", "2"}};
+
+    /**
+     * The Council's next assignment. What you get depends on who you are:
+     * Class-D are expendable and get sent at the anomalies; Level 1 keeps the site running; Level 2
+     * researchers document, gather dossiers and research material; Level 3+ recover and terminate;
+     * the higher you go, the less you're put in front of the thing yourself.
+     */
     public static void assignMission(ServerPlayer p) {
         CareerData d = data(p);
         Rank r = d.getRank();
         if (r == Rank.ADMINISTRATOR || d.ascended) return;
+        boolean overworld = p.level().dimension() == Level.OVERWORLD;
+        List<Mission.Type> pool = new ArrayList<>();
+        switch (r) {
+            case CLASS_D -> { pool.addAll(List.of(Mission.Type.EXPOSURE, Mission.Type.EXPOSURE, Mission.Type.EXPOSURE, Mission.Type.TERMINATE, Mission.Type.SUPPLY)); }
+            case LEVEL_1 -> { pool.addAll(List.of(Mission.Type.SUPPLY, Mission.Type.SUPPLY, Mission.Type.CARE, Mission.Type.EXPOSURE)); }
+            case LEVEL_2 -> { pool.addAll(List.of(Mission.Type.DOCUMENT, Mission.Type.DOCUMENT, Mission.Type.FILES, Mission.Type.FILES, Mission.Type.SUPPLY)); }
+            case LEVEL_3 -> { pool.addAll(List.of(Mission.Type.RECOVER, Mission.Type.TERMINATE, Mission.Type.TERMINATE, Mission.Type.DOCUMENT)); }
+            default -> { pool.addAll(List.of(Mission.Type.RECOVER, Mission.Type.RECOVER, Mission.Type.FILES, Mission.Type.SUPPLY)); }
+        }
+        if (!overworld) pool.removeIf(t -> t != Mission.Type.SUPPLY && t != Mission.Type.FILES);
+        if (pool.isEmpty()) pool.add(Mission.Type.SUPPLY);
+        assign(p, pool.get(p.getRandom().nextInt(pool.size())), null);
+    }
+
+    /** A loose anomaly near you, outside every site, that no assignment of yours covers yet. */
+    @org.jetbrains.annotations.Nullable
+    public static Mob looseNear(ServerPlayer p, double range) {
+        CareerData d = data(p);
+        Mob best = null;
+        double bd = range * range;
+        for (Mob m : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(range), Unleashed::isAnomaly)) {
+            if (Sites.at(p.level(), m.blockPosition()) != null || Unleashed.isContained(m)) continue;
+            ResourceLocation id = Unleashed.idOf(m);
+            if (id == null || d.missions.stream().anyMatch(ms -> ms.item.equals(id.getPath()))) continue;
+            if (p.distanceToSqr(m) < bd) { bd = p.distanceToSqr(m); best = m; }
+        }
+        return best;
+    }
+
+    /** Builds one assignment of the given type. {@code focus}: a real anomaly near you to build it around. */
+    public static void assign(ServerPlayer p, Mission.Type type, @org.jetbrains.annotations.Nullable Mob focus) {
+        CareerData d = data(p);
+        Rank r = d.getRank();
         RandomSource rnd = p.getRandom();
         ServerLevel level = p.serverLevel();
-        boolean overworld = level.dimension() == Level.OVERWORLD;
-        List<Mission.Type> pool = new ArrayList<>(List.of(Mission.Type.SUPPLY, Mission.Type.SUPPLY));
-        if (overworld) {
-            pool.add(Mission.Type.TERMINATE);
-            if (r.atLeast(Rank.LEVEL_1)) pool.add(Mission.Type.CARE);
-            if (r.atLeast(Rank.LEVEL_2)) { pool.add(Mission.Type.RECOVER); pool.add(Mission.Type.RECOVER); }
-        }
         Mission m = new Mission();
-        m.type = pool.get(rnd.nextInt(pool.size()));
+        m.type = type;
         m.expires = level.getGameTime() + 25 * MINUTE;
+        if (focus == null && (type == Mission.Type.EXPOSURE || type == Mission.Type.DOCUMENT || type == Mission.Type.RECOVER)) focus = looseNear(p, 64);
+        switch (type) {
+            case EXPOSURE -> {
+                String id;
+                Vec3 spot;
+                if (focus != null) {
+                    id = Unleashed.idOf(focus).getPath();
+                    spot = focus.position();
+                } else {
+                    List<String> opts = new ArrayList<>(List.of(Unleashed.SCP_173, Unleashed.SCP_049, Unleashed.SCP_066, Unleashed.SCP_131, Unleashed.SCP_999));
+                    opts.removeIf(e -> Unleashed.entity(e).isEmpty());
+                    if (opts.isEmpty()) return;
+                    id = opts.get(rnd.nextInt(opts.size()));
+                    spot = surfaceSpot(level, p.blockPosition(), 30, 50, rnd);
+                    if (spot == null) return;
+                    spawnAt(level, Unleashed.entity(id).get(), spot);
+                }
+                m.item = id;
+                m.designation = Unleashed.designation(id);
+                m.target = r == Rank.CLASS_D ? 30 + rnd.nextInt(4) * 10 : 20;
+                m.giver = 5;
+                setPos(m, spot);
+                m.description = "Test " + d.nextTestNumber() + ": stand within 8m of " + m.designation + " for " + m.target + " seconds. Survive. Report what you saw.";
+                message(p, O5.O5_5, personnelId(p) + ", you're on the testing roster. " + m.designation + ", " + m.x + ", " + m.z + ". Get close, stay close, try to come back.");
+            }
+            case DOCUMENT -> {
+                String id;
+                Vec3 spot;
+                if (focus != null) {
+                    id = Unleashed.idOf(focus).getPath();
+                    spot = focus.position();
+                } else {
+                    List<String> opts = new ArrayList<>(List.of(Unleashed.SCP_173, Unleashed.SCP_049, Unleashed.SCP_066, Unleashed.SCP_131, Unleashed.SCP_457, Unleashed.SCP_999));
+                    opts.removeIf(e -> Unleashed.entity(e).isEmpty());
+                    if (opts.isEmpty()) return;
+                    id = opts.get(rnd.nextInt(opts.size()));
+                    spot = surfaceSpot(level, p.blockPosition(), 35, 60, rnd);
+                    if (spot == null) return;
+                    spawnAt(level, Unleashed.entity(id).get(), spot);
+                }
+                m.item = id;
+                m.designation = Unleashed.designation(id);
+                m.target = 1;
+                m.giver = 10;
+                setPos(m, spot);
+                m.description = "Field documentation: photograph " + m.designation + " with your phone camera for its file. Keep your distance.";
+                message(p, O5.O5_10, "The file on " + m.designation + " is thin. It was last seen near " + m.x + ", " + m.z + ". Bring me a photograph." + (id.equals(Unleashed.SCP_096) ? " Not its face." : ""));
+            }
+            case FILES -> {
+                m.item = "scp_unleashed:anomaly_document";
+                m.target = r.atLeast(Rank.LEVEL_4) ? 3 : 2;
+                m.giver = 10;
+                m.description = "Archive work: recover " + m.target + " Anomaly Dossiers from an Archive Terminal and submit them from your phone.";
+                message(p, O5.O5_10, "Our records are incomplete. Pull " + m.target + " dossiers from an Archive Terminal and send them up. Unread, preferably.");
+            }
+            case SUPPLY -> {
+                if (r == Rank.LEVEL_2 || r.atLeast(Rank.LEVEL_4) && rnd.nextBoolean()) {
+                    List<String[]> opts = new ArrayList<>();
+                    for (String[] e : RESEARCH) if (BuiltInRegistries.ITEM.containsKey(ResourceLocation.parse(e[0]))) opts.add(e);
+                    if (!opts.isEmpty()) {
+                        String[] e = opts.get(rnd.nextInt(opts.size()));
+                        m.item = e[0];
+                        m.target = Integer.parseInt(e[1]);
+                        m.giver = 10;
+                        Item it = BuiltInRegistries.ITEM.get(ResourceLocation.parse(m.item));
+                        m.description = "Research requisition: bring in " + m.target + " x " + it.getDescription().getString() + ". Submit from your phone.";
+                        message(p, O5.O5_10, "Research needs material: " + m.target + " " + it.getDescription().getString() + ". The lab is waiting.");
+                        break;
+                    }
+                }
+                fill(p, m, r, rnd, level);
+            }
+            case RECOVER -> {
+                if (focus != null && Unleashed.canBeContained(focus) || focus != null && r.atLeast(Rank.LEVEL_4)) {
+                    String id = Unleashed.idOf(focus).getPath();
+                    m.designation = Unleashed.designation(id);
+                    m.item = id;
+                    m.giver = rnd.nextBoolean() ? 6 : 8;
+                    setPos(m, focus.position());
+                    m.description = "Recover " + m.designation + ", loose near " + m.x + ", " + m.z + ". Seal it in a stasis pod, or hold it in a cell inside one of your sites.";
+                    message(p, O5.seat(m.giver), m.designation + " is loose near you, outside any site. Bring it in: a stasis pod, or a cell on Foundation ground.");
+                } else {
+                    fill(p, m, r, rnd, level);
+                }
+            }
+            default -> fill(p, m, r, rnd, level);
+        }
+        if (m.description.isEmpty()) return;
+        d.missions.add(m);
+        d.dirty = true;
+    }
+
+    /** The original assignment types (supply, terminate, care, recover by rank). */
+    private static void fill(ServerPlayer p, Mission m, Rank r, RandomSource rnd, ServerLevel level) {
         int tier = r.ordinal();
         switch (m.type) {
             case SUPPLY -> {
@@ -382,7 +556,7 @@ public final class Career {
                 if (spot == null) return;
                 spawnAt(level, type.get(), spot);
                 setPos(m, spot);
-                m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". Hold it in a cell built from SCP Unleashed containment blocks, or behind a forcefield.";
+                m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". Seal it in a stasis pod, or hold it in a cell inside one of your sites.";
                 message(p, O5.seat(m.giver), m.designation + " has surfaced outside containment near " + m.x + ", " + m.z + ". Bring it home. "
                         + switch (m.designation) {
                     case "SCP-173" -> "Do not blink.";
@@ -395,9 +569,8 @@ public final class Career {
             }
             default -> {}
         }
-        d.missions.add(m);
-        d.dirty = true;
     }
+
 
     private static void setPos(Mission m, Vec3 v) {
         m.hasPos = true;
@@ -461,6 +634,9 @@ public final class Career {
                 case TERMINATE -> "Confirmed. The doctor's patients are at rest.";
                 case CARE -> "Morale readings across the site are up 40 percent. Thank you.";
                 case RECOVER -> m.designation + " is back where it belongs. Good work.";
+                case EXPOSURE -> "Test logged. You came back. That puts you ahead of the last three.";
+                case DOCUMENT -> "Photograph received. The " + m.designation + " file is better for it.";
+                case FILES -> "Dossiers received and filed. Thank you for not reading them.";
                 default -> "Mission complete.";
             });
             commend(p);
@@ -473,7 +649,7 @@ public final class Career {
         CareerData d = data(p);
         if (index < 0 || index >= d.missions.size()) return false;
         Mission m = d.missions.get(index);
-        if (m.type != Mission.Type.SUPPLY) return false;
+        if (m.type != Mission.Type.SUPPLY && m.type != Mission.Type.FILES) return false;
         Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(m.item));
         int have = 0;
         for (ItemStack s : p.getInventory().items) if (s.is(item)) have += s.getCount();
@@ -536,6 +712,17 @@ public final class Career {
             }
         }
         if (p.tickCount % 100 < 20) scanContainment(p);
+        for (Mission m : d.missions) {
+            if (m.type != Mission.Type.EXPOSURE || m.done()) continue;
+            Mob near = null;
+            for (Mob mob : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(8), mob -> Unleashed.is(mob, m.item) && mob.isAlive())) { near = mob; break; }
+            if (near != null) {
+                m.progress++;
+                setPos(m, near.position());
+                d.dirty = true;
+                if (m.progress % 10 == 0 && !m.done()) p.displayClientMessage(Component.literal("[ TEST ] " + m.progress + "/" + m.target + "s near " + m.designation).withStyle(ChatFormatting.GOLD), true);
+            }
+        }
         for (Mission m : d.missions) {
             if (m.type == Mission.Type.CARE && !m.done()) {
                 var blob = Unleashed.entity(Unleashed.SCP_999);
@@ -637,6 +824,8 @@ public final class Career {
             at.putString("n", UnleashedApi.isShyGuy(mob) && UnleashedApi.isBagged(mob) ? "Hooded" : "");
             at.putInt("m", (int) Math.sqrt(p.distanceToSqr(mob)));
             at.putInt("id", mob.getId());
+            Sites.Site site = Sites.at(p.level(), mob.blockPosition());
+            at.putString("site", site == null ? "" : site.name);
             at.putString("type", net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString());
             at.putInt("x", mob.getBlockX());
             at.putInt("y", mob.getBlockY());
@@ -645,25 +834,26 @@ public final class Career {
         }
         t.put("nearby", near);
         ListTag rifts = new ListTag();
-        for (net.minecraft.world.entity.Entity r : Clearance.linked(p, "rifts") ? p.level().getEntities(p, p.getBoundingBox().inflate(128), UnleashedApi::isRift) : List.<net.minecraft.world.entity.Entity>of()) {
+        for (net.minecraft.world.entity.Entity rift : Clearance.linked(p, "rifts") ? p.level().getEntities(p, p.getBoundingBox().inflate(128), UnleashedApi::isRift) : List.<net.minecraft.world.entity.Entity>of()) {
             if (rifts.size() >= 12) break;
             CompoundTag rt = new CompoundTag();
-            rt.putInt("id", r.getId());
-            rt.putString("type", net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(r.getType()).toString());
-            rt.putString("dk", r.getType().getDescriptionId());
-            rt.putString("rarity", UnleashedApi.riftLabel(r));
-            rt.putInt("colour", UnleashedApi.riftColour(r));
-            rt.putFloat("ex", UnleashedApi.riftExtraction(r));
-            rt.putBoolean("can", UnleashedApi.riftExtractable(r));
-            rt.putInt("x", r.getBlockX());
-            rt.putInt("y", r.getBlockY());
-            rt.putInt("z", r.getBlockZ());
-            rt.putInt("m", (int) Math.sqrt(p.distanceToSqr(r)));
+            rt.putInt("id", rift.getId());
+            rt.putString("type", net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(rift.getType()).toString());
+            rt.putString("dk", rift.getType().getDescriptionId());
+            rt.putString("rarity", UnleashedApi.riftLabel(rift));
+            rt.putInt("colour", UnleashedApi.riftColour(rift));
+            rt.putFloat("ex", UnleashedApi.riftExtraction(rift));
+            rt.putBoolean("can", UnleashedApi.riftExtractable(rift));
+            rt.putInt("x", rift.getBlockX());
+            rt.putInt("y", rift.getBlockY());
+            rt.putInt("z", rift.getBlockZ());
+            rt.putInt("m", (int) Math.sqrt(p.distanceToSqr(rift)));
             rifts.add(rt);
         }
         t.put("rifts", rifts);
         com.breachprotocol.network.Command.addToSync(p, t);
         Contacts.addToSync(p, t);
+        Sites.addToSync(p, t);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));
     }
 

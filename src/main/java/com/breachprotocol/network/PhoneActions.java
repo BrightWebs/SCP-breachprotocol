@@ -41,6 +41,8 @@ public final class PhoneActions {
             case "mtf_report" -> com.breachprotocol.compat.UnleashedApi.mtfReport(p);
             case "mtf_extract" -> Command.extract(p);
             case "orbital_strike" -> Command.orbitalStrike(p);
+            case "site_declare" -> com.breachprotocol.career.Sites.declare(p, arg);
+            case "site_remove" -> com.breachprotocol.career.Sites.remove(p, arg);
             case "link" -> com.breachprotocol.career.Clearance.link(p, arg);
             case "contact_req" -> com.breachprotocol.career.Contacts.request(p, arg);
             case "contact_accept" -> com.breachprotocol.career.Contacts.accept(p, arg);

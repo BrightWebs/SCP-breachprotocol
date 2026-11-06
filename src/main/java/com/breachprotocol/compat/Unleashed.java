@@ -170,12 +170,15 @@ public final class Unleashed {
 
     /**
      * Is this anomaly contained? SCP-096 with its hood on is (SCP Unleashed's own procedure). Anything
-     * else has to be inside a cell: near a working SCP Unleashed forcefield, or boxed in on all four
-     * sides and above by SCP Unleashed containment blocks within 12 blocks.
+     * else has to be in a cell inside a declared Foundation site: near a working SCP Unleashed
+     * forcefield, or boxed in on all four sides and above by SCP Unleashed containment blocks.
+     * (Sealing it in a stasis pod also counts; that's reported by SCP Unleashed's capture hook.)
      */
     public static boolean isContained(Mob mob) {
         if (UnleashedApi.isShyGuy(mob) && UnleashedApi.isBagged(mob)) return true;
         Level l = mob.level();
+        // a cell only counts on Foundation ground: inside a declared site
+        if (com.breachprotocol.career.Sites.at(l, mob.blockPosition()) == null) return false;
         Vec3 c = mob.position().add(0, Math.min(1.0, mob.getBbHeight() / 2), 0);
         if (UnleashedApi.forcefieldNear(l, c, 4)) return true;
         BlockPos start = BlockPos.containing(c);
