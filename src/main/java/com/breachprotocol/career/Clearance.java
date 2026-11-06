@@ -125,12 +125,13 @@ public final class Clearance {
         ItemStack found = ItemStack.EMPTY;
         for (ItemStack s : p.getInventory().items) if (s.is(item)) { found = s; break; }
         if (found.isEmpty() && p.getOffhandItem().is(item)) found = p.getOffhandItem();
-        if (found.isEmpty()) {
+        boolean creative = p.getAbilities().instabuild;
+        if (found.isEmpty() && !creative) {
             p.displayClientMessage(Component.literal("You need a ").append(new ItemStack(item).getHoverName()).append(" in your inventory.").withStyle(ChatFormatting.RED), true);
             return;
         }
-        Component name = found.getHoverName();
-        if (!p.getAbilities().instabuild) found.shrink(1);
+        Component name = found.isEmpty() ? new ItemStack(item).getHoverName() : found.getHoverName();
+        if (!creative) found.shrink(1);
         CustomData.update(DataComponents.CUSTOM_DATA, phone, t -> {
             net.minecraft.nbt.ListTag l = t.getList(LINKS, net.minecraft.nbt.Tag.TAG_STRING);
             l.add(net.minecraft.nbt.StringTag.valueOf(dev[1]));
@@ -153,6 +154,15 @@ public final class Clearance {
                 best = l;
                 slot = i;
             }
+        }
+        if (slot < 0 && p.getAbilities().instabuild && current < 6) {
+            // Creative: no card needed, each tap raises the phone one level (6 = Omni)
+            final int up = current + 1;
+            String card = BuiltInRegistries.ITEM.getKey(Unleashed.keycard(up)).toString();
+            CustomData.update(DataComponents.CUSTOM_DATA, phone, t -> { t.putInt(FUSED, up); t.putString(FUSED_CARD, card); });
+            p.level().playSound(null, p.blockPosition(), SoundEvents.SMITHING_TABLE_USE, SoundSource.PLAYERS, 0.8F, 1.4F);
+            p.displayClientMessage(Component.literal("Creative: phone clearance raised to " + (up >= 6 ? "Omni" : "Level " + up) + ".").withStyle(ChatFormatting.AQUA), true);
+            return;
         }
         if (slot < 0) {
             p.displayClientMessage(Component.literal(current > 0 ? "You aren't carrying a keycard better than the one in your phone." : "You aren't carrying an SCP Unleashed keycard.").withStyle(ChatFormatting.GRAY), true);

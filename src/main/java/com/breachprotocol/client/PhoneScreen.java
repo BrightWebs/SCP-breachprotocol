@@ -1501,6 +1501,12 @@ public class PhoneScreen extends Screen {
         text(g, fused > 0 ? "Fused to this phone" : "No card fused", x + 58, y + 8, fused > 0 ? 0xFF5BE36F : MUTED);
         text(g, fused > 0 ? cardName(fused) + " · swipes scanners" : "Fuse a keycard to keep it", x + 58, y + 20, 0xFF9FB1C2);
         y += 48;
+        if (carried <= fused && t.getBoolean("creative") && fused < 6) {
+            card(g, x, y, w, 26);
+            text(g, "Creative", x + 8, y + 9, AMBER);
+            pill(g, x + w - 96, y + 6, 90, 14, "Fuse " + cardName(fused + 1), AMBER, 0xFF1A1206, true, () -> send("fuse", 0));
+            y += 30;
+        }
         if (carried > fused) {
             rrect(g, x, y, w, 74, 8, 0xFF5A4A1E);
             rrect(g, x + 1, y + 1, w - 2, 72, 7, 0xFF1D1A12);
@@ -1601,7 +1607,10 @@ public class PhoneScreen extends Screen {
             small(g, ellipsize(devs[i][2], (int) ((w - 78) / 0.75F)), x + 25 + (int) (font.width(ellipsize(devs[i][2], (int) ((w - 78) / 0.75F))) * 0.375F), y + 17, MUTED);
             final int idx = i;
             if (on) text(g, "Linked", x + w - 8 - font.width("Linked"), y + 11, 0xFF5BE36F);
-            else pill(g, x + w - 48, y + 8, 42, 14, has ? "Link" : "Need it", 0xFF2E9E57, has, () -> send("link", idx));
+            else {
+                boolean cr = t.getBoolean("creative");
+                pill(g, x + w - 48, y + 8, 42, 14, has || cr ? "Link" : "Need it", 0xFF2E9E57, has || cr, () -> send("link", idx));
+            }
             y += 33;
         }
         y += 4;

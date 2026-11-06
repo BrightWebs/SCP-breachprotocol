@@ -119,6 +119,7 @@ public final class Command {
         t.putInt("fused", Clearance.fused(Clearance.phoneOf(p)));
         t.putInt("carried", Clearance.carried(p));
         t.putInt("rankClr", Clearance.fromRank(p));
+        t.putBoolean("creative", p.getAbilities().instabuild);
         ListTag links = new ListTag();
         for (String l : Clearance.links(Clearance.phoneOf(p))) links.add(net.minecraft.nbt.StringTag.valueOf(l));
         t.put("links", links);

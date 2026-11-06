@@ -712,6 +712,11 @@ public final class Career {
         if (index < 0 || index >= d.missions.size()) return false;
         Mission m = d.missions.get(index);
         if (m.type != Mission.Type.SUPPLY && m.type != Mission.Type.FILES) return false;
+        if (p.getAbilities().instabuild) { // Creative: hand-in without the items
+            m.progress = m.target;
+            completeFinished(p);
+            return true;
+        }
         Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(m.item));
         int have = 0;
         for (ItemStack s : p.getInventory().items) if (s.is(item)) have += s.getCount();
