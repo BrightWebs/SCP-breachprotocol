@@ -630,6 +630,7 @@ public final class Career {
         }
         t.put("nearby", near);
         com.breachprotocol.network.Command.addToSync(p, t);
+        Contacts.addToSync(p, t);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));
     }
 

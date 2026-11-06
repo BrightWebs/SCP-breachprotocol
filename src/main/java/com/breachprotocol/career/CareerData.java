@@ -19,7 +19,34 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public String sender, body;
         public long time;
         public boolean read;
+        /** Sent by this player (player-to-player texts). */
+        public boolean out;
     }
+
+    /** Another player whose number you have, or who asked for yours. */
+    public static class Contact {
+        public String uuid = "", name = "";
+        public long time;
+
+        CompoundTag save() {
+            CompoundTag t = new CompoundTag();
+            t.putString("u", uuid);
+            t.putString("n", name);
+            t.putLong("t", time);
+            return t;
+        }
+
+        static Contact load(CompoundTag t) {
+            Contact c = new Contact();
+            c.uuid = t.getString("u");
+            c.name = t.getString("n");
+            c.time = t.getLong("t");
+            return c;
+        }
+    }
+
+    public final List<Contact> contacts = new ArrayList<>();
+    public final List<Contact> requests = new ArrayList<>();
 
     /** A pending phone call: a decision the caller wants from you. */
     public static class Call {
@@ -146,9 +173,16 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             mt.putString("b", m.body);
             mt.putLong("t", m.time);
             mt.putBoolean("r", m.read);
+            if (m.out) mt.putBoolean("o", true);
             msgs.add(mt);
         }
         t.put("messages", msgs);
+        ListTag cs = new ListTag();
+        for (Contact c : contacts) cs.add(c.save());
+        t.put("contacts", cs);
+        ListTag rq = new ListTag();
+        for (Contact c : requests) rq.add(c.save());
+        t.put("requests", rq);
         ListTag ms = new ListTag();
         for (Mission m : missions) ms.add(m.save());
         t.put("missions", ms);
@@ -193,8 +227,13 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             m.body = mt.getString("b");
             m.time = mt.getLong("t");
             m.read = mt.getBoolean("r");
+            m.out = mt.getBoolean("o");
             messages.add(m);
         }
+        contacts.clear();
+        for (Tag e : t.getList("contacts", Tag.TAG_COMPOUND)) contacts.add(Contact.load((CompoundTag) e));
+        requests.clear();
+        for (Tag e : t.getList("requests", Tag.TAG_COMPOUND)) requests.add(Contact.load((CompoundTag) e));
         missions.clear();
         for (Tag e : t.getList("missions", Tag.TAG_COMPOUND)) missions.add(Mission.load((CompoundTag) e));
         call = null;
