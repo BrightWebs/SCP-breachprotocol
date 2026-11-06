@@ -119,7 +119,7 @@ public final class Guide {
             arrivedAt = 0;
         }
 
-        int w = 82, h = 90, a = anchor(), col = a % 3, row = a / 3;
+        int w = 82, h = 90, anc = anchor(), col = anc % 3, row = anc / 3;
         int x = col == 0 ? 6 : col == 1 ? g.guiWidth() / 2 - w / 2 : g.guiWidth() - w - 6;
         int y = row == 0 ? 6 : row == 1 ? g.guiHeight() / 2 - h / 2 : g.guiHeight() - h - 40;
         g.fill(x, y, x + w, y + h, 0xC0020804);
