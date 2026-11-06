@@ -7,24 +7,56 @@ OUT = os.path.join(ROOT, "src/main/resources/assets/breachprotocol/textures/gui/
 os.makedirs(OUT, exist_ok=True)
 S = 4  # supersample for smooth shapes
 
+def greenify(layer):
+    """Recolour a glyph layer into phosphor green by brightness (white -> bright, colours -> mid)."""
+    px = layer.load()
+    for y in range(layer.height):
+        for x in range(layer.width):
+            r, g, b, a = px[x, y]
+            if a == 0:
+                continue
+            l = (0.3 * r + 0.59 * g + 0.11 * b) / 255.0
+            k = 0.35 + 0.65 * l
+            px[x, y] = (int(110 * k), int(255 * k), int(150 * k), a)
+    return layer
+
 def icon(name, top, bottom, draw_glyph):
     big = Image.new("RGBA", (32 * S, 32 * S), (0, 0, 0, 0))
+    mask = Image.new("L", big.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, big.width - 1, big.height - 1], radius=8 * S, fill=255)
+    # dark glass tile with a faint green lift toward the top
     grad = Image.new("RGBA", big.size)
     gp = grad.load()
     for y in range(big.height):
         k = y / (big.height - 1)
-        c = tuple(int(top[i] * (1 - k) + bottom[i] * k) for i in range(3))
+        c = (int(10 - 6 * k), int(40 - 28 * k), int(22 - 14 * k), 255)
         for x in range(big.width):
-            gp[x, y] = c + (255,)
-    mask = Image.new("L", big.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle([0, 0, big.width - 1, big.height - 1], radius=8 * S, fill=255)
+            gp[x, y] = c
     big.paste(grad, (0, 0), mask)
+    # scanlines on the glass
+    sl = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(sl)
+    for y in range(0, big.height, 2 * S):
+        d.rectangle([0, y, big.width, y + S - 1], fill=(0, 0, 0, 40))
+    sl.putalpha(Image.composite(sl.getchannel("A"), Image.new("L", big.size, 0), mask))
+    big = Image.alpha_composite(big, sl)
+    # glyph in phosphor green, with a soft glow under it
+    glyph = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    draw_glyph(ImageDraw.Draw(glyph), S)
+    glyph = greenify(glyph)
+    glow = glyph.copy().filter(ImageFilter.GaussianBlur(3 * S))
+    ga = glow.getchannel("A").point(lambda v: int(v * 0.9))
+    glow.putalpha(Image.composite(ga, Image.new("L", big.size, 0), mask))
+    big = Image.alpha_composite(big, glow)
+    big = Image.alpha_composite(big, glyph)
+    # glossy top edge and a bright green rim
     shine = Image.new("RGBA", big.size, (0, 0, 0, 0))
-    ImageDraw.Draw(shine).rounded_rectangle([0, 0, big.width - 1, big.height // 2], radius=8 * S, fill=(255, 255, 255, 34))
+    ImageDraw.Draw(shine).rounded_rectangle([0, 0, big.width - 1, big.height // 2], radius=8 * S, fill=(160, 255, 190, 18))
     shine.putalpha(Image.composite(shine.getchannel("A"), Image.new("L", big.size, 0), mask))
     big = Image.alpha_composite(big, shine)
-    d = ImageDraw.Draw(big)
-    draw_glyph(d, S)
+    rim = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    ImageDraw.Draw(rim).rounded_rectangle([S // 2, S // 2, big.width - 1 - S // 2, big.height - 1 - S // 2], radius=8 * S, outline=(92, 255, 138, 210), width=S + S // 2)
+    big = Image.alpha_composite(big, rim)
     small = big.resize((32, 32), Image.LANCZOS)
     px = small.load()
     for y in range(32):
@@ -89,7 +121,8 @@ p = wp.load()
 for y in range(h):
     for x in range(w):
         k = y / h
-        r = int(10 + 22 * k); g = int(18 + 10 * k); b = int(34 + 30 * (1 - abs(0.5 - x / w)))
+        c = 1 - abs(0.5 - x / w)
+        r = int(2 + 4 * k); g = int(14 + 18 * k * c + 6 * c); b = int(8 + 8 * k)
         p[x, y] = (r, g, b, 255)
 grid = Image.new("RGBA", (w, h), (0, 0, 0, 0))
 d = ImageDraw.Draw(grid)
@@ -97,18 +130,18 @@ for row in range(-1, 40):
     for col in range(-1, 12):
         cx = col * 16 + (8 if row % 2 else 0); cy = row * 14
         pts = [(cx + math.cos(math.radians(a)) * 8, cy + math.sin(math.radians(a)) * 8) for a in range(30, 390, 60)]
-        d.polygon(pts, outline=(255, 255, 255, 14))
+        d.polygon(pts, outline=(92, 255, 138, 16))
 wp = Image.alpha_composite(wp, grid)
 glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-ImageDraw.Draw(glow).ellipse([18, 160, 138, 270], fill=(150, 40, 50, 46))
+ImageDraw.Draw(glow).ellipse([14, 156, 142, 274], fill=(40, 200, 100, 60))
 wp = Image.alpha_composite(wp, glow.filter(ImageFilter.GaussianBlur(18)))
 # Original Foundation emblem: an octagonal containment-vault door with a locking wheel
 E = 8
 cx, cy, R = 78 * E, 214 * E, 34 * E
 emb = Image.new("RGBA", (w * E, h * E), (0, 0, 0, 0))
 d = ImageDraw.Draw(emb)
-col = (226, 230, 236, 150)
-dim = (226, 230, 236, 70)
+col = (110, 255, 150, 170)
+dim = (110, 255, 150, 70)
 octa = lambda r: [(cx + r * math.cos(math.radians(22.5 + k * 45)), cy + r * math.sin(math.radians(22.5 + k * 45))) for k in range(8)]
 d.polygon(octa(R), outline=col, width=5 * E)
 d.polygon(octa(R - 9 * E), outline=dim, width=2 * E)
@@ -121,9 +154,15 @@ d.ellipse([cx - rw, cy - rw, cx + rw, cy + rw], outline=col, width=3 * E)
 for k in range(4):
     a = math.radians(45 + k * 90)
     d.line([(cx, cy), (cx + (rw + 5 * E) * math.cos(a), cy + (rw + 5 * E) * math.sin(a))], fill=col, width=3 * E)
-d.ellipse([cx - 4 * E, cy - 4 * E, cx + 4 * E, cy + 4 * E], fill=(170, 30, 36, 190))
+d.ellipse([cx - 4 * E, cy - 4 * E, cx + 4 * E, cy + 4 * E], fill=(190, 255, 205, 220))
 emb = emb.resize((w, h), Image.LANCZOS)
+wp = Image.alpha_composite(wp, emb.filter(ImageFilter.GaussianBlur(2.5)))
 wp = Image.alpha_composite(wp, emb)
+lines = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+dl = ImageDraw.Draw(lines)
+for y in range(0, h, 2):
+    dl.line([(0, y), (w, y)], fill=(0, 0, 0, 34))
+wp = Image.alpha_composite(wp, lines)
 wp.save(os.path.join(OUT, "wallpaper.png"))
 print("phone art generated")
 
@@ -160,3 +199,14 @@ icon("app_archive", (220, 175, 70), (140, 100, 20), archive)
 icon("app_settings", (130, 140, 155), (60, 66, 78), settings)
 icon("app_network", (70, 200, 180), (20, 110, 110), network)
 print("addon app icons generated")
+
+def mapglyph(d, s):
+    # folded map with a pin
+    d.polygon([(5 * s, 9 * s), (12 * s, 6 * s), (20 * s, 9 * s), (27 * s, 6 * s), (27 * s, 23 * s), (20 * s, 26 * s), (12 * s, 23 * s), (5 * s, 26 * s)], fill=W)
+    d.line([(12 * s, 6 * s), (12 * s, 23 * s)], fill=(120, 120, 120, 255), width=s)
+    d.line([(20 * s, 9 * s), (20 * s, 26 * s)], fill=(120, 120, 120, 255), width=s)
+    d.ellipse([13 * s, 9 * s, 21 * s, 17 * s], fill=(40, 40, 40, 255))
+    d.polygon([(14 * s, 15 * s), (20 * s, 15 * s), (17 * s, 21 * s)], fill=(40, 40, 40, 255))
+    d.ellipse([15.5 * s, 11.5 * s, 18.5 * s, 14.5 * s], fill=W)
+icon("app_map", (0, 0, 0), (0, 0, 0), mapglyph)
+print("map icon generated")

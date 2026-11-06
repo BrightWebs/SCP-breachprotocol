@@ -39,7 +39,7 @@ public class PhoneScreen extends Screen {
     private static final ResourceLocation WALLPAPER = tex("wallpaper");
     private static ResourceLocation tex(String n) { return BreachProtocol.id("textures/gui/phone/" + n + ".png"); }
 
-    private enum View { HOME, RECENTS, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE }
+    private enum View { HOME, RECENTS, MAP, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE }
 
     private record App(String icon, String label, View view, int accent, IntPredicate allowed) {}
 
@@ -55,7 +55,8 @@ public class PhoneScreen extends Screen {
     private static final App NETWORK = new App("app_network", "Network", View.NETWORK, 0xFF1A8A80, c -> c >= 5);
     private static final App SITE = new App("app_site01", "Site-01", View.SITE, 0xFF7A35C4, c -> false);
     private static final App SETTINGS = new App("app_settings", "Settings", View.SETTINGS, 0xFF4A525E, c -> true);
-    private static final List<App> GRID = List.of(CAMERA, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
+    private static final App MAP = new App("app_map", "Map", View.MAP, 0xFF2E8F4A, c -> true);
+    private static final List<App> GRID = List.of(CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
     private static final List<App> DOCK = List.of(PHONE, MESSAGES, MISSIONS, CAMERA);
 
     private static final Deque<App> RECENT = new ArrayDeque<>();
@@ -131,12 +132,17 @@ public class PhoneScreen extends Screen {
 
     // ================================================================ drawing helpers
 
-    private static void rect(GuiGraphics g, int x, int y, int w, int h, int c) { g.fill(x, y, x + w, y + h, Terminal.map(c)); }
+    /** RAW: draw real colours (the phone hardware). ROUND: keep rounded corners (home screen, bars). */
+    private static boolean RAW, ROUND;
+
+    private static int col(int c) { return RAW ? c : Terminal.map(c); }
+
+    private static void rect(GuiGraphics g, int x, int y, int w, int h, int c) { g.fill(x, y, x + w, y + h, col(c)); }
 
     /** Terminal style: square edges (r is ignored except for tiny 1px bevels). */
     private static void rrect(GuiGraphics g, int x, int y, int w, int h, int r, int c) {
-        c = Terminal.map(c);
-        r = Math.min(r > 0 ? 1 : 0, Math.min(w, h) / 2);
+        c = col(c);
+        r = Math.min(ROUND || RAW ? r : r > 0 ? 1 : 0, Math.min(w, h) / 2);
         g.fill(x + r, y, x + w - r, y + h, c);
         for (int i = 0; i < r; i++) {
             int inset = r - (int) Math.round(Math.sqrt(r * r - (r - i - 0.5) * (r - i - 0.5)));
@@ -150,7 +156,7 @@ public class PhoneScreen extends Screen {
     }
 
     private static void circle(GuiGraphics g, int cx, int cy, int r, int c) {
-        c = Terminal.map(c);
+        c = col(c);
         for (int dy = -r; dy < r; dy++) {
             int dx = (int) Math.round(Math.sqrt(r * r - (dy + 0.5) * (dy + 0.5)));
             g.fill(cx - dx, cy + dy, cx + dx, cy + dy + 1, c);
@@ -296,6 +302,7 @@ public class PhoneScreen extends Screen {
             case COMMAND -> COMMAND;
             case NETWORK -> NETWORK;
             case SITE -> SITE;
+            case MAP -> MAP;
             default -> null;
         };
     }
@@ -325,21 +332,28 @@ public class PhoneScreen extends Screen {
         g.pose().translate(ox, oy, 0);
         g.pose().scale(scale, scale, 1);
 
+        // the hardware keeps its real look
+        RAW = true;
         rrect(g, -2, -2, PW + 4, PH + 4, 26, 0xFF2A2E37);
         rrect(g, 0, 0, PW, PH, 24, 0xFF1A1D24);
         rect(g, -3, 74, 2, 24, 0xFF2A2E37);
         rect(g, PW + 1, 90, 2, 34, 0xFF2A2E37);
-        g.fill(SX, SY, SX + SW, SY + SH, Terminal.BG);
+        rrect(g, SX, SY, SW, SH, 18, Terminal.BG);
+        RAW = false;
 
         scissor(g, SX, SY, SW, SH);
+        boolean phone = view == View.HOME || view == View.RECENTS;
+        ROUND = phone;
         switch (view) {
             case HOME -> drawHome(g);
             case RECENTS -> drawRecents(g);
             default -> drawApp(g);
         }
+        ROUND = true;
         drawStatusBar(g);
         drawNavBar(g);
-        Terminal.scanlines(g, SX, SY, SW, SH);
+        ROUND = false;
+        if (!phone) Terminal.scanlines(g, SX, SY + STATUS, SW, SH - STATUS - NAV);
         g.disableScissor();
 
         if (!hover.isEmpty()) {
@@ -356,119 +370,100 @@ public class PhoneScreen extends Screen {
     }
 
     private void drawStatusBar(GuiGraphics g) {
-        g.fill(SX, SY, SX + SW, SY + STATUS, Terminal.BG);
-        Terminal.dashes(g, SX + 4, SY + STATUS - 1, SW - 8, Terminal.LINE);
-        text(g, clock(), SX + 8, SY + 3, Terminal.MID);
+        if (view != View.HOME && view != View.CAMERA && view != View.CALL && view != View.RECENTS) rect(g, SX, SY, SW, STATUS, 0xFF0E131A);
+        text(g, clock(), SX + 12, SY + 3, 0xFFFFFFFF);
         String c = clrLabel(clr());
-        int col = clr() >= 6 ? Terminal.BRIGHT : clr() >= 4 ? Terminal.AMBER : Terminal.GREEN;
-        String tag = "[" + c + "]";
-        int x = SX + SW - 8 - font.width(tag);
-        g.drawString(font, tag, x, SY + 3, col, false);
-        // signal bars
-        for (int i = 0; i < 3; i++) g.fill(x - 12 + i * 3, SY + 9 - i * 2, x - 10 + i * 3, SY + 11, Terminal.MID);
+        int cw = font.width(c) + 6, cx = SX + SW - 36 - cw;
+        rrect(g, cx, SY + 2, cw, 10, 3, clrColor(clr()));
+        rrect(g, cx + 1, SY + 3, cw - 2, 8, 2, 0xFF0B1118);
+        text(g, c, cx + 3, SY + 3, clrColor(clr()));
+        int x = SX + SW - 30;
+        rrect(g, x, SY + 4, 14, 7, 2, 0xFFC8D2DC);
+        rect(g, x + 1, SY + 5, 10, 5, 0xFF5BE36F);
+        rect(g, x + 14, SY + 6, 1, 3, 0xFFC8D2DC);
+        for (int i = 0; i < 3; i++) rect(g, x + 18 + i * 3, SY + 9 - i * 2, 2, 2 + i * 2, 0xFFFFFFFF);
     }
 
     /** The three hardware buttons: Back, Home, Recents. */
     private void drawNavBar(GuiGraphics g) {
         int y = SY + SH - NAV;
-        g.fill(SX, y, SX + SW, y + NAV, Terminal.BG);
-        Terminal.dashes(g, SX + 4, y, SW - 8, Terminal.LINE);
-        int third = SW / 3, ty = y + (NAV - 8) / 2;
-        String[] keys = {"[<]", "[O]", "[=]"};
-        Runnable[] acts = {this::goBack, this::goHome, () -> { if (view == View.RECENTS) goBack(); else go(View.RECENTS); }};
-        for (int i = 0; i < 3; i++) {
-            int bx = SX + i * third;
-            boolean h = over(bx, y, third, NAV);
-            if (h) g.fill(bx + 8, y + 3, bx + third - 8, y + NAV - 3, Terminal.SELECT);
-            g.drawString(font, keys[i], bx + third / 2 - font.width(keys[i]) / 2, ty, h ? Terminal.ON_SELECT : Terminal.MID, false);
-            hit(bx, y, third, NAV, acts[i]);
+        rect(g, SX, y, SW, NAV, 0xFF06090D);
+        rect(g, SX, y, SW, 1, 0xFF141B24);
+        int third = SW / 3, cy = y + NAV / 2;
+        // back
+        int bx = SX + third / 2;
+        boolean hb = over(SX, y, third, NAV);
+        int cb = hb ? 0xFFFFFFFF : 0xFFC8D2DC;
+        for (int i = 0; i < 5; i++) {
+            rect(g, bx + i - 2, cy - i, 2, 1, cb);
+            rect(g, bx + i - 2, cy + i, 2, 1, cb);
         }
+        hit(SX, y, third, NAV, this::goBack);
+        // home
+        int hx = SX + third + third / 2;
+        ring(g, hx, cy, 6, over(SX + third, y, third, NAV) ? 0xFFFFFFFF : 0xFFE8EEF4);
+        hit(SX + third, y, third, NAV, this::goHome);
+        // recents
+        int rx = SX + 2 * third + third / 2;
+        int cr = over(SX + 2 * third, y, third, NAV) ? 0xFFFFFFFF : 0xFFC8D2DC;
+        rect(g, rx - 5, cy - 5, 10, 1, cr); rect(g, rx - 5, cy + 4, 10, 1, cr);
+        rect(g, rx - 5, cy - 5, 1, 10, cr); rect(g, rx + 4, cy - 5, 1, 10, cr);
+        hit(SX + 2 * third, y, third, NAV, () -> { if (view == View.RECENTS) goBack(); else go(View.RECENTS); });
     }
 
     // ---------------------------------------------------------------- home
 
-    private static final String[] MOTD = {
-            "Keep your card on you. Doors don't argue.",
-            "If it moved while you blinked, report it.",
-            "Hydrate. Then check the cell seals again.",
-            "Lost personnel are not 'probably fine'.",
-            "Unread orders are still orders.",
-            "Do not feed anything you can't name.",
-            "The quiet ones are on the Keter list."};
-
     private void drawHome(GuiGraphics g) {
-        int x = SX + 6, w = SW - 12, y = SY + STATUS + 5;
-        // banner
-        g.pose().pushPose();
-        g.pose().translate(x + 1, y + 1, 0);
-        g.pose().scale(2F, 2F, 1);
-        g.drawString(font, "FOUNDATION", 0, 0, 0xFF0C3A1C, false);
-        g.pose().translate(-0.5F, -0.5F, 0);
-        g.drawString(font, "FOUNDATION", 0, 0, Terminal.GREEN, false);
-        g.pose().popPose();
-        y += 19;
-        small(g, "SECURE TERMINAL  \u00B7  SITE DAY " + (t().getLong("now") / 24000 + 1), SX + SW / 2, y, Terminal.DIM);
-        y += 8;
-        small(g, ellipsize(t().getString("title").toUpperCase(Locale.ROOT), (int) ((SW - 12) / 0.75F)), SX + SW / 2, y, Terminal.MID);
-        y += 11;
+        g.blit(WALLPAPER, SX, SY, SW, SH, 0, 0, 156, 300, 156, 300);
+        big(g, clock(), SX + SW / 2, SY + 24, 3.2F, 0xFFFFFFFF);
+        long day = t().getLong("now") / 24000 + 1;
+        small(g, "SITE DAY " + day, SX + SW / 2, SY + 52, 0xFF9FB1C2);
+        small(g, ellipsize(t().getString("title"), (int) ((SW - 16) / 0.75F)), SX + SW / 2, SY + 60, 0xFFD6E0EA);
 
-        // menu
-        List<App> apps = new ArrayList<>();
-        for (App a : List.of(PHONE, MESSAGES, MISSIONS, CAMERA, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS)) if (allowed(a)) apps.add(a);
-        int rowH = 11, menuH = apps.size() * rowH + 10;
-        panel(g, "Modules", x, y, w, menuH);
-        int ry = y + 8;
-        for (App a : apps) {
-            boolean hov = over(x + 2, ry, w - 4, rowH);
-            if (hov) g.fill(x + 3, ry, x + w - 3, ry + rowH - 1, Terminal.SELECT);
-            int ink = hov ? Terminal.ON_SELECT : Terminal.GREEN;
-            g.drawString(font, (hov ? "> " : "  ") + a.label().toUpperCase(Locale.ROOT), x + 5, ry + 1, ink, false);
-            int b = badge(a);
-            if (b > 0) {
-                String bt = "[" + (b > 9 ? "9+" : b) + "]";
-                g.drawString(font, bt, x + w - 6 - font.width(bt), ry + 1, hov ? Terminal.ON_SELECT : a == PHONE || a == GALLERY ? Terminal.RED : Terminal.AMBER, false);
+        int ny = SY + 72;
+        if (t().contains("callText")) {
+            rrect(g, SX + 8, ny, SW - 16, 26, 9, over(SX + 8, ny, SW - 16, 26) ? 0xEE1F6E3A : 0xDD17502C);
+            text(g, "\u260E Incoming call", SX + 14, ny + 4, 0xFFB8FFCC);
+            text(g, ellipsize(t().getString("callFrom"), SW - 30), SX + 14, ny + 14, 0xFFFFFFFF);
+            hit(SX + 8, ny, SW - 16, 26, () -> go(View.CALL));
+        } else {
+            ListTag msgs = t().getList("messages", Tag.TAG_COMPOUND);
+            if (!msgs.isEmpty()) {
+                CompoundTag m = msgs.getCompound(0);
+                rrect(g, SX + 8, ny, SW - 16, 26, 9, over(SX + 8, ny, SW - 16, 26) ? 0xEE2A3340 : 0xD0141A22);
+                text(g, ellipsize(seatOf(m.getString("s")) + " " + nick(m.getString("s")), SW - 30), SX + 14, ny + 4, m.getBoolean("r") ? 0xFF9FB0C0 : 0xFF7FE0FF);
+                text(g, ellipsize(m.getString("b"), SW - 30), SX + 14, ny + 14, 0xFFE0E6EC);
+                final String sender = m.getString("s");
+                hit(SX + 8, ny, SW - 16, 26, () -> { thread = sender; go(View.THREAD); });
             }
-            hit(x + 2, ry, w - 4, rowH, () -> openApp(a));
-            ry += rowH;
         }
-        y += menuH + 5;
 
-        // system log
-        int bottom = SY + SH - NAV - 4;
-        int logH = bottom - y;
-        if (logH < 30) return;
-        panel(g, "System log", x, y, w, logH);
-        List<String[]> log = new ArrayList<>();
-        log.add(new String[]{" OK ", "CLEARANCE " + clrLabel(clr())});
-        int un = unread();
-        log.add(new String[]{un > 0 ? "MSG " : " OK ", un > 0 ? un + " UNREAD MESSAGE" + (un == 1 ? "" : "S") : "NO NEW MESSAGES"});
-        int ms = t().getList("missions", Tag.TAG_COMPOUND).size();
-        log.add(new String[]{ms > 0 ? "TASK" : " OK ", ms > 0 ? ms + " ACTIVE ASSIGNMENT" + (ms == 1 ? "" : "S") : "NO ASSIGNMENTS"});
-        int rq = t().getList("requestList", Tag.TAG_COMPOUND).size();
-        if (rq > 0) log.add(new String[]{"PHON", rq + " NUMBER REQUEST" + (rq == 1 ? "" : "S")});
-        if (t().contains("callText")) log.add(new String[]{" !! ", "INCOMING CALL: " + seatOf(t().getString("callFrom"))});
-        int near = t().getList("nearby", Tag.TAG_COMPOUND).size();
-        log.add(new String[]{near > 0 ? "WARN" : " OK ", near > 0 ? near + " ANOMAL" + (near == 1 ? "Y" : "IES") + " WITHIN 64M" : "NO ANOMALIES NEARBY"});
-        int ly = y + 9;
-        for (String[] l : log) {
-            if (ly + 8 > bottom - 14) break;
-            int st = l[0].equals(" OK ") ? Terminal.GREEN : l[0].equals(" !! ") || l[0].equals("WARN") ? Terminal.RED : Terminal.AMBER;
-            g.drawString(font, "[", x + 4, ly, Terminal.DIM, false);
-            g.drawString(font, l[0], x + 9, ly, st, false);
-            g.drawString(font, "]", x + 9 + font.width("WARN") + 1, ly, Terminal.DIM, false);
-            g.pose().pushPose();
-            g.pose().translate(x + 36, ly + 1, 0);
-            g.pose().scale(0.75F, 0.75F, 1);
-            g.drawString(font, ellipsize(l[1], (int) ((w - 42) / 0.75F)), 0, 0, Terminal.MID, false);
-            g.pose().popPose();
-            ly += 10;
+        List<App> apps = new ArrayList<>();
+        for (App a : GRID) if (allowed(a) && !DOCK.contains(a)) apps.add(a);
+        int cols = 4, cell = (SW - 8) / cols;
+        App hovered = null;
+        int hx = 0, hy = 0;
+        for (int i = 0; i < apps.size(); i++) {
+            int x = SX + 4 + (i % cols) * cell + (cell - 28) / 2, y = SY + 106 + (i / cols) * 44;
+            if (drawIcon(g, apps.get(i), x, y, cell)) { hovered = apps.get(i); hx = x; hy = y; }
         }
-        String motd = "MOTD: " + MOTD[(int) ((t().getLong("now") / 6000) % MOTD.length)];
-        g.pose().pushPose();
-        g.pose().translate(x + 5, bottom - 10, 0);
-        g.pose().scale(0.75F, 0.75F, 1);
-        g.drawString(font, ellipsize(motd, (int) ((w - 10) / 0.75F)), 0, 0, Terminal.DIM, false);
-        g.pose().popPose();
+        small(g, "FOUNDATION SECURE NETWORK", SX + SW / 2, SY + SH - NAV - 58, 0x99C8D2DC);
+        int dy = SY + SH - NAV - 44;
+        rrect(g, SX + 6, dy, SW - 12, 40, 14, 0x55FFFFFF);
+        int dc = (SW - 12) / DOCK.size();
+        for (int i = 0; i < DOCK.size(); i++) {
+            int x = SX + 6 + i * dc + (dc - 28) / 2;
+            if (drawIcon(g, DOCK.get(i), x, dy + 6, 0)) { hovered = DOCK.get(i); hx = x; hy = dy + 6; }
+        }
+        if (hovered != null) {
+            // name bubble above the icon you're pointing at
+            String n = hovered.label();
+            int bw = font.width(n) + 10, bx = Mth.clamp(hx + 14 - bw / 2, SX + 3, SX + SW - 3 - bw), by = hy - 17;
+            rrect(g, bx, by, bw, 13, 6, 0xF0F2F5F8);
+            rect(g, hx + 12, by + 13, 4, 1, 0xF0F2F5F8);
+            rect(g, hx + 13, by + 14, 2, 1, 0xF0F2F5F8);
+            text(g, n, bx + 5, by + 3, 0xFF10161D);
+        }
     }
 
     /** Camera isn't a screen: it puts the phone down and gives you the viewfinder. */
@@ -509,19 +504,21 @@ public class PhoneScreen extends Screen {
     }
 
     private void drawRecents(GuiGraphics g) {
-        int x = SX + 6, w = SW - 12, y = SY + STATUS + 6;
+        rect(g, SX, SY, SW, SH, 0xF0070A0E);
+        textC(g, "Recent apps", SX + SW / 2, SY + 22, MUTED);
+        int y = SY + 38;
         List<App> list = new ArrayList<>();
-        for (App a : RECENT) if (allowed(a) && a != CAMERA) list.add(a);
-        int h = Math.max(40, list.size() * 14 + 12);
-        panel(g, "Recent", x, y, w, h);
-        if (list.isEmpty()) small(g, "NOTHING OPEN YET", SX + SW / 2, y + 20, Terminal.DIM);
-        int ry = y + 9;
+        for (App a : RECENT) if (allowed(a)) list.add(a);
+        if (list.isEmpty()) textC(g, "Nothing open yet.", SX + SW / 2, y + 40, 0xFF6F7C88);
         for (App a : list) {
-            boolean hov = over(x + 2, ry, w - 4, 13);
-            if (hov) g.fill(x + 3, ry, x + w - 3, ry + 12, Terminal.SELECT);
-            g.drawString(font, (hov ? "> " : "  ") + a.label().toUpperCase(Locale.ROOT), x + 5, ry + 2, hov ? Terminal.ON_SELECT : Terminal.GREEN, false);
-            hit(x + 2, ry, w - 4, 13, () -> go(a.view()));
-            ry += 14;
+            int x = SX + 10, w = SW - 20, h = 34;
+            if (y + h > SY + SH - NAV - 4) break;
+            rrect(g, x, y, w, h, 10, over(x, y, w, h) ? 0xFF1E2733 : CARD);
+            rect(g, x, y, 4, h, a.accent());
+            g.blit(tex(a.icon()), x + 8, y + 5, 24, 24, 0, 0, 32, 32, 32, 32);
+            text(g, a.label(), x + 38, y + 13, 0xFFFFFFFF);
+            hit(x, y, w, h, () -> openApp(a));
+            y += h + 6;
         }
     }
 
@@ -583,6 +580,7 @@ public class PhoneScreen extends Screen {
             case SETTINGS -> drawSettings(g, y0);
             case COMMAND -> drawCommand(g, y0);
             case NETWORK -> drawNetwork(g, y0);
+            case MAP -> drawMap(g, y0);
             default -> drawSite(g, y0);
         };
     }
@@ -687,6 +685,107 @@ public class PhoneScreen extends Screen {
         return y;
     }
 
+    // ---------------------------------------------------------------- Map
+
+    private static final int[] ZOOMS = {1, 2, 4, 8};
+    private int zoomIdx = 1;
+
+    private static int missionColor(String type) {
+        return switch (type) {
+            case "RECOVER" -> RED; case "TERMINATE" -> 0xFFB04FE0; case "CARE" -> AMBER; default -> TEAL;
+        };
+    }
+
+    private int drawMap(GuiGraphics g, int y) {
+        int x = SX + 6, w = SW - 12, zoom = ZOOMS[zoomIdx];
+        Minecraft mc = Minecraft.getInstance();
+        if (!PhoneMap.update(zoom) || mc.player == null) { empty(g, y, "No signal", "The map needs a loaded world."); return y + 60; }
+        // map frame
+        g.fill(x - 1, y - 1, x + w + 1, y + w + 1, Terminal.LINE);
+        g.blit(PhoneMap.TEXTURE, x, y, w, w, 0, 0, PhoneMap.SIZE, PhoneMap.SIZE, PhoneMap.SIZE, PhoneMap.SIZE);
+        float k = w / (float) PhoneMap.SIZE;
+        int cx = PhoneMap.centerX(), cz = PhoneMap.centerZ();
+        // grid every 64 blocks
+        for (int gx = Math.floorDiv(cx - 64 * zoom, 64) * 64; gx <= cx + 64 * zoom; gx += 64) {
+            int sx = x + (int) (((gx - cx) / (float) zoom + 64) * k);
+            if (sx > x && sx < x + w) g.fill(sx, y, sx + 1, y + w, 0x2230FF70);
+        }
+        for (int gz = Math.floorDiv(cz - 64 * zoom, 64) * 64; gz <= cz + 64 * zoom; gz += 64) {
+            int sy = y + (int) (((gz - cz) / (float) zoom + 64) * k);
+            if (sy > y && sy < y + w) g.fill(x, sy, x + w, sy + 1, 0x2230FF70);
+        }
+        // missions
+        ListTag ms = t().getList("missions", Tag.TAG_COMPOUND);
+        String tip = null;
+        for (int i = 0; i < ms.size(); i++) {
+            CompoundTag m = ms.getCompound(i);
+            if (!m.getBoolean("hasPos")) continue;
+            float fx = ((m.getInt("x") - cx) / (float) zoom + 64) * k, fz = ((m.getInt("z") - cz) / (float) zoom + 64) * k;
+            boolean edge = fx < 3 || fx > w - 3 || fz < 3 || fz > w - 3;
+            int mx = x + (int) Mth.clamp(fx, 3, w - 3), my = y + (int) Mth.clamp(fz, 3, w - 3);
+            int c = Terminal.map(missionColor(m.getString("type")));
+            boolean pulse = (System.currentTimeMillis() / 400) % 2 == 0;
+            if (Guide.guiding(m.getInt("x"), m.getInt("z")) && pulse) Terminal.box(g, mx - 5, my - 5, 11, 11, Terminal.BRIGHT);
+            g.fill(mx - 2, my - 2, mx + 3, my + 3, 0xFF000000);
+            g.fill(mx - 1, my - 1, mx + 2, my + 2, c);
+            if (!edge) g.fill(mx, my + 2, mx + 1, my + 5, c);
+            if (over(mx - 4, my - 4, 9, 9)) tip = m.getString("type").replace('_', ' ') + "  " + m.getInt("x") + ", " + m.getInt("z");
+        }
+        // you
+        int px = x + w / 2, py = y + w / 2;
+        g.pose().pushPose();
+        g.pose().translate(px + 0.5F, py + 0.5F, 0);
+        g.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(mc.player.getYRot() + 180F));
+        for (int i = 0; i < 5; i++) g.fill(-(4 - i) , -3 + i, (4 - i) + 1, -2 + i, Terminal.BRIGHT);
+        g.fill(-1, 2, 2, 4, Terminal.BRIGHT);
+        g.pose().popPose();
+        // compass and scale
+        g.drawString(font, "N", x + w / 2 - 2, y + 2, Terminal.BRIGHT, true);
+        small(g, (64 * zoom) + "M", x + w - 14, y + w - 8, Terminal.GREEN);
+        if (tip != null) {
+            int tw2 = font.width(tip) + 8;
+            g.fill(x + 3, y + w - 15, x + 3 + tw2, y + w - 3, 0xE0020804);
+            Terminal.box(g, x + 3, y + w - 15, tw2, 12, Terminal.MID);
+            g.drawString(font, tip, x + 7, y + w - 13, Terminal.GREEN, false);
+        }
+        y += w + 5;
+        pill(g, x, y, 22, 14, "-", Terminal.MID, zoomIdx < ZOOMS.length - 1, () -> zoomIdx++);
+        pill(g, x + 25, y, 22, 14, "+", Terminal.MID, zoomIdx > 0, () -> zoomIdx--);
+        text(g, mc.player.getBlockX() + ", " + mc.player.getBlockY() + ", " + mc.player.getBlockZ(), x + 52, y + 3, Terminal.DIM);
+        if (Guide.active()) pill(g, x + w - 44, y, 44, 14, "Stop", RED, true, Guide::stop);
+        y += 20;
+        // mission list
+        boolean any = false;
+        for (int i = 0; i < ms.size(); i++) {
+            CompoundTag m = ms.getCompound(i);
+            if (!m.getBoolean("hasPos")) continue;
+            any = true;
+            y = guideRow(g, m, x, y, w);
+        }
+        if (!any) small(g, "NO MISSION LOCATIONS RIGHT NOW", SX + SW / 2, y + 2, Terminal.DIM);
+        return y + 10;
+    }
+
+    /** A mission with a location: name, distance, height, and a Guide toggle. */
+    private int guideRow(GuiGraphics g, CompoundTag m, int x, int y, int w) {
+        Minecraft mc = Minecraft.getInstance();
+        int mx = m.getInt("x"), my = m.getInt("y"), mz = m.getInt("z");
+        card(g, x, y, w, 24);
+        g.fill(x, y, x + 2, y + 24, Terminal.map(missionColor(m.getString("type"))));
+        text(g, m.getString("type").replace('_', ' '), x + 6, y + 3, Terminal.GREEN);
+        String info = mx + ", " + mz;
+        if (mc.player != null) {
+            int d = (int) Math.sqrt(mc.player.distanceToSqr(mx + 0.5, mc.player.getY(), mz + 0.5));
+            int dy = my - mc.player.getBlockY();
+            info += "  \u00B7  " + d + "M" + (dy > 3 ? "  \u25B2" + dy : dy < -3 ? "  \u25BC" + (-dy) : "");
+        }
+        small(g, info, x + 6 + (int) (font.width(info) * 0.375F), y + 14, Terminal.DIM);
+        boolean on = Guide.guiding(mx, mz);
+        String label = m.getString("type").replace('_', ' ') + " " + mx + ", " + mz;
+        pill(g, x + w - 50, y + 5, 46, 14, on ? "Stop" : "Guide", on ? RED : Terminal.MID, true, () -> { if (on) Guide.stop(); else Guide.start(mx, my, mz, label); });
+        return y + 27;
+    }
+
     // ---------------------------------------------------------------- Missions
 
     private int drawMissions(GuiGraphics g, int y) {
@@ -743,6 +842,12 @@ public class PhoneScreen extends Screen {
             if (type.equals("SUPPLY")) {
                 int half = (iw - 4) / 2;
                 pill(g, x + pad, cy, half, 14, "Submit", 0xFF2E9E57, true, () -> send("submit", idx));
+                pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
+            } else if (!trial && m.getBoolean("hasPos")) {
+                int half = (iw - 4) / 2, mx = m.getInt("x"), my2 = m.getInt("y"), mz = m.getInt("z");
+                boolean on = Guide.guiding(mx, mz);
+                String gl = type.replace('_', ' ') + " " + mx + ", " + mz;
+                pill(g, x + pad, cy, half, 14, on ? "Stop guide" : "Guide me", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.start(mx, my2, mz, gl); });
                 pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
             } else if (!trial) {
                 pill(g, x + pad, cy, iw, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
