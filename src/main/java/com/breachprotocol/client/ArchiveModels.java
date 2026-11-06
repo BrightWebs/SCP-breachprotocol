@@ -100,6 +100,40 @@ public final class ArchiveModels {
         return null;
     }
 
+    private static final Map<String, LivingEntity> BY_TYPE = new HashMap<>();
+
+    /** A display copy of an entity type (never the live one, so its in-world pose isn't touched). */
+    private static LivingEntity ofType(String typeId) {
+        if (FAILED.containsKey("type:" + typeId)) return null;
+        LivingEntity le = BY_TYPE.get(typeId);
+        if (le != null) return le;
+        Minecraft mc = Minecraft.getInstance();
+        ResourceLocation rl = ResourceLocation.tryParse(typeId);
+        if (mc.level == null || rl == null) return null;
+        try {
+            EntityType<?> t = BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+            Entity e = t == null ? null : t.create(mc.level);
+            if (e instanceof LivingEntity l) {
+                BY_TYPE.put(typeId, l);
+                return l;
+            }
+        } catch (Throwable ex) {
+            BreachProtocol.LOGGER.warn("Containment preview: could not create {}: {}", typeId, ex.toString());
+        }
+        FAILED.put("type:" + typeId, NONE);
+        return null;
+    }
+
+    public static boolean hasType(String typeId) {
+        return ofType(typeId) != null;
+    }
+
+    /** Turning model of an entity type, centred in the box. */
+    public static boolean drawType(GuiGraphics g, String typeId, int x, int y, int w, int h) {
+        LivingEntity le = ofType(typeId);
+        return le != null && render(g, le, x, y, w, h, "type:" + typeId);
+    }
+
     public static boolean has(String docId) {
         return entity(docId) != null;
     }
@@ -107,7 +141,10 @@ public final class ArchiveModels {
     /** Draws the model turning in place, centred in the box. Returns false if there's no model. */
     public static boolean draw(GuiGraphics g, String docId, int x, int y, int w, int h) {
         LivingEntity le = entity(docId);
-        if (le == null) return false;
+        return le != null && render(g, le, x, y, w, h, docId);
+    }
+
+    private static boolean render(GuiGraphics g, LivingEntity le, int x, int y, int w, int h, String key) {
         try {
             float rot = (System.currentTimeMillis() % 14000L) / 14000F * 360F;
             le.yBodyRot = rot; le.yBodyRotO = rot;
@@ -120,9 +157,9 @@ public final class ArchiveModels {
             InventoryScreen.renderEntityInInventory(g, x + w / 2F, y + h / 2F, scale, new Vector3f(0, bh / 2F, 0), pose, null, le);
             return true;
         } catch (Throwable t) {
-            BreachProtocol.LOGGER.warn("Archive preview failed to draw {}", docId, t);
-            CACHE.remove(docId);
-            FAILED.put(docId, NONE);
+            BreachProtocol.LOGGER.warn("Preview failed to draw {}", key, t);
+            CACHE.remove(key);
+            FAILED.put(key, NONE);
             return false;
         }
     }

@@ -44,6 +44,24 @@ public final class AddonEvents {
         }
     }
 
+    /** A rift that was drawn out (extraction complete) counts as an assignment for whoever extracted it. */
+    @SubscribeEvent
+    public static void onLeave(net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent event) {
+        if (event.getLevel().isClientSide || !UnleashedApi.isRift(event.getEntity())) return;
+        Entity rift = event.getEntity();
+        if (UnleashedApi.riftExtraction(rift) < 0.98F) return;
+        ServerPlayer best = null;
+        double bd = 32 * 32;
+        for (net.minecraft.world.entity.player.Player pl : event.getLevel().players()) {
+            if (pl instanceof ServerPlayer sp && sp.distanceToSqr(rift) < bd) { bd = sp.distanceToSqr(rift); best = sp; }
+        }
+        if (best == null) return;
+        Career.message(best, com.breachprotocol.career.O5.O5_9, "Rift contained. The fragment is yours. Good work.");
+        Career.changeStability(best, 3);
+        Career.commend(best);
+        Career.sync(best);
+    }
+
     /** Swipe an SCP Unleashed keycard scanner with your phone: it presents the fused keycard. */
     @SubscribeEvent
     public static void onUseBlock(PlayerInteractEvent.RightClickBlock event) {

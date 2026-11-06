@@ -18,23 +18,24 @@ import net.minecraft.world.level.material.MapColor;
 public final class PhoneMap {
     private PhoneMap() {}
 
-    public static final int SIZE = 128;
+    public static final int SIZE = 256;
     public static final ResourceLocation TEXTURE = BreachProtocol.id("phone_map");
     private static DynamicTexture texture;
-    private static int centerX = Integer.MIN_VALUE, centerZ, builtZoom;
+    private static int centerX = Integer.MIN_VALUE, centerZ;
+    private static float builtZoom;
     private static long builtAt;
 
     public static int centerX() { return centerX; }
     public static int centerZ() { return centerZ; }
 
     /** Rebuilds when you've moved, changed zoom, or every few seconds. Returns false with no world. */
-    public static boolean update(int zoom) {
+    public static boolean update(float zoom) {
         Minecraft mc = Minecraft.getInstance();
         ClientLevel level = mc.level;
         if (level == null || mc.player == null) return false;
         int px = mc.player.getBlockX(), pz = mc.player.getBlockZ();
         long now = System.currentTimeMillis();
-        boolean moved = Math.abs(px - centerX) > 2 * zoom || Math.abs(pz - centerZ) > 2 * zoom;
+        boolean moved = Math.abs(px - centerX) > Math.max(1, 2 * zoom) || Math.abs(pz - centerZ) > Math.max(1, 2 * zoom);
         if (texture != null && !moved && zoom == builtZoom && now - builtAt < 4000) return true;
         if (texture == null) {
             texture = new DynamicTexture(SIZE, SIZE, false);
@@ -50,7 +51,7 @@ public final class PhoneMap {
         int[] prevRow = new int[SIZE];
         for (int j = 0; j < SIZE; j++) {
             for (int i = 0; i < SIZE; i++) {
-                int x = px + (i - SIZE / 2) * zoom, z = pz + (j - SIZE / 2) * zoom;
+                int x = px + (int) Math.floor((i - SIZE / 2) * zoom), z = pz + (int) Math.floor((j - SIZE / 2) * zoom);
                 int argb;
                 if (!level.hasChunk(x >> 4, z >> 4)) {
                     argb = 0xFF020604;
@@ -63,17 +64,31 @@ public final class PhoneMap {
                     int rgb = mc2 == MapColor.NONE ? 0x101010 : mc2.col;
                     // shade by slope against the row above (north), like a paper map
                     float shade = 1.0F;
-                    if (prevRow[i] != Integer.MIN_VALUE) shade = y > prevRow[i] ? 1.18F : y < prevRow[i] ? 0.78F : 1.0F;
+                    if (prevRow[i] != Integer.MIN_VALUE) {
+                        int d = y - prevRow[i];
+                        shade = d > 1 ? 1.28F : d > 0 ? 1.14F : d < -1 ? 0.66F : d < 0 ? 0.82F : 1.0F;
+                    }
                     prevRow[i] = y;
                     boolean water = !s.getFluidState().isEmpty();
-                    argb = Terminal.map(0xFF000000 | scale(rgb, water ? 0.55F : shade));
-                    if (water) argb = 0xFF000000 | ((argb & 0xFEFEFE) >> 1) | 0x101810;
+                    if (water) {
+                        // deeper water reads darker
+                        int depth = 0;
+                        BlockPos.MutableBlockPos q = pos.mutable();
+                        while (depth < 12 && !level.getBlockState(q.move(0, -1, 0)).getFluidState().isEmpty()) depth++;
+                        argb = 0xFF000000 | rgbOf(10, (int) (70 - depth * 3.5F), (int) (52 - depth * 2.5F));
+                    } else {
+                        argb = Terminal.map(0xFF000000 | scale(rgb, shade));
+                    }
                 }
                 img.setPixelRGBA(i, j, abgr(argb));
             }
         }
         texture.upload();
         return true;
+    }
+
+    private static int rgbOf(int r, int g, int b) {
+        return Math.max(0, Math.min(255, r)) << 16 | Math.max(0, Math.min(255, g)) << 8 | Math.max(0, Math.min(255, b));
     }
 
     private static int scale(int rgb, float k) {

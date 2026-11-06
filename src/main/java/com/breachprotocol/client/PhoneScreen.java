@@ -39,7 +39,7 @@ public class PhoneScreen extends Screen {
     private static final ResourceLocation WALLPAPER = tex("wallpaper");
     private static ResourceLocation tex(String n) { return BreachProtocol.id("textures/gui/phone/" + n + ".png"); }
 
-    private enum View { HOME, RECENTS, MAP, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE }
+    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE }
 
     private record App(String icon, String label, View view, int accent, IntPredicate allowed) {}
 
@@ -271,6 +271,12 @@ public class PhoneScreen extends Screen {
         return sp > 0 ? sender.substring(0, sp) : sender;
     }
 
+    private static boolean hasLink(String feature) {
+        ListTag l = t().getList("links", Tag.TAG_STRING);
+        for (int i = 0; i < l.size(); i++) if (l.getString(i).equals(feature)) return true;
+        return false;
+    }
+
     private static int unread() {
         int n = 0;
         for (Tag e : t().getList("messages", Tag.TAG_COMPOUND)) if (!((CompoundTag) e).getBoolean("r")) n++;
@@ -308,7 +314,7 @@ public class PhoneScreen extends Screen {
             case CAMERA -> CAMERA;
             case GALLERY, PHOTO -> GALLERY;
             case ARCHIVE, FILE -> ARCHIVE;
-            case CONTAINMENT -> CONTAIN;
+            case CONTAINMENT, ANOMALY -> CONTAIN;
             case PERSONNEL -> PERSONNEL;
             case SETTINGS -> SETTINGS;
             case COMMAND -> COMMAND;
@@ -545,6 +551,7 @@ public class PhoneScreen extends Screen {
                 case THREAD -> nick(thread);
                 case FILE -> fileTitle();
                 case PHOTO -> "Photo";
+                case ANOMALY -> "Anomaly";
                 default -> app.label();
             };
             g.drawString(font, ellipsize(title, SW - 24), SX + 10, top + 7, Terminal.BRIGHT, false);
@@ -585,6 +592,7 @@ public class PhoneScreen extends Screen {
             case ARCHIVE -> drawArchive(g, y0);
             case FILE -> drawFile(g, y0);
             case CONTAINMENT -> drawContainment(g, y0);
+            case ANOMALY -> drawAnomaly(g, y0);
             case PERSONNEL -> drawPersonnel(g, y0);
             case SETTINGS -> drawSettings(g, y0);
             case COMMAND -> drawCommand(g, y0);
@@ -694,8 +702,11 @@ public class PhoneScreen extends Screen {
 
     // ---------------------------------------------------------------- Map
 
-    private static final int[] ZOOMS = {1, 2, 4, 8};
+    private static final float[] ZOOMS = {0.5F, 1, 2, 4};
     private int zoomIdx = 1;
+    /** Point picked on the map (world x, z), or none. */
+    private boolean mapTarget;
+    private int mapTX, mapTZ;
 
     private static int missionColor(String type) {
         return switch (type) {
@@ -704,73 +715,128 @@ public class PhoneScreen extends Screen {
     }
 
     private int drawMap(GuiGraphics g, int y) {
-        int x = SX + 6, w = SW - 12, zoom = ZOOMS[zoomIdx];
+        int x = SX + 6, w = SW - 12;
+        float zoom = ZOOMS[zoomIdx];
         Minecraft mc = Minecraft.getInstance();
         if (!PhoneMap.update(zoom) || mc.player == null) { empty(g, y, "No signal", "The map needs a loaded world."); return y + 60; }
-        // map frame
-        g.fill(x - 1, y - 1, x + w + 1, y + w + 1, Terminal.LINE);
-        g.blit(PhoneMap.TEXTURE, x, y, w, w, 0, 0, PhoneMap.SIZE, PhoneMap.SIZE, PhoneMap.SIZE, PhoneMap.SIZE);
-        float k = w / (float) PhoneMap.SIZE;
+        final int S = PhoneMap.SIZE;
+        RAW = true;
+        rrect(g, x - 1, y - 1, w + 2, w + 2, 4, Terminal.MID);
+        RAW = false;
+        g.blit(PhoneMap.TEXTURE, x, y, w, w, 0, 0, S, S, S, S);
+        float k = w / (float) S;
         int cx = PhoneMap.centerX(), cz = PhoneMap.centerZ();
+        java.util.function.IntUnaryOperator toX = wx -> x + Math.round(((wx - cx) / zoom + S / 2F) * k);
+        java.util.function.IntUnaryOperator toY = wz -> y + Math.round(((wz - cz) / zoom + S / 2F) * k);
         // grid every 64 blocks
-        for (int gx = Math.floorDiv(cx - 64 * zoom, 64) * 64; gx <= cx + 64 * zoom; gx += 64) {
-            int sx = x + (int) (((gx - cx) / (float) zoom + 64) * k);
-            if (sx > x && sx < x + w) g.fill(sx, y, sx + 1, y + w, 0x2230FF70);
+        int half = (int) (S / 2F * zoom);
+        for (int gx = Math.floorDiv(cx - half, 64) * 64; gx <= cx + half; gx += 64) {
+            int sx = toX.applyAsInt(gx);
+            if (sx > x && sx < x + w) g.fill(sx, y, sx + 1, y + w, 0x1830FF70);
         }
-        for (int gz = Math.floorDiv(cz - 64 * zoom, 64) * 64; gz <= cz + 64 * zoom; gz += 64) {
-            int sy = y + (int) (((gz - cz) / (float) zoom + 64) * k);
-            if (sy > y && sy < y + w) g.fill(x, sy, x + w, sy + 1, 0x2230FF70);
+        for (int gz = Math.floorDiv(cz - half, 64) * 64; gz <= cz + half; gz += 64) {
+            int sy = toY.applyAsInt(gz);
+            if (sy > y && sy < y + w) g.fill(x, sy, x + w, sy + 1, 0x1830FF70);
         }
-        // missions
-        ListTag ms = t().getList("missions", Tag.TAG_COMPOUND);
         String tip = null;
-        for (int i = 0; i < ms.size(); i++) {
-            CompoundTag m = ms.getCompound(i);
-            if (!m.getBoolean("hasPos")) continue;
-            float fx = ((m.getInt("x") - cx) / (float) zoom + 64) * k, fz = ((m.getInt("z") - cz) / (float) zoom + 64) * k;
-            boolean edge = fx < 3 || fx > w - 3 || fz < 3 || fz > w - 3;
-            int mx = x + (int) Mth.clamp(fx, 3, w - 3), my = y + (int) Mth.clamp(fz, 3, w - 3);
-            int c = Terminal.map(missionColor(m.getString("type")));
-            boolean pulse = (System.currentTimeMillis() / 400) % 2 == 0;
-            if (Guide.guiding(m.getInt("x"), m.getInt("z")) && pulse) Terminal.box(g, mx - 5, my - 5, 11, 11, Terminal.BRIGHT);
-            g.fill(mx - 2, my - 2, mx + 3, my + 3, 0xFF000000);
-            g.fill(mx - 1, my - 1, mx + 2, my + 2, c);
-            if (!edge) g.fill(mx, my + 2, mx + 1, my + 5, c);
-            if (over(mx - 4, my - 4, 9, 9)) tip = m.getString("type").replace('_', ' ') + "  " + m.getInt("x") + ", " + m.getInt("z");
+        boolean pulse = (System.currentTimeMillis() / 400) % 2 == 0;
+        // pins: missions (always), anomalies (Camera Tablet), rifts (Rift Detector)
+        List<int[]> pins = new ArrayList<>(); // x, z, colour, kind(0 mission,1 anomaly,2 rift), index
+        ListTag ms = t().getList("missions", Tag.TAG_COMPOUND);
+        for (int i = 0; i < ms.size(); i++) if (ms.getCompound(i).getBoolean("hasPos")) pins.add(new int[]{ms.getCompound(i).getInt("x"), ms.getCompound(i).getInt("z"), Terminal.map(missionColor(ms.getCompound(i).getString("type"))), 0, i});
+        ListTag an = t().getList("nearby", Tag.TAG_COMPOUND);
+        if (hasLink("cameras")) for (int i = 0; i < an.size(); i++) pins.add(new int[]{an.getCompound(i).getInt("x"), an.getCompound(i).getInt("z"), an.getCompound(i).getBoolean("c") ? 0xFF7FD6FF : 0xFFFF5A5A, 1, i});
+        ListTag rf = t().getList("rifts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < rf.size(); i++) pins.add(new int[]{rf.getCompound(i).getInt("x"), rf.getCompound(i).getInt("z"), 0xFF000000 | rf.getCompound(i).getInt("colour"), 2, i});
+        for (int[] pin : pins) {
+            int mx = Mth.clamp(toX.applyAsInt(pin[0]), x + 3, x + w - 4), my = Mth.clamp(toY.applyAsInt(pin[1]), y + 3, y + w - 4);
+            boolean guided = Guide.guiding(pin[0], pin[1]);
+            if (guided && pulse) Terminal.box(g, mx - 5, my - 5, 11, 11, Terminal.BRIGHT);
+            if (pin[3] == 2) { // rift: diamond
+                for (int d = 0; d < 4; d++) g.fill(mx - (3 - d), my - d, mx + (4 - d), my - d + 1, 0xFF000000);
+                for (int d = 0; d < 4; d++) g.fill(mx - (3 - d), my + d, mx + (4 - d), my + d + 1, 0xFF000000);
+                for (int d = 0; d < 3; d++) g.fill(mx - (2 - d), my - d, mx + (3 - d), my - d + 1, pin[2]);
+                for (int d = 0; d < 3; d++) g.fill(mx - (2 - d), my + d, mx + (3 - d), my + d + 1, pin[2]);
+            } else {
+                g.fill(mx - 2, my - 2, mx + 3, my + 3, 0xFF000000);
+                g.fill(mx - 1, my - 1, mx + 2, my + 2, pin[2]);
+                if (pin[3] == 0) g.fill(mx, my + 2, mx + 1, my + 5, pin[2]);
+            }
+            if (over(mx - 4, my - 4, 9, 9)) {
+                tip = switch (pin[3]) {
+                    case 0 -> ms.getCompound(pin[4]).getString("type").replace('_', ' ');
+                    case 1 -> Component.translatable(an.getCompound(pin[4]).getString("dk")).getString();
+                    default -> rf.getCompound(pin[4]).getString("rarity") + " rift";
+                } + "  " + pin[0] + ", " + pin[1];
+            }
+        }
+        // picked target
+        if (mapTarget) {
+            int tx = toX.applyAsInt(mapTX), ty = toY.applyAsInt(mapTZ);
+            if (tx >= x && tx < x + w && ty >= y && ty < y + w) {
+                int c = Terminal.RED;
+                g.fill(tx - 6, ty, tx - 2, ty + 1, c); g.fill(tx + 3, ty, tx + 7, ty + 1, c);
+                g.fill(tx, ty - 6, tx + 1, ty - 2, c); g.fill(tx, ty + 3, tx + 1, ty + 7, c);
+                Terminal.box(g, tx - 3, ty - 3, 7, 7, c);
+            }
         }
         // you
         int px = x + w / 2, py = y + w / 2;
         g.pose().pushPose();
         g.pose().translate(px + 0.5F, py + 0.5F, 0);
         g.pose().mulPose(com.mojang.math.Axis.ZP.rotationDegrees(mc.player.getYRot() + 180F));
-        for (int i = 0; i < 5; i++) g.fill(-(4 - i) , -3 + i, (4 - i) + 1, -2 + i, Terminal.BRIGHT);
-        g.fill(-1, 2, 2, 4, Terminal.BRIGHT);
+        for (int i = 0; i < 5; i++) g.fill(-(4 - i), -3 + i, (4 - i) + 1, -2 + i, 0xFF000000);
+        for (int i = 0; i < 4; i++) g.fill(-(3 - i), -2 + i, (3 - i) + 1, -1 + i, Terminal.BRIGHT);
         g.pose().popPose();
-        // compass and scale
         g.drawString(font, "N", x + w / 2 - 2, y + 2, Terminal.BRIGHT, true);
-        small(g, (64 * zoom) + "M", x + w - 14, y + w - 8, Terminal.GREEN);
+        int scaleM = Math.round(64 * zoom);
+        g.fill(x + w - 6 - (int) (64 / zoom * k), y + w - 5, x + w - 6, y + w - 4, Terminal.BRIGHT);
+        small(g, scaleM + "M", x + w - 6 - (int) (32 / zoom * k), y + w - 13, Terminal.BRIGHT);
         if (tip != null) {
             int tw2 = font.width(tip) + 8;
-            g.fill(x + 3, y + w - 15, x + 3 + tw2, y + w - 3, 0xE0020804);
-            Terminal.box(g, x + 3, y + w - 15, tw2, 12, Terminal.MID);
-            g.drawString(font, tip, x + 7, y + w - 13, Terminal.GREEN, false);
+            g.fill(x + 3, y + 3, x + 3 + Math.min(tw2, w - 6), y + 15, 0xE0020804);
+            Terminal.box(g, x + 3, y + 3, Math.min(tw2, w - 6), 12, Terminal.MID);
+            g.drawString(font, ellipsize(tip, w - 14), x + 7, y + 5, Terminal.GREEN, false);
         }
+        // tap to pick a point
+        final int fx = x, fy = y;
+        hit(x, y, w, w, () -> {
+            mapTarget = true;
+            mapTX = cx + Math.round(((mouseLX - fx) / k - S / 2F) * zoom);
+            mapTZ = cz + Math.round(((mouseLY - fy) / k - S / 2F) * zoom);
+        });
         y += w + 5;
         pill(g, x, y, 22, 14, "-", Terminal.MID, zoomIdx < ZOOMS.length - 1, () -> zoomIdx++);
         pill(g, x + 25, y, 22, 14, "+", Terminal.MID, zoomIdx > 0, () -> zoomIdx--);
-        text(g, mc.player.getBlockX() + ", " + mc.player.getBlockY() + ", " + mc.player.getBlockZ(), x + 52, y + 3, Terminal.DIM);
+        small(g, mc.player.getBlockX() + ", " + mc.player.getBlockY() + ", " + mc.player.getBlockZ(), x + 52 + (int) (font.width(mc.player.getBlockX() + ", " + mc.player.getBlockY() + ", " + mc.player.getBlockZ()) * 0.375F), y + 4, MUTED);
         if (Guide.active()) pill(g, x + w - 44, y, 44, 14, "Stop", RED, true, Guide::stop);
         y += 20;
+        // target panel
+        if (mapTarget) {
+            int d = (int) Math.sqrt(Math.pow(mapTX - mc.player.getX(), 2) + Math.pow(mapTZ - mc.player.getZ(), 2));
+            card(g, x, y, w, 46);
+            text(g, "Target  " + mapTX + ", " + mapTZ, x + 7, y + 5, 0xFFFFFFFF);
+            small(g, d + "M AWAY", x + w - 8 - (int) (font.width(d + "M AWAY") * 0.375F), y + 6, MUTED);
+            int hw = (w - 18) / 2;
+            final int gx = mapTX, gz = mapTZ;
+            int gy = mc.level != null && mc.level.hasChunk(gx >> 4, gz >> 4) ? mc.level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, gx, gz) : mc.player.getBlockY();
+            pill(g, x + 6, y + 24, hw, 16, Guide.guiding(gx, gz) ? "Guiding" : "Guide here", 0xFF2E9E57, !Guide.guiding(gx, gz), () -> Guide.start(gx, gy, gz, "Map target " + gx + ", " + gz));
+            boolean canStrike = clr() >= 5 && hasLink("orbital") && t().getBoolean("orbReady");
+            String sl = clr() < 5 ? "Strike: Level 5" : !hasLink("orbital") ? "Need Designator" : t().getBoolean("orbReady") ? "Orbital strike" : "Recharging";
+            pill(g, x + 12 + hw, y + 24, hw, 16, sl, 0xFFA8323A, canStrike, () -> send("orbital_at:" + gx + ":" + gz, 0));
+            hit(x + w - 14, y + 2, 12, 12, () -> mapTarget = false);
+            text(g, "\u00D7", x + w - 11, y + 4, MUTED);
+            y += 50;
+        } else {
+            small(g, "TAP THE MAP TO PICK A TARGET", SX + SW / 2, y, Terminal.DIM);
+            y += 10;
+        }
         // mission list
-        boolean any = false;
         for (int i = 0; i < ms.size(); i++) {
             CompoundTag m = ms.getCompound(i);
-            if (!m.getBoolean("hasPos")) continue;
-            any = true;
-            y = guideRow(g, m, x, y, w);
+            if (m.getBoolean("hasPos")) y = guideRow(g, m, x, y, w);
         }
-        if (!any) small(g, "NO MISSION LOCATIONS RIGHT NOW", SX + SW / 2, y + 2, Terminal.DIM);
-        return y + 10;
+        return y + 6;
     }
 
     /** A mission with a location: name, distance, height, and a Guide toggle. */
@@ -1213,28 +1279,144 @@ public class PhoneScreen extends Screen {
 
     // ---------------------------------------------------------------- Containment
 
+    private int containTab, anomalyId = -1;
+
+    private static String vertical(int dy) {
+        return dy > 3 ? "  \u25B2" + dy + "M" : dy < -3 ? "  \u25BC" + (-dy) + "M" : "";
+    }
+
+    private int playerDy(int y) {
+        Minecraft mc = Minecraft.getInstance();
+        return mc.player == null ? 0 : y - mc.player.getBlockY();
+    }
+
+    private CompoundTag anomaly(int id) {
+        for (Tag tg : t().getList("nearby", Tag.TAG_COMPOUND)) if (((CompoundTag) tg).getInt("id") == id) return (CompoundTag) tg;
+        return null;
+    }
+
     private int drawContainment(GuiGraphics g, int y) {
-        ListTag list = t().getList("nearby", Tag.TAG_COMPOUND);
-        text(g, "Anomalies within 64m \u00B7 cells count", SX + 8, y, MUTED);
-        y += 14;
-        if (list.isEmpty()) { empty(g, y - 20, "All quiet", "No anomalies detected nearby."); return y + 60; }
+        int x = SX + 6, w = SW - 12;
+        ListTag list = t().getList("nearby", Tag.TAG_COMPOUND), rifts = t().getList("rifts", Tag.TAG_COMPOUND);
+        String[] tabs = {"Anomalies " + list.size(), "Rifts" + (hasLink("rifts") ? " " + rifts.size() : "")};
+        int tw = (w - 3) / 2;
+        for (int i = 0; i < 2; i++) {
+            int bx = x + i * (tw + 3);
+            boolean sel = containTab == i, hov = over(bx, y, tw, 14);
+            rbox(g, bx, y, tw, 14, 7, sel ? Terminal.SELECT : 0xFF08180E, sel || hov ? Terminal.SELECT : 0xFF163D24);
+            g.drawString(font, tabs[i], bx + tw / 2 - font.width(tabs[i]) / 2, y + 3, sel ? Terminal.ON_SELECT : Terminal.GREEN, false);
+            final int idx = i;
+            hit(bx, y, tw, 14, () -> { containTab = idx; scroll = 0; });
+        }
+        y += 20;
+        if (containTab == 1) return drawRifts(g, y, rifts);
+        if (list.isEmpty()) { empty(g, y - 20, "All quiet", "No anomalies detected within 64m."); return y + 60; }
         for (Tag tg : list) {
             CompoundTag a = (CompoundTag) tg;
             boolean contained = a.getBoolean("c"), containable = a.getBoolean("k");
-            int x = SX + 6, w = SW - 12;
-            card(g, x, y, w, 26);
-            circle(g, x + 10, y + 13, 4, contained ? TEAL : containable ? RED : 0xFF8A96A2);
+            int h = 30, id = a.getInt("id");
+            boolean hov = over(x, y, w, h);
+            rbox(g, x, y, w, h, 8, hov ? 0xFF123A20 : 0xFF08180E, hov ? Terminal.MID : 0xFF163D24);
+            circle(g, x + 10, y + 15, 4, contained ? TEAL : containable ? RED : 0xFF8A96A2);
             String nm = a.contains("dk") ? Component.translatable(a.getString("dk")).getString() : a.getString("d");
-            text(g, ellipsize(nm, w - 70), x + 20, y + 4, 0xFFFFFFFF);
+            text(g, ellipsize(nm, w - 76), x + 20, y + 5, 0xFFFFFFFF);
             String cls = a.getString("o");
             int cc = cls.equals("Safe") ? 0xFF3AA860 : cls.equals("Euclid") ? 0xFFC8A030 : 0xFFC0383F;
-            rrect(g, x + w - 8 - font.width(cls) - 6, y + 3, font.width(cls) + 6, 10, 4, cc);
-            text(g, cls, x + w - 5 - font.width(cls) - 6, y + 4, 0xFFFFFFFF);
-            String status = contained ? (a.getString("n").isEmpty() ? "IN CELL" : a.getString("n").toUpperCase(Locale.ROOT)) : containable ? "LOOSE" : "STASIS-IMMUNE, LOOSE";
-            text(g, ellipsize(status, w - 60), x + 20, y + 15, contained ? 0xFF7FD6FF : containable ? 0xFFFF7A7A : 0xFF9AA6B2);
-            String dist = a.getInt("m") + "m";
-            text(g, dist, x + w - 6 - font.width(dist), y + 15, 0xFF7A8794);
-            y += 30;
+            rrect(g, x + w - 8 - font.width(cls) - 6, y + 4, font.width(cls) + 6, 10, 4, cc);
+            text(g, cls, x + w - 5 - font.width(cls) - 6, y + 5, 0xFFFFFFFF);
+            String status = contained ? (a.getString("n").isEmpty() ? "In cell" : a.getString("n")) : containable ? "Loose" : "Loose, stasis-immune";
+            small(g, status.toUpperCase(Locale.ROOT), x + 20 + (int) (font.width(status.toUpperCase(Locale.ROOT)) * 0.375F), y + 18, contained ? 0xFF7FD6FF : containable ? 0xFFFF7A7A : 0xFF9AA6B2);
+            String dist = a.getInt("m") + "m" + vertical(playerDy(a.getInt("y")));
+            small(g, dist, x + w - 8 - (int) (font.width(dist) * 0.375F), y + 18, Guide.guidingEntity(id) ? Terminal.BRIGHT : 0xFF7A8794);
+            hit(x, y, w, h, () -> { anomalyId = id; go(View.ANOMALY); });
+            y += h + 4;
+        }
+        small(g, "TAP AN ANOMALY FOR GUIDANCE", SX + SW / 2, y + 2, Terminal.DIM);
+        return y + 12;
+    }
+
+    private int drawRifts(GuiGraphics g, int y, ListTag rifts) {
+        int x = SX + 6, w = SW - 12;
+        if (!hasLink("rifts")) {
+            empty(g, y - 20, "No rift sensor", "Link a Rift Detector to your phone in Settings to find rifts.");
+            pill(g, x, y + 56, w, 16, "Open Settings", 0xFF2E9E57, true, () -> go(View.SETTINGS));
+            return y + 80;
+        }
+        if (rifts.isEmpty()) { empty(g, y - 20, "No rifts", "Nothing open within 128m. You'll get a message when one appears."); return y + 60; }
+        for (Tag tg : rifts) {
+            CompoundTag r = (CompoundTag) tg;
+            int h = 40, id = r.getInt("id");
+            card(g, x, y, w, h);
+            int colour = 0xFF000000 | r.getInt("colour");
+            RAW = true;
+            rrect(g, x + 1, y + 6, 3, h - 12, 1, colour);
+            RAW = false;
+            String rarity = r.getString("rarity");
+            String nm = Component.translatable(r.getString("dk")).getString();
+            String title = (rarity.isEmpty() ? "" : rarity.substring(0, 1).toUpperCase(Locale.ROOT) + rarity.substring(1) + " ") + nm;
+            g.drawString(font, ellipsize(title, w - 60), x + 9, y + 5, 0xFF000000 | Terminal.map(colour) & 0xFFFFFF | 0xFF000000, false);
+            String dist = r.getInt("m") + "m" + vertical(playerDy(r.getInt("y")));
+            small(g, dist, x + w - 8 - (int) (font.width(dist) * 0.375F), y + 7, 0xFF7A8794);
+            float ex = r.getFloat("ex");
+            int bw = w - 70;
+            rrect(g, x + 9, y + 19, bw, 4, 2, 0xFF27303A);
+            if (ex > 0) rrect(g, x + 9, y + 19, Math.max(4, (int) (bw * ex)), 4, 2, 0xFF5BE36F);
+            small(g, !r.getBoolean("can") ? "SETTLING" : ex > 0 ? (int) (ex * 100) + "% DRAWN OUT" : "USE A RIFT EXTRACTOR", x + 9 + (int) (font.width(!r.getBoolean("can") ? "SETTLING" : ex > 0 ? (int) (ex * 100) + "% DRAWN OUT" : "USE A RIFT EXTRACTOR") * 0.375F), y + 27, MUTED);
+            boolean on = Guide.guidingEntity(id);
+            final int rx = r.getInt("x"), ry = r.getInt("y"), rz = r.getInt("z");
+            final String label = title;
+            pill(g, x + w - 52, y + 18, 46, 14, on ? "Stop" : "Guide", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.startEntity(id, rx, ry, rz, label); });
+            y += h + 4;
+        }
+        return y;
+    }
+
+    /** One anomaly: turning 3D view, status, distance, and guidance (plus an orbital strike at Level 5). */
+    private int drawAnomaly(GuiGraphics g, int y) {
+        CompoundTag a = anomaly(anomalyId);
+        int x = SX + 6, w = SW - 12;
+        if (a == null) { empty(g, y, "Out of range", "It's no longer within 64m of you."); return y + 70; }
+        int mh = 104;
+        RAW = true;
+        rrect(g, x, y, w, mh, 10, 0xFF163D24);
+        rrect(g, x + 1, y + 1, w - 2, mh - 2, 9, 0xFF04100A);
+        RAW = false;
+        for (int gy = y + 10; gy < y + mh - 4; gy += 10) g.fill(x + 6, gy, x + w - 6, gy + 1, 0x1430FF70);
+        g.fill(x + 24, y + mh - 16, x + w - 24, y + mh - 15, 0x4430FF70);
+        boolean shy = a.getString("type").endsWith("scp096_shy_guy");
+        if (shy) {
+            g.fill(x + w / 2 - 30, y + 34, x + w / 2 + 30, y + 58, 0xFF000000);
+            small(g, "IMAGE WITHHELD", x + w / 2, y + 64, 0xFFFF8A8F);
+        } else if (!ArchiveModels.drawType(g, a.getString("type"), x, y + 2, w, mh - 16)) {
+            small(g, "NO IMAGE", x + w / 2, y + mh / 2 - 4, MUTED);
+        }
+        y += mh + 6;
+        String nm = Component.translatable(a.getString("dk")).getString();
+        text(g, ellipsize(nm, w - 60), x + 2, y, 0xFFFFFFFF);
+        String cls = a.getString("o");
+        int cc = cls.equals("Safe") ? 0xFF3AA860 : cls.equals("Euclid") ? 0xFFC8A030 : 0xFFC0383F;
+        rrect(g, x + w - font.width(cls) - 8, y - 1, font.width(cls) + 6, 10, 4, cc);
+        text(g, cls, x + w - font.width(cls) - 5, y, 0xFFFFFFFF);
+        y += 12;
+        boolean contained = a.getBoolean("c");
+        int dy = playerDy(a.getInt("y"));
+        String where = a.getInt("m") + "m away  \u00B7  " + a.getInt("x") + ", " + a.getInt("y") + ", " + a.getInt("z");
+        small(g, where.toUpperCase(Locale.ROOT), SX + SW / 2, y, MUTED);
+        y += 9;
+        String vert = dy > 3 ? "\u25B2 " + dy + "M ABOVE YOU" : dy < -3 ? "\u25BC " + (-dy) + "M BELOW YOU" : "ON YOUR LEVEL";
+        small(g, vert + "  \u00B7  " + (contained ? "IN CELL" : "LOOSE"), SX + SW / 2, y, contained ? 0xFF7FD6FF : 0xFFFF7A7A);
+        y += 12;
+        int id = a.getInt("id");
+        boolean on = Guide.guidingEntity(id);
+        final int ax = a.getInt("x"), ay = a.getInt("y"), az = a.getInt("z");
+        final String label = nm;
+        pill(g, x, y, w, 16, on ? "Stop guidance" : "Guide me there", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.startEntity(id, ax, ay, az, label); });
+        y += 20;
+        if (clr() >= 5) {
+            boolean ready = t().getBoolean("orbReady") && hasLink("orbital");
+            pill(g, x, y, w, 16, hasLink("orbital") ? (ready ? "Orbital strike on it" : "Satellite not ready") : "Orbital: link a ZENITH Designator", 0xFFA8323A, ready,
+                    () -> send("orbital_at:" + ax + ":" + az, 0));
+            y += 20;
         }
         return y;
     }
@@ -1329,6 +1511,35 @@ public class PhoneScreen extends Screen {
         text(g, "Fused " + fused + " · carried " + carried + " · rank " + Math.min(5, rankClr) + (rankClr >= 6 ? "+" : ""), x + 8, y + 20, MUTED);
         text(g, "The highest one counts.", x + 8, y + 31, 0xFF6F7C88);
         y += 54;
+        // linked SCP Unleashed devices
+        label(g, "Linked devices", x + 2, y);
+        y += 12;
+        ListTag lk = t.getList("links", Tag.TAG_STRING), dv = t.getList("devices", Tag.TAG_INT);
+        Set<String> links = new HashSet<>();
+        for (int i = 0; i < lk.size(); i++) links.add(lk.getString(i));
+        Set<Integer> carrying = new HashSet<>();
+        for (Tag e : dv) carrying.add(((net.minecraft.nbt.IntTag) e).getAsInt());
+        String[][] devs = {
+                {"orbital_designator", "orbital", "Orbital strikes from Network and Map"},
+                {"mtf_signal_radio", "mtf", "Call MTF squads from Command"},
+                {"rift_detector", "rifts", "Rift alerts, tracking and guidance"},
+                {"camera_tablet", "cameras", "Anomalies on the Map via security feeds"},
+                {"facility_tablet", "network", "Facility network status"}};
+        for (int i = 0; i < devs.length; i++) {
+            boolean on = links.contains(devs[i][1]), has = carrying.contains(i);
+            String name = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("scp_unleashed", devs[i][0]))
+                    .map(it -> new net.minecraft.world.item.ItemStack(it).getHoverName().getString()).orElse(devs[i][0]);
+            card(g, x, y, w, 30);
+            net.minecraft.world.item.Item it = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("scp_unleashed", devs[i][0])).orElse(null);
+            if (it != null) g.renderItem(new net.minecraft.world.item.ItemStack(it), x + 5, y + 7);
+            text(g, ellipsize(name, w - 78), x + 25, y + 5, on ? Terminal.BRIGHT : 0xFFE8EEF4);
+            small(g, ellipsize(devs[i][2], (int) ((w - 78) / 0.75F)), x + 25 + (int) (font.width(ellipsize(devs[i][2], (int) ((w - 78) / 0.75F))) * 0.375F), y + 17, MUTED);
+            final int idx = i;
+            if (on) text(g, "Linked", x + w - 8 - font.width("Linked"), y + 11, 0xFF5BE36F);
+            else pill(g, x + w - 48, y + 8, 42, 14, has ? "Link" : "Need it", 0xFF2E9E57, has, () -> send("link", idx));
+            y += 33;
+        }
+        y += 4;
         label(g, "Device", x + 2, y);
         y += 12;
         card(g, x, y, w, 36);
@@ -1352,6 +1563,11 @@ public class PhoneScreen extends Screen {
         }
         y += 20;
         int x = SX + 6, w = SW - 12;
+        if (commandTab == 0 && !hasLink("mtf")) {
+            empty(g, y - 20, "No MTF uplink", "Link an MTF Signal Radio to your phone in Settings to call squads.");
+            pill(g, x, y + 56, w, 16, "Open Settings", 0xFF2E9E57, true, () -> go(View.SETTINGS));
+            return y + 80;
+        }
         if (commandTab == 0) {
             long cd = t().getLong("mtfCd");
             card(g, x, y, w, 30);
@@ -1426,15 +1642,21 @@ public class PhoneScreen extends Screen {
             text(g, "No uplink to SCP Unleashed's array.", x + 8, y + 11, MUTED);
             y += 36;
         } else {
-            boolean ready = t.getBoolean("orbReady");
-            int shots = t.getInt("orbShots"), parts = t.getInt("orbParts");
+            boolean ready = t.getBoolean("orbReady"), complete = t.getBoolean("orbComplete");
+            int parts = t.getInt("orbParts"), wait = t.getInt("orbWait");
             card(g, x, y, w, 64);
             circle(g, x + 22, y + 22, 14, 0xFF10222A);
             ring(g, x + 22, y + 22, 14, ready ? 0xFF5BE36F : AMBER);
             circle(g, x + 22, y + 22, 3, ready ? 0xFF5BE36F : AMBER);
-            text(g, ready ? "Array online" : "Array incomplete", x + 44, y + 9, ready ? 0xFF5BE36F : AMBER);
-            text(g, parts + " parts · " + shots + " shot" + (shots == 1 ? "" : "s") + " charged", x + 44, y + 21, 0xFF9FB1C2);
-            pill(g, x + 6, y + 42, w - 12, 16, "Strike at crosshair (256m)", 0xFFA8323A, ready && shots > 0, () -> send("orbital_strike", 0));
+            text(g, !complete ? "Array incomplete" : ready ? "Satellite ready" : "Recharging", x + 44, y + 9, ready ? 0xFF5BE36F : AMBER);
+            text(g, !complete ? parts + " parts in orbit" : ready ? "Pick a target" : wait / 60 + ":" + String.format("%02d", wait % 60) + " until ready", x + 44, y + 21, 0xFF9FB1C2);
+            int half = (w - 16) / 2;
+            if (hasLink("orbital")) {
+                pill(g, x + 6, y + 42, half, 16, "At crosshair", 0xFFA8323A, ready, () -> send("orbital_strike", 0));
+                pill(g, x + 10 + half, y + 42, half, 16, "On the map", 0xFF2E9E57, true, () -> go(View.MAP));
+            } else {
+                pill(g, x + 6, y + 42, w - 12, 16, "Link a ZENITH Designator", 0xFF2E9E57, true, () -> go(View.SETTINGS));
+            }
             y += 70;
         }
         label(g, "Facility network", x + 2, y);
@@ -1442,7 +1664,7 @@ public class PhoneScreen extends Screen {
         int hubs = t.getInt("hubs");
         card(g, x, y, w, 30);
         text(g, "Network hubs registered", x + 8, y + 5, 0xFFE8EEF4);
-        text(g, hubs < 0 ? "unavailable" : String.valueOf(hubs), x + 8, y + 17, hubs > 0 ? TEAL : MUTED);
+        text(g, hubs == -2 ? "Link a Facility Tablet in Settings" : hubs < 0 ? "unavailable" : String.valueOf(hubs), x + 8, y + 17, hubs > 0 ? TEAL : MUTED);
         return y + 36;
     }
 

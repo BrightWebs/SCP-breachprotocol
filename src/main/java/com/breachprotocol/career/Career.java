@@ -189,6 +189,16 @@ public final class Career {
 
     /** Every 5 seconds: anomalies around the player that are now held in a cell. */
     public static void scanContainment(ServerPlayer p) {
+        // new rifts nearby: the phone tells you where
+        CareerData d = data(p);
+        if (Clearance.linked(p, "rifts")) for (net.minecraft.world.entity.Entity r : p.level().getEntities(p, p.getBoundingBox().inflate(96), UnleashedApi::isRift)) {
+            if (d.seenRifts.add(r.getId())) {
+                String rarity = UnleashedApi.riftLabel(r);
+                message(p, O5.O5_9, "Rift detected: " + rarity.substring(0, 1).toUpperCase() + rarity.substring(1) + " rift near " + r.getBlockX() + ", " + r.getBlockZ()
+                        + ". Draw it out with a Rift Extractor. Containment > Rifts will guide you.");
+                d.dirty = true;
+            }
+        }
         for (Mob mob : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(48), Unleashed::isAnomaly)) {
             if (Unleashed.isContained(mob)) onContained(p.serverLevel(), p.blockPosition(), mob);
         }
@@ -626,9 +636,32 @@ public final class Career {
             at.putBoolean("k", Unleashed.canBeContained(mob));
             at.putString("n", UnleashedApi.isShyGuy(mob) && UnleashedApi.isBagged(mob) ? "Hooded" : "");
             at.putInt("m", (int) Math.sqrt(p.distanceToSqr(mob)));
+            at.putInt("id", mob.getId());
+            at.putString("type", net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString());
+            at.putInt("x", mob.getBlockX());
+            at.putInt("y", mob.getBlockY());
+            at.putInt("z", mob.getBlockZ());
             near.add(at);
         }
         t.put("nearby", near);
+        ListTag rifts = new ListTag();
+        for (net.minecraft.world.entity.Entity r : Clearance.linked(p, "rifts") ? p.level().getEntities(p, p.getBoundingBox().inflate(128), UnleashedApi::isRift) : List.<net.minecraft.world.entity.Entity>of()) {
+            if (rifts.size() >= 12) break;
+            CompoundTag rt = new CompoundTag();
+            rt.putInt("id", r.getId());
+            rt.putString("type", net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(r.getType()).toString());
+            rt.putString("dk", r.getType().getDescriptionId());
+            rt.putString("rarity", UnleashedApi.riftLabel(r));
+            rt.putInt("colour", UnleashedApi.riftColour(r));
+            rt.putFloat("ex", UnleashedApi.riftExtraction(r));
+            rt.putBoolean("can", UnleashedApi.riftExtractable(r));
+            rt.putInt("x", r.getBlockX());
+            rt.putInt("y", r.getBlockY());
+            rt.putInt("z", r.getBlockZ());
+            rt.putInt("m", (int) Math.sqrt(p.distanceToSqr(r)));
+            rifts.add(rt);
+        }
+        t.put("rifts", rifts);
         com.breachprotocol.network.Command.addToSync(p, t);
         Contacts.addToSync(p, t);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));

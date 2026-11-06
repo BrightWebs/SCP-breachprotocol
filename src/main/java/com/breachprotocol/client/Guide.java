@@ -15,7 +15,7 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.RenderGuiEvent;
 
 /**
- * Mission guidance. Pick a mission in Map or Missions and press Guide: an arrow at the middle-left
+ * Guidance. Pick a mission (Missions, Map) or an anomaly (Containment) and press Guide: an arrow at the middle-right
  * of your screen turns toward it, with the distance and whether it's above or below you.
  */
 @EventBusSubscriber(modid = BreachProtocol.MODID, value = Dist.CLIENT)
@@ -24,6 +24,8 @@ public final class Guide {
 
     private static boolean active;
     private static int tx, ty, tz;
+    /** When guiding to a creature: its entity id, followed live while it's loaded. -1 = a fixed spot. */
+    private static int entityId = -1;
     private static String label = "";
     private static long arrivedAt;
 
@@ -32,7 +34,18 @@ public final class Guide {
         tx = x; ty = y; tz = z;
         label = name;
         arrivedAt = 0;
+        entityId = -1;
         Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.8F, 0.4F));
+    }
+
+    /** Guide to a creature; the arrow follows it while it's in range of your client. */
+    public static void startEntity(int id, int x, int y, int z, String name) {
+        start(x, y, z, name);
+        entityId = id;
+    }
+
+    public static boolean guidingEntity(int id) {
+        return active && entityId == id;
     }
 
     public static void stop() {
@@ -58,11 +71,15 @@ public final class Guide {
         if (!active || mc.player == null || CameraMode.active() || mc.options.hideGui) return;
         GuiGraphics g = event.getGuiGraphics();
         Font font = mc.font;
+        if (entityId >= 0 && mc.level != null) {
+            net.minecraft.world.entity.Entity e = mc.level.getEntity(entityId);
+            if (e != null && e.isAlive()) { tx = e.getBlockX(); ty = e.getBlockY(); tz = e.getBlockZ(); }
+        }
         double dx = tx + 0.5 - mc.player.getX(), dz = tz + 0.5 - mc.player.getZ();
         int dy = ty - mc.player.getBlockY();
         int dist = (int) Math.sqrt(dx * dx + dz * dz);
         long now = System.currentTimeMillis();
-        if (dist <= 4 && Math.abs(dy) <= 4) {
+        if (dist <= (entityId >= 0 ? 6 : 4) && Math.abs(dy) <= 4) {
             if (arrivedAt == 0) {
                 arrivedAt = now;
                 mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_CHIME.value(), 1.6F, 0.6F));
@@ -72,7 +89,7 @@ public final class Guide {
             arrivedAt = 0;
         }
 
-        int w = 74, h = 84, x = 6, y = g.guiHeight() / 2 - h / 2;
+        int w = 82, h = 90, x = g.guiWidth() - w - 6, y = g.guiHeight() / 2 - h / 2;
         g.fill(x, y, x + w, y + h, 0xC0020804);
         Terminal.box(g, x, y, w, h, Terminal.MID);
         g.drawString(font, "GUIDE", x + 5, y + 4, Terminal.DIM, false);
@@ -109,12 +126,24 @@ public final class Guide {
         }
         String d = dist >= 1000 ? String.format("%.1fKM", dist / 1000F) : dist + "M";
         g.drawString(font, d, cx - font.width(d) / 2, y + 63, Terminal.GREEN, false);
-        String v = dy > 3 ? "▲ " + dy + "M ABOVE" : dy < -3 ? "▼ " + (-dy) + "M BELOW" : "SAME LEVEL";
-        int vc = dy > 3 || dy < -3 ? Terminal.AMBER : Terminal.DIM;
+        // up high or underground?
+        boolean underground = false;
+        if (mc.level != null && mc.level.hasChunk(tx >> 4, tz >> 4)) {
+            int surface = mc.level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, tx, tz);
+            underground = ty < surface - 3;
+        }
+        String v1, v2;
+        int vc;
+        if (dy > 3) { v1 = "\u25B2 HIGHER"; v2 = dy + "M UP"; vc = Terminal.AMBER; }
+        else if (dy < -3) { v1 = underground ? "\u25BC UNDERGROUND" : "\u25BC LOWER"; v2 = (-dy) + "M DOWN"; vc = underground ? Terminal.RED : Terminal.AMBER; }
+        else if (underground) { v1 = "\u25BC UNDERGROUND"; v2 = "SAME DEPTH"; vc = Terminal.RED; }
+        else { v1 = "SAME LEVEL"; v2 = ""; vc = Terminal.DIM; }
+        boolean show = dy <= 3 && dy >= -3 || (now / 450) % 2 == 0;
         g.pose().pushPose();
-        g.pose().translate(cx, y + 74, 0);
+        g.pose().translate(cx, y + 73, 0);
         g.pose().scale(0.75F, 0.75F, 1);
-        g.drawString(font, v, -font.width(v) / 2, 0, vc, false);
+        if (show) g.drawString(font, v1, -font.width(v1) / 2, 0, vc, false);
+        if (!v2.isEmpty()) g.drawString(font, v2, -font.width(v2) / 2, 10, Terminal.DIM, false);
         g.pose().popPose();
     }
 }

@@ -89,6 +89,58 @@ public final class Clearance {
         return Math.max(Math.max(fused(phoneOf(p)), carried(p)), fromRank(p));
     }
 
+    // ------------------------------------------------------------------ linked devices
+
+    public static final String LINKS = "breachprotocol_links";
+
+    /** SCP Unleashed devices that can be linked into the phone, and the feature each one unlocks. */
+    public static final String[][] DEVICES = {
+            {"orbital_designator", "orbital"},
+            {"mtf_signal_radio", "mtf"},
+            {"rift_detector", "rifts"},
+            {"camera_tablet", "cameras"},
+            {"facility_tablet", "network"}};
+
+    public static java.util.Set<String> links(ItemStack phone) {
+        java.util.Set<String> out = new java.util.HashSet<>();
+        if (phone.isEmpty()) return out;
+        for (net.minecraft.nbt.Tag e : data(phone).getList(LINKS, net.minecraft.nbt.Tag.TAG_STRING)) out.add(e.getAsString());
+        return out;
+    }
+
+    /** Is this feature linked into the phone you're carrying? */
+    public static boolean linked(Player p, String feature) {
+        return links(phoneOf(p)).contains(feature);
+    }
+
+    /** Links an SCP Unleashed device from your inventory into the phone (the device goes into the phone). */
+    public static void link(ServerPlayer p, int deviceIndex) {
+        if (deviceIndex < 0 || deviceIndex >= DEVICES.length) return;
+        ItemStack phone = phoneOf(p);
+        if (phone.isEmpty()) return;
+        String[] dev = DEVICES[deviceIndex];
+        if (links(phone).contains(dev[1])) return;
+        Item item = BuiltInRegistries.ITEM.getOptional(ResourceLocation.fromNamespaceAndPath(Unleashed.MODID, dev[0])).orElse(null);
+        if (item == null) return;
+        ItemStack found = ItemStack.EMPTY;
+        for (ItemStack s : p.getInventory().items) if (s.is(item)) { found = s; break; }
+        if (found.isEmpty() && p.getOffhandItem().is(item)) found = p.getOffhandItem();
+        if (found.isEmpty()) {
+            p.displayClientMessage(Component.literal("You need a ").append(new ItemStack(item).getHoverName()).append(" in your inventory.").withStyle(ChatFormatting.RED), true);
+            return;
+        }
+        Component name = found.getHoverName();
+        if (!p.getAbilities().instabuild) found.shrink(1);
+        CustomData.update(DataComponents.CUSTOM_DATA, phone, t -> {
+            net.minecraft.nbt.ListTag l = t.getList(LINKS, net.minecraft.nbt.Tag.TAG_STRING);
+            l.add(net.minecraft.nbt.StringTag.valueOf(dev[1]));
+            t.put(LINKS, l);
+        });
+        p.getInventory().setChanged();
+        p.level().playSound(null, p.blockPosition(), SoundEvents.SMITHING_TABLE_USE, SoundSource.PLAYERS, 0.8F, 1.6F);
+        p.displayClientMessage(Component.literal("Linked to your phone: ").withStyle(ChatFormatting.GREEN).append(name), true);
+    }
+
     /** Fuses the best carried keycard that beats the one already in the phone. */
     public static void fuse(ServerPlayer p) {
         ItemStack phone = phoneOf(p);

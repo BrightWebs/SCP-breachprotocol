@@ -41,12 +41,17 @@ public final class PhoneActions {
             case "mtf_report" -> com.breachprotocol.compat.UnleashedApi.mtfReport(p);
             case "mtf_extract" -> Command.extract(p);
             case "orbital_strike" -> Command.orbitalStrike(p);
+            case "link" -> com.breachprotocol.career.Clearance.link(p, arg);
             case "contact_req" -> com.breachprotocol.career.Contacts.request(p, arg);
             case "contact_accept" -> com.breachprotocol.career.Contacts.accept(p, arg);
             case "contact_decline" -> com.breachprotocol.career.Contacts.decline(p, arg);
             case "contact_remove" -> com.breachprotocol.career.Contacts.remove(p, arg);
             default -> {
                 if (action.startsWith("dir:")) Directives.run(p, action.substring(4));
+                else if (action.startsWith("orbital_at:")) {
+                    String[] xz = action.substring(11).split(":");
+                    if (xz.length == 2) Command.orbitalStrikeAt(p, Integer.parseInt(xz[0]), Integer.parseInt(xz[1]));
+                }
                 else if (action.startsWith("text:")) com.breachprotocol.career.Contacts.text(p, arg, action.substring(5));
                 else if (action.startsWith("mtf:")) Command.callMtf(p, action.substring(4));
                 else if (action.startsWith("dorder:")) Command.orderDClass(p, arg, action.substring(7));

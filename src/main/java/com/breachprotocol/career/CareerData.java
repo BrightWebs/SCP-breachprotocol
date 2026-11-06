@@ -118,6 +118,8 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public double returnX, returnY, returnZ;
 
     public transient boolean dirty = true;
+    /** Rifts this player's phone has already alerted them about (entity ids, this session). */
+    public final transient java.util.Set<Integer> seenRifts = new java.util.HashSet<>();
 
     public Rank getRank() {
         return Rank.byId(rank);

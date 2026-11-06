@@ -11,6 +11,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
@@ -51,7 +52,7 @@ public final class Command {
      * fragment of the matching rarity and goes through MtfMissions.call, with the same cooldown.
      */
     public static void callMtf(ServerPlayer p, String tier) {
-        if (!mtfTiers(p).contains(tier)) return;
+        if (!mtfTiers(p).contains(tier) || !Clearance.linked(p, "mtf")) return;
         if (UnleashedApi.mtfBusy(p)) { deny(p, "busy"); return; }
         long cd = UnleashedApi.mtfCooldown(p);
         if (cd > 0) {
@@ -78,17 +79,24 @@ public final class Command {
         else p.displayClientMessage(Component.translatable("message.scp_unleashed.mtf.none").withStyle(ChatFormatting.GRAY), false);
     }
 
+    /** Orbital strike at your crosshair, through SCP Unleashed's own designator logic. */
     public static void orbitalStrike(ServerPlayer p) {
-        if (Clearance.effective(p) < 5) return;
-        Vec3 eye = p.getEyePosition();
-        HitResult hit = p.level().clip(new ClipContext(eye, eye.add(p.getViewVector(1.0F).scale(256)), ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, p));
-        if (!(hit instanceof BlockHitResult bh) || hit.getType() == HitResult.Type.MISS) {
-            p.displayClientMessage(Component.literal("No target under your crosshair (256m).").withStyle(ChatFormatting.GRAY), true);
+        if (Clearance.effective(p) < 5 || !Clearance.linked(p, "orbital")) return;
+        if (UnleashedApi.orbitalFire(p, null) == null)
+            p.displayClientMessage(Component.literal("Satellite uplink unavailable.").withStyle(ChatFormatting.RED), true);
+    }
+
+    /** Orbital strike on a spot picked on the Map app (top block at x, z). */
+    public static void orbitalStrikeAt(ServerPlayer p, int x, int z) {
+        if (Clearance.effective(p) < 5 || !Clearance.linked(p, "orbital")) return;
+        ServerLevel l = p.serverLevel();
+        if (!l.hasChunk(x >> 4, z >> 4)) {
+            p.displayClientMessage(Component.literal("No satellite fix there: that area isn't loaded.").withStyle(ChatFormatting.RED), true);
             return;
         }
-        boolean ok = UnleashedApi.orbitalStrike(p, bh.getBlockPos());
-        p.displayClientMessage(Component.literal(ok ? "Orbital strike authorised. Get clear." : "Satellite not ready: finish your array or wait for it to recharge.")
-                .withStyle(ok ? ChatFormatting.GOLD : ChatFormatting.RED), true);
+        int top = l.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, x, z) - 1;
+        if (UnleashedApi.orbitalFire(p, new BlockPos(x, top, z)) == null)
+            p.displayClientMessage(Component.literal("Satellite uplink unavailable.").withStyle(ChatFormatting.RED), true);
     }
 
     public static void orderDClass(ServerPlayer p, int entityId, String order) {
@@ -111,6 +119,16 @@ public final class Command {
         t.putInt("fused", Clearance.fused(Clearance.phoneOf(p)));
         t.putInt("carried", Clearance.carried(p));
         t.putInt("rankClr", Clearance.fromRank(p));
+        ListTag links = new ListTag();
+        for (String l : Clearance.links(Clearance.phoneOf(p))) links.add(net.minecraft.nbt.StringTag.valueOf(l));
+        t.put("links", links);
+        ListTag owned = new ListTag();   // which linkable devices you're carrying right now
+        for (int i = 0; i < Clearance.DEVICES.length; i++) {
+            final String id = Clearance.DEVICES[i][0];
+            boolean has = p.getInventory().items.stream().anyMatch(s -> !s.isEmpty() && net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(s.getItem()).toString().equals("scp_unleashed:" + id));
+            if (has) owned.add(net.minecraft.nbt.IntTag.valueOf(i));
+        }
+        t.put("devices", owned);
         if (clr >= 4) {
             ListTag tiers = new ListTag();
             for (String s : mtfTiers(p)) {
@@ -143,10 +161,11 @@ public final class Command {
             int[] orb = UnleashedApi.orbitalStatus(p);
             if (orb != null) {
                 t.putInt("orbParts", orb[0]);
-                t.putBoolean("orbReady", orb[1] == 1);
-                t.putInt("orbShots", orb[2]);
+                t.putBoolean("orbComplete", orb[1] == 1);
+                t.putInt("orbWait", orb[2]);
+                t.putBoolean("orbReady", orb[1] == 1 && orb[2] == 0 && p.level().dimension() == net.minecraft.world.level.Level.OVERWORLD);
             }
-            t.putInt("hubs", UnleashedApi.networkHubCount(p.server));
+            t.putInt("hubs", Clearance.linked(p, "network") ? UnleashedApi.networkHubCount(p.server) : -2);
         }
     }
 }

@@ -202,26 +202,74 @@ public final class UnleashedApi {
         return call(method("orbital.OrbitalArray", "get", MinecraftServer.class), null, server);
     }
 
-    /** {parts installed, 1 if complete, shots ready}, or null when unavailable. */
+    /** {parts installed, 1 if complete, seconds until ready}, or null when unavailable. */
     public static int[] orbitalStatus(ServerPlayer p) {
         Object arr = orbitalArray(p.server);
         if (arr == null) return null;
         Object count = call(method("orbital.OrbitalArray", "count", java.util.UUID.class), arr, p.getUUID());
         Object complete = call(method("orbital.OrbitalArray", "complete", java.util.UUID.class), arr, p.getUUID());
-        Object shots = call(method("orbital.OrbitalArray", "shots", java.util.UUID.class), arr, p.getUUID());
-        return new int[]{count instanceof Integer i ? i : 0, complete instanceof Boolean b && b ? 1 : 0, shots instanceof Integer s ? s : 0};
+        Object readyAt = call(method("orbital.OrbitalArray", "readyAt", java.util.UUID.class), arr, p.getUUID());
+        long now = p.server.overworld().getGameTime();
+        int wait = readyAt instanceof Long r ? (int) Math.max(0, (r - now + 19) / 20) : 0;
+        return new int[]{count instanceof Integer i ? i : 0, complete instanceof Boolean b && b ? 1 : 0, wait};
     }
 
-    /** Fires the player's satellite at {@code target}. Only when their array is complete and charged. */
-    public static boolean orbitalStrike(ServerPlayer p, BlockPos target) {
-        int[] st = orbitalStatus(p);
-        if (st == null || st[1] == 0 || st[2] <= 0) return false;
-        Method m = method("orbital.OrbitalFiring", "call", ServerLevel.class, BlockPos.class, ServerPlayer.class);
-        if (m == null) return false;
-        Object strike = call(m, null, p.serverLevel(), target, p);
-        if (strike == null) return false;
-        call(method("orbital.OrbitalArray", "fired", java.util.UUID.class, long.class), orbitalArray(p.server), p.getUUID(), p.level().getGameTime());
-        return true;
+    /**
+     * Fires the player's orbital array exactly as SCP Unleashed's ZENITH Designator does
+     * (OrbitalFiring.use): array check, recharge, dimension, buried targets, cooldown, messages.
+     * The phone presents a designator linked to the player. {@code marked} null = aim at the crosshair.
+     * Returns SCP Unleashed's outcome name ("Fired", "Recharging", ...) or null if unavailable.
+     */
+    public static String orbitalFire(ServerPlayer p, @org.jetbrains.annotations.Nullable BlockPos marked) {
+        try {
+            Class<?> reg = cls("orbital.OrbitalRegistry"), link = cls("orbital.OrbitalLink");
+            if (reg == null || link == null) return null;
+            Object designatorHolder = reg.getField("Designator").get(null);
+            Object linkHolder = reg.getField("Link").get(null);
+            net.minecraft.world.item.Item item = (net.minecraft.world.item.Item) ((java.util.function.Supplier<?>) designatorHolder).get();
+            @SuppressWarnings("unchecked")
+            net.minecraft.core.component.DataComponentType<Object> type = (net.minecraft.core.component.DataComponentType<Object>) ((java.util.function.Supplier<?>) linkHolder).get();
+            Object linkValue = link.getConstructor(java.util.UUID.class, String.class).newInstance(p.getUUID(), p.getGameProfile().getName());
+            ItemStack designator = new ItemStack(item);
+            designator.set(type, linkValue);
+            Object out = marked == null
+                    ? call(method("orbital.OrbitalFiring", "use", ServerPlayer.class, ItemStack.class), null, p, designator)
+                    : call(method("orbital.OrbitalFiring", "use", ServerPlayer.class, ItemStack.class, BlockPos.class), null, p, designator, marked);
+            return out == null ? null : out.toString();
+        } catch (Throwable t) {
+            BreachProtocol.LOGGER.warn("SCP Unleashed orbital firing unavailable: {}", t.toString());
+            return null;
+        }
+    }
+
+    // ------------------------------------------------------------------ rifts
+
+    /** SCP Unleashed rifts (anything implementing anomaly.Extractable). */
+    public static boolean isRift(Entity e) {
+        Class<?> c = cls("anomaly.Extractable");
+        return c != null && c.isInstance(e);
+    }
+
+    /** "faint", "wavering", ... (Extractable.getRiftLabel). */
+    public static String riftLabel(Entity e) {
+        Object r = call(method("anomaly.Extractable", "getRiftLabel"), e);
+        return r == null ? "unknown" : r.toString();
+    }
+
+    public static int riftColour(Entity e) {
+        Object r = call(method("anomaly.Extractable", "getRiftColour"), e);
+        return r instanceof Integer i ? i : 0xB070FF;
+    }
+
+    /** Extraction progress 0..1 (Extractable.getExtraction). */
+    public static float riftExtraction(Entity e) {
+        Object r = call(method("anomaly.Extractable", "getExtraction"), e);
+        return r instanceof Float f ? f : 0F;
+    }
+
+    public static boolean riftExtractable(Entity e) {
+        Object r = call(method("anomaly.Extractable", "canBeExtracted"), e);
+        return r instanceof Boolean b && b;
     }
 
     // ------------------------------------------------------------------ network hubs
