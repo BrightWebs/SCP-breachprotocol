@@ -1082,6 +1082,7 @@ public class PhoneScreen extends Screen {
     }
 
     private String query = "";
+    private String classFilter = "all";
     private boolean searchFocused;
 
     private int drawArchive(GuiGraphics g, int y) {
@@ -1099,12 +1100,40 @@ public class PhoneScreen extends Screen {
             hit(x + w - 16, y, 16, 16, () -> { query = ""; scroll = 0; });
         }
         hit(x, y, w - (query.isEmpty() ? 0 : 16), 16, () -> searchFocused = true);
-        y += 22;
+        y += 20;
+        // object class filter
+        String[][] filters = {{"all", "All"}, {"safe", "Safe"}, {"euclid", "Euclid"}, {"keter", "Keter"}, {"thaumiel", "Thaumiel"}, {"other", "Other"}};
+        int fx = x, fy = y;
+        for (String[] f : filters) {
+            int fw = (int) (font.width(f[1]) * 0.75F) + 10;
+            if (fx + fw > x + w) { fx = x; fy += 13; }
+            boolean sel = classFilter.equals(f[0]), fh = over(fx, fy, fw, 11);
+            int tone = f[0].equals("all") || f[0].equals("other") ? Terminal.MID : Terminal.map(ArchiveFiles.classColor(f[0]));
+            RAW = true;
+            rrect(g, fx, fy, fw, 11, 5, sel ? tone : fh ? 0xFF1E6B3A : 0xFF163D24);
+            if (!sel) rrect(g, fx + 1, fy + 1, fw - 2, 9, 4, 0xFF08180E);
+            RAW = false;
+            g.pose().pushPose();
+            g.pose().translate(fx + fw / 2F, fy + 2, 0);
+            g.pose().scale(0.75F, 0.75F, 1);
+            String ft = f[1].toUpperCase(Locale.ROOT);
+            g.drawString(font, ft, -font.width(ft) / 2, 0, sel ? Terminal.ON_SELECT : tone, false);
+            g.pose().popPose();
+            final String key = f[0];
+            hit(fx, fy, fw, 11, () -> { classFilter = key; scroll = 0; });
+            fx += fw + 3;
+        }
+        y = fy + 16;
         if (all.isEmpty()) { empty(g, y - 20, "Archive offline", "SCP Unleashed hasn't sent its dossiers yet. Rejoin the world."); return y + 60; }
         String q = query.toLowerCase(Locale.ROOT).trim();
         String qDigits = q.replaceAll("[^0-9]", "");
         int shown = 0;
         for (ArchiveFiles.Entry e : all) {
+            if (!classFilter.equals("all")) {
+                String ck = e.classKey();
+                boolean main = ck.equals("safe") || ck.equals("euclid") || ck.equals("keter") || ck.equals("thaumiel");
+                if (classFilter.equals("other") ? main : !ck.equals(classFilter)) continue;
+            }
             if (!q.isEmpty()) {
                 String hay = (e.designation() + " " + e.title() + " " + e.objectClass()).toLowerCase(Locale.ROOT);
                 boolean numHit = !qDigits.isEmpty() && e.designation().replaceAll("[^0-9]", "").startsWith(qDigits) && q.replaceAll("[0-9scp\\- ]", "").isEmpty();
@@ -1124,7 +1153,7 @@ public class PhoneScreen extends Screen {
             if (ok) hit(x, y, w, h, () -> { fileId = id; searchFocused = false; go(View.FILE); });
             y += h + 4;
         }
-        if (shown == 0) { empty(g, y - 24, "No match", "Nothing in the archive matches \"" + query + "\"."); y += 50; }
+        if (shown == 0) { empty(g, y - 24, "No match", "No " + (classFilter.equals("all") ? "" : classFilter + " ") + "files" + (q.isEmpty() ? "" : " match \"" + query + "\"") + "."); y += 50; }
         return y;
     }
 
@@ -1134,7 +1163,8 @@ public class PhoneScreen extends Screen {
         int x = SX + 6, w = SW - 12;
         boolean omni = clr() >= 6;
         // the anomaly itself, slowly turning (SCP-096's image is withheld, as in its own dossier)
-        boolean shy = e.id().endsWith(":scp_096");
+        boolean shy = e.id().endsWith("scp_096") || e.designation().equals("SCP-096");
+        ArchiveModels.designation(e.id(), e.designation());
         if (shy || ArchiveModels.has(e.id())) {
             int mh = 96;
             rrect(g, x, y, w, mh, 10, 0xFF0F151C);

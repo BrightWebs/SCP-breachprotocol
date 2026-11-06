@@ -11,8 +11,9 @@ import net.minecraft.world.entity.LivingEntity;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.breachprotocol.BreachProtocol;
+
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,28 +28,53 @@ public final class ArchiveModels {
     private static final Object NONE = new Object();
     private static final Map<String, Object> FAILED = new HashMap<>();
 
-    /** Dossier "scp_unleashed:scp_096" -> entity "scp096_shy_guy"; "scp_001_day" -> "scp001_day_*"; "z_0004" -> "z0004_*". */
-    private static EntityType<?> typeFor(String docId) {
+    /** Remembers each dossier's designation so the number can be used when the file id doesn't match. */
+    private static final Map<String, String> DESIGNATION = new HashMap<>();
+
+    public static void designation(String docId, String designation) {
+        DESIGNATION.putIfAbsent(docId, designation);
+    }
+
+    /**
+     * Candidate SCP Unleashed entities for a dossier, best first. "scp_096" or "SCP-096" -> scp096_shy_guy;
+     * "scp_001_day" -> scp001_day_*; "z_0004" -> z0004_*; "scp_001_scarlet" -> scarlet_*.
+     */
+    private static List<EntityType<?>> candidates(String docId) {
         ResourceLocation doc = ResourceLocation.tryParse(docId);
-        if (doc == null) return null;
-        String prefix;
-        Matcher m = Pattern.compile("^scp_(\\d+)(?:_([a-z]+))?$").matcher(doc.getPath());
-        Matcher z = Pattern.compile("^z_(\\d+)$").matcher(doc.getPath());
-        if (m.matches()) prefix = "scp" + m.group(1) + (m.group(2) == null ? "" : "_" + m.group(2));
-        else if (z.matches()) prefix = "z" + z.group(1);
-        else return null;
-        EntityType<?> best = null;
-        int bestLen = Integer.MAX_VALUE;
-        for (EntityType<?> t : BuiltInRegistries.ENTITY_TYPE) {
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(t);
-            if (!doc.getNamespace().equals(id.getNamespace())) continue;
-            String p = id.getPath();
-            if (!(p.equals(prefix) || p.startsWith(prefix + "_"))) continue;
-            if (m.matches() && m.group(2) == null && p.length() > prefix.length() && Character.isDigit(p.charAt(prefix.length() + 1)) && !p.startsWith(prefix + "_2")) continue;
-            if (p.contains("portal") || p.contains("seat") || p.contains("restraint")) continue;
-            if (p.length() < bestLen) { best = t; bestLen = p.length(); }
+        String path = doc == null ? docId : doc.getPath();
+        path = path.substring(path.lastIndexOf('/') + 1).replace(".json", "");
+        List<String> prefixes = new ArrayList<>();
+        Matcher m = Pattern.compile("^scp_?(\\d+)(?:_([a-z]+))?.*$").matcher(path);
+        Matcher z = Pattern.compile("^z_?(\\d+).*$").matcher(path);
+        if (path.equals("scp_001_scarlet")) prefixes.add("scarlet_");
+        if (m.matches()) {
+            if (m.group(2) != null && !m.group(2).equals("j")) prefixes.add("scp" + m.group(1) + "_" + m.group(2));
+            prefixes.add("scp" + m.group(1));
+        } else if (z.matches()) {
+            prefixes.add("z" + z.group(1));
         }
-        return best;
+        String des = DESIGNATION.getOrDefault(docId, "");
+        Matcher dm = Pattern.compile("(\\d{3,4})").matcher(des);
+        if (dm.find()) prefixes.add("scp" + dm.group(1));
+        List<EntityType<?>> out = new ArrayList<>();
+        for (String prefix : prefixes) {
+            List<EntityType<?>> found = new ArrayList<>();
+            for (EntityType<?> t : BuiltInRegistries.ENTITY_TYPE) {
+                ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(t);
+                if (!"scp_unleashed".equals(id.getNamespace())) continue;
+                String p = id.getPath();
+                boolean match = prefix.endsWith("_") ? p.startsWith(prefix) : p.equals(prefix) || p.startsWith(prefix + "_");
+                if (!match) continue;
+                // scp001 alone shouldn't pick up scp001_day_* etc.; scp049 shouldn't pick scp049_2 first
+                if (prefix.equals("scp001") && p.startsWith("scp001_") ) continue;
+                if (p.contains("portal") || p.contains("seat") || p.contains("restraint") || p.contains("egg") || p.contains("bolt")
+                        || p.contains("thrown") || p.contains("shot") || p.contains("image") || p.contains("field") || p.contains("note")) continue;
+                found.add(t);
+            }
+            found.sort(Comparator.comparingInt(t -> BuiltInRegistries.ENTITY_TYPE.getKey(t).getPath().length()));
+            for (EntityType<?> t : found) if (!out.contains(t)) out.add(t);
+        }
+        return out;
     }
 
     private static LivingEntity entity(String docId) {
@@ -57,14 +83,19 @@ public final class ArchiveModels {
         if (cached != null) return cached;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return null;
-        try {
-            EntityType<?> t = typeFor(docId);
-            Entity e = t == null ? null : t.create(mc.level);
-            if (e instanceof LivingEntity le) {
-                CACHE.put(docId, le);
-                return le;
+        for (EntityType<?> t : candidates(docId)) {
+            try {
+                Entity e = t.create(mc.level);
+                if (e instanceof LivingEntity le) {
+                    CACHE.put(docId, le);
+                    BreachProtocol.LOGGER.info("Archive preview: {} -> {}", docId, BuiltInRegistries.ENTITY_TYPE.getKey(t));
+                    return le;
+                }
+            } catch (Throwable ex) {
+                BreachProtocol.LOGGER.warn("Archive preview: could not create {} for {}: {}", BuiltInRegistries.ENTITY_TYPE.getKey(t), docId, ex.toString());
             }
-        } catch (Throwable ignored) {}
+        }
+        BreachProtocol.LOGGER.info("Archive preview: no creature for {}", docId);
         FAILED.put(docId, NONE);
         return null;
     }
@@ -89,6 +120,7 @@ public final class ArchiveModels {
             InventoryScreen.renderEntityInInventory(g, x + w / 2F, y + h / 2F, scale, new Vector3f(0, bh / 2F, 0), pose, null, le);
             return true;
         } catch (Throwable t) {
+            BreachProtocol.LOGGER.warn("Archive preview failed to draw {}", docId, t);
             CACHE.remove(docId);
             FAILED.put(docId, NONE);
             return false;
