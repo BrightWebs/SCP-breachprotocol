@@ -130,6 +130,7 @@ public final class BpCommands {
                 }))
                 .then(Commands.literal("reset").executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
+                    p.removeTag(CareerEvents.GATE_SPARED);
                     CareerData fresh = new CareerData();
                     fresh.recruited = true;
                     Career.data(p).load(fresh.save());

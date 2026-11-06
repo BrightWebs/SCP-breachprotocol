@@ -70,6 +70,8 @@ public final class CareerEvents {
         if (p.tickCount % 20 != 0) return;
         Career.tick(p);
         if (d.ascended) {
+            // SCP Unleashed's Gate Guardian spares anything carrying its avoid marker (Scp001GateAvoid.Marker)
+            if (!p.getTags().contains(GATE_SPARED)) p.addTag(GATE_SPARED);
             p.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 60, 1, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, 1, true, false, false));
@@ -100,7 +102,11 @@ public final class CareerEvents {
         if (d.ritualTicks <= 0) ascend(p, d);
     }
 
+    /** SCP Unleashed's own "the Gate Guardian leaves this one alone" tag. */
+    public static final String GATE_SPARED = "scp001gate_avoider";
+
     public static void ascend(ServerPlayer p, CareerData d) {
+        p.addTag(GATE_SPARED);
         d.ascended = true;
         d.stability = 100;
         d.missions.clear();
@@ -156,12 +162,32 @@ public final class CareerEvents {
         }
         if (target instanceof Player p && Career.isAscended(p)) {
             // Nothing in the Foundation's care may harm its master.
+            net.minecraft.world.entity.Entity any = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
+            if (any != null && (Unleashed.isAnomaly(any) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(any) || com.breachprotocol.compat.UnleashedApi.isRift(any)))
+                p.getPersistentData().putLong("bp_anomaly_hit", p.level().getGameTime());
             net.minecraft.world.entity.Entity src = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
             if (src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src))) {
                 event.setCanceled(true);
                 return;
             }
             event.setAmount(event.getAmount() * 0.4F);
+        }
+    }
+
+    /**
+     * Some anomalies finish what they start with a kill() that skips ordinary damage (SCP Unleashed's
+     * Gate Guardian smite, SCP-682, ...). If an anomaly just went for SCP-Omega, the death doesn't happen.
+     */
+    @SubscribeEvent
+    public static void onDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+        if (!(event.getEntity() instanceof ServerPlayer p) || !Career.isAscended(p)) return;
+        net.minecraft.world.entity.Entity src = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
+        boolean anomalous = src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src) || com.breachprotocol.compat.UnleashedApi.isRift(src));
+        long last = p.getPersistentData().getLong("bp_anomaly_hit");
+        if (anomalous || p.level().getGameTime() - last <= 5) {
+            event.setCanceled(true);
+            p.setHealth(p.getMaxHealth());
+            p.displayClientMessage(Component.literal("It cannot end you. You are SCP-\u03A9.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
         }
     }
 

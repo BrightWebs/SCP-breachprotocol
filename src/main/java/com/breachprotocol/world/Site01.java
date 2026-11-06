@@ -42,25 +42,29 @@ import java.util.Random;
 public final class Site01 {
     private Site01() {}
 
-    public static final int SX = 66, SY = 10, SZ = 44;
+    public static final int SX = 66, SY = 10, SZ = 72;
     private static final int FLAGS = Block.UPDATE_CLIENTS;
 
     // ------------------------------------------------------------------ saved state
 
     public static class Data extends SavedData {
         public boolean built;
+        /** 2 = has the south wing (Administrator's office, lab, server room, barracks). */
+        public int version;
 
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
 
         public static Data load(CompoundTag tag, HolderLookup.Provider provider) {
             Data d = new Data();
             d.built = tag.getBoolean("built");
+            d.version = tag.getInt("version");
             return d;
         }
 
         @Override
         public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
             tag.putBoolean("built", built);
+            tag.putInt("version", version);
             return tag;
         }
     }
@@ -88,9 +92,31 @@ public final class Site01 {
         if (!data.built) {
             build(overworld, o);
             data.built = true;
+            data.version = 2;
+            data.setDirty();
+        } else if (data.version < 2) {
+            buildSouthWing(overworld, o);
+            data.version = 2;
             data.setDirty();
         }
+        registerSite(overworld, o);
         return o;
+    }
+
+    /** Site-01 is Foundation ground: its cells count as containment. */
+    private static void registerSite(ServerLevel l, BlockPos o) {
+        com.breachprotocol.career.Sites sites = com.breachprotocol.career.Sites.get(l.getServer());
+        if (sites.sites.stream().anyMatch(s -> s.name.equals("Site-01"))) return;
+        com.breachprotocol.career.Sites.Site s = new com.breachprotocol.career.Sites.Site();
+        s.name = "Site-01";
+        s.ownerName = "The Administrator";
+        s.dim = l.dimension().location().toString();
+        s.x = o.getX() + SX / 2;
+        s.y = o.getY();
+        s.z = o.getZ() + SZ / 2;
+        s.radius = 48;
+        sites.sites.add(s);
+        sites.setDirty();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -108,6 +134,15 @@ public final class Site01 {
 
     private static BlockState b(Block block) {
         return block.defaultBlockState();
+    }
+
+    /** An SCP Unleashed block by id (vanilla fallback if it's ever missing). */
+    private static BlockState u(String id, Block fallback) {
+        return Unleashed.block(id, fallback).defaultBlockState();
+    }
+
+    private static ItemStack ui(String id, net.minecraft.world.level.ItemLike fallback, int n) {
+        return new ItemStack(Unleashed.item(id, fallback.asItem()), n);
     }
 
     private static void chest(ServerLevel l, BlockPos o, int x, int y, int z, Direction facing, ItemStack... items) {
@@ -310,5 +345,121 @@ public final class Site01 {
                 st(Unleashed.item("mtf_signal_radio", Items.COMPASS), 1), st(Unleashed.item("scramble_goggles", Items.CARVED_PUMPKIN), 1),
                 st(Unleashed.item("scp096_bag", Items.LEATHER), 1), st(Items.REDSTONE_BLOCK, 8),
                 st(Items.BEACON, 1), st(Items.DIAMOND_BLOCK, 4), st(Items.IRON_BLOCK, 16), st(Items.OBSIDIAN, 32));
+        buildSouthWing(l, o);
+    }
+
+    // ------------------------------------------------------------------ south wing
+
+    /**
+     * The Administrator's own wing: a private office behind a Level 5 scanner, a research lab, the
+     * server and power room, and MTF barracks - furnished with SCP Unleashed's own blocks and gear.
+     */
+    private static void buildSouthWing(ServerLevel l, BlockPos o) {
+        for (int cx = (o.getX() - 2) >> 4; cx <= (o.getX() + SX + 2) >> 4; cx++)
+            for (int cz = (o.getZ() + 40) >> 4; cz <= (o.getZ() + SZ + 2) >> 4; cz++)
+                l.getChunk(cx, cz);
+        BlockState wall = b(Unleashed.cellWall()), air = b(Blocks.AIR);
+        fill(l, o, 0, -1, 45, SX, SY - 1, SZ, wall);
+
+        // corridor from the main hall, and the wing hall
+        fill(l, o, 44, 0, 26, 46, 4, 46, air);
+        fill(l, o, 44, -1, 26, 46, -1, 46, u("ez_floor", Blocks.POLISHED_ANDESITE));
+        fill(l, o, 4, 0, 46, 62, 4, 48, air);
+        fill(l, o, 4, -1, 46, 62, -1, 48, u("ez_floor", Blocks.POLISHED_ANDESITE));
+        for (int x = 6; x <= 60; x += 6) set(l, o, x, 4, 47, u("facility_lamp_white", Blocks.SEA_LANTERN));
+        for (int z = 28; z <= 44; z += 5) set(l, o, 45, 4, z, u("facility_lamp_white", Blocks.SEA_LANTERN));
+        set(l, o, 45, 3, 26, u("facility_sign_entrance_zone_small", Blocks.AIR));
+
+        // --- research lab
+        fill(l, o, 4, 0, 50, 20, 4, 69, air);
+        fill(l, o, 11, 0, 49, 13, 3, 49, air);
+        fill(l, o, 4, -1, 50, 20, -1, 69, u("facility_lab_tile", Blocks.WHITE_CONCRETE));
+        for (int x = 6; x <= 18; x += 4) for (int z = 52; z <= 68; z += 5) set(l, o, x, 4, z, u("facility_lamp_cyan", Blocks.SEA_LANTERN));
+        set(l, o, 5, 0, 52, u("centrifuge", Blocks.CAULDRON));
+        set(l, o, 5, 0, 55, u("advanced_assembler", Blocks.CRAFTING_TABLE));
+        set(l, o, 5, 0, 58, u("advanced_materials_bench", Blocks.SMITHING_TABLE));
+        set(l, o, 5, 0, 62, u("cloning_machine", Blocks.BREWING_STAND));
+        for (int z = 52; z <= 60; z += 4) set(l, o, 19, 0, z, u("containment_room_specimen_tank", Blocks.GLASS));
+        set(l, o, 12, 0, 63, u("examination_table", Blocks.WHITE_BED));
+        for (int x = 8; x <= 16; x += 2) set(l, o, x, 0, 68, u("chemical_shelf", Blocks.BOOKSHELF));
+        set(l, o, 19, 0, 64, u("computer_terminal", Blocks.LECTERN));
+        chest(l, o, 19, 0, 67, Direction.WEST,
+                ui("hazmat_hood", Items.LEATHER_HELMET, 2), ui("hazmat_suit", Items.LEATHER_CHESTPLATE, 2), ui("hazmat_trousers", Items.LEATHER_LEGGINGS, 2),
+                ui("hazmat_boots", Items.LEATHER_BOOTS, 2), ui("gas_mask", Items.LEATHER_HELMET, 2), ui("scramble_goggles", Items.CARVED_PUMPKIN, 2),
+                ui("energum_dust", Items.GLOWSTONE_DUST, 32), ui("rift_extractor", Items.SPYGLASS, 1), ui("rift_detector", Items.COMPASS, 1),
+                ui("stasis_pod_faint", Items.GLASS_BOTTLE, 4), ui("stasis_pod_volatile", Items.GLASS_BOTTLE, 2), ui("scp096_bag", Items.LEATHER, 1),
+                ui("amnestic_canister", Items.MILK_BUCKET, 6));
+        set(l, o, 12, 3, 49, u("facility_sign_maintenance_small", Blocks.AIR));
+
+        // --- server and power room
+        fill(l, o, 23, 0, 50, 40, 4, 58, air);
+        fill(l, o, 30, 0, 49, 32, 3, 49, air);
+        fill(l, o, 23, -1, 50, 40, -1, 58, u("power_floor", Blocks.POLISHED_BLACKSTONE));
+        for (int x = 25; x <= 39; x += 5) set(l, o, x, 4, 54, u("power_lamp", Blocks.SEA_LANTERN));
+        set(l, o, 24, 0, 51, u("network_hub", Blocks.LODESTONE));
+        set(l, o, 26, 0, 51, u("network_router", Blocks.OBSERVER));
+        set(l, o, 28, 0, 51, u("chat_server", Blocks.JUKEBOX));
+        set(l, o, 34, 0, 51, u("power_control_console", Blocks.LECTERN));
+        set(l, o, 39, 0, 52, u("power_generator_housing_bottom", Blocks.IRON_BLOCK));
+        set(l, o, 39, 1, 52, u("power_generator_housing_middle", Blocks.IRON_BLOCK));
+        set(l, o, 39, 2, 52, u("power_generator_housing_top", Blocks.IRON_BLOCK));
+        set(l, o, 39, 0, 56, u("power_breaker_panel_bottom", Blocks.IRON_BLOCK));
+        set(l, o, 39, 1, 56, u("power_breaker_panel_middle", Blocks.IRON_BLOCK));
+        set(l, o, 39, 2, 56, u("power_breaker_panel_top", Blocks.IRON_BLOCK));
+        for (int x = 24; x <= 38; x++) set(l, o, x, 3, 57, u("cable_tray", Blocks.IRON_BARS));
+        set(l, o, 31, 3, 49, u("facility_sign_server_room_small", Blocks.AIR));
+        chest(l, o, 24, 0, 57, Direction.NORTH,
+                ui("facility_tablet", Items.MAP, 1), ui("camera_tablet", Items.MAP, 1), ui("power_cable_spool", Items.STRING, 8));
+
+        // --- MTF barracks
+        fill(l, o, 23, 0, 61, 40, 4, 69, air);
+        fill(l, o, 23, 0, 59, 25, 3, 60, air);
+        fill(l, o, 23, -1, 61, 40, -1, 69, u("facility_diamond_plate", Blocks.IRON_BLOCK));
+        for (int x = 25; x <= 39; x += 5) set(l, o, x, 4, 65, u("facility_lamp_white", Blocks.SEA_LANTERN));
+        for (int x = 27; x <= 39; x += 4) bed(l, o, x, 0, 67, Blocks.GRAY_BED, Direction.SOUTH);
+        chest(l, o, 24, 0, 62, Direction.EAST,
+                ui("assault_rifle", Items.CROSSBOW, 2), ui("combat_shotgun", Items.CROSSBOW, 1), ui("pistol", Items.CROSSBOW, 2), ui("machine_gun", Items.CROSSBOW, 1),
+                ui("rifle_rounds", Items.ARROW, 64), ui("rifle_rounds", Items.ARROW, 64), ui("handgun_rounds", Items.ARROW, 64), ui("shotgun_shells", Items.ARROW, 32),
+                ui("frag_grenade", Items.TNT, 8), ui("flash_grenade", Items.SNOWBALL, 8), ui("gas_grenade", Items.SPLASH_POTION, 4));
+        chest(l, o, 24, 0, 65, Direction.EAST,
+                ui("mtf_helmet", Items.IRON_HELMET, 4), ui("mtf_vest", Items.IRON_CHESTPLATE, 4), ui("mtf_signal_radio", Items.COMPASS, 1),
+                ui("unstable_fragment_volatile", Items.AMETHYST_SHARD, 4), ui("unstable_fragment_severe", Items.AMETHYST_SHARD, 2), ui("unstable_fragment_abyssal", Items.AMETHYST_SHARD, 1),
+                ui("scp3008_bandage", Items.PAPER, 16));
+        set(l, o, 24, 3, 60, u("facility_sign_armory_small", Blocks.AIR));
+
+        // --- the Administrator's office (Level 5 to enter)
+        fill(l, o, 43, 0, 50, 62, 5, 69, air);
+        fill(l, o, 43, -1, 50, 62, -1, 69, u("facility_carpet_maroon", Blocks.RED_CARPET));
+        door(l, o, 52, 0, 49, Direction.SOUTH);
+        BlockState scanner = u("keycard_scanner", Blocks.STONE_BUTTON);
+        for (net.minecraft.world.level.block.state.properties.Property<?> prop : scanner.getProperties()) {
+            if (prop.getName().equals("level") && prop instanceof net.minecraft.world.level.block.state.properties.IntegerProperty ip && ip.getPossibleValues().contains(5)) scanner = scanner.setValue(ip, 5);
+            if (prop.getName().equals("facing") && prop instanceof net.minecraft.world.level.block.state.properties.DirectionProperty dp && dp.getPossibleValues().contains(Direction.NORTH)) scanner = scanner.setValue(dp, Direction.NORTH);
+        }
+        set(l, o, 53, 1, 48, scanner);
+        set(l, o, 52, 3, 48, u("facility_sign_heavy_containment_small", Blocks.AIR));
+        for (int x = 45; x <= 61; x += 4) for (int z = 52; z <= 68; z += 4) set(l, o, x, 5, z, u("facility_lamp_purple", Blocks.SEA_LANTERN));
+        // the desk, facing the door
+        set(l, o, 51, 0, 64, u("corner_desk", Blocks.DARK_OAK_PLANKS));
+        set(l, o, 52, 0, 64, u("corner_desk", Blocks.DARK_OAK_PLANKS));
+        set(l, o, 53, 0, 64, u("corner_desk", Blocks.DARK_OAK_PLANKS));
+        set(l, o, 51, 1, 64, u("crt_monitor", Blocks.AIR));
+        set(l, o, 52, 1, 64, u("computer", Blocks.AIR));
+        set(l, o, 53, 1, 64, u("desk_lamp", Blocks.AIR));
+        set(l, o, 52, 0, 65, stair(Blocks.DARK_OAK_STAIRS, Direction.SOUTH));
+        // records wall
+        for (int x = 44; x <= 61; x++) { set(l, o, x, 0, 69, u("binder_shelf", Blocks.BOOKSHELF)); set(l, o, x, 1, 69, u("binder_shelf", Blocks.BOOKSHELF)); }
+        set(l, o, 44, 0, 60, u("archive", Blocks.LECTERN));
+        set(l, o, 44, 0, 62, u("archive_database_terminal", Blocks.LECTERN));
+        // briefing table
+        for (int x = 48; x <= 56; x++) set(l, o, x, 0, 55, u("conference_table", Blocks.DARK_OAK_SLAB));
+        for (int x = 48; x <= 56; x += 2) { set(l, o, x, 0, 54, stair(Blocks.DARK_OAK_STAIRS, Direction.SOUTH)); set(l, o, x, 0, 56, stair(Blocks.DARK_OAK_STAIRS, Direction.NORTH)); }
+        for (int[] c : new int[][]{{44, 51}, {61, 51}, {44, 68}, {61, 68}}) set(l, o, c[0], 0, c[1], u("ez_planter", Blocks.POTTED_FERN));
+        bed(l, o, 60, 0, 59, Blocks.PURPLE_BED, Direction.SOUTH);
+        chest(l, o, 61, 0, 62, Direction.WEST,
+                ui("keycard_omni", Items.PAPER, 1), ui("orbital_designator", Items.SPYGLASS, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2),
+                ui("mtf_signal_radio", Items.COMPASS, 1), ui("rift_detector", Items.COMPASS, 1), ui("camera_tablet", Items.MAP, 1), ui("facility_tablet", Items.MAP, 1),
+                new ItemStack(Unleashed.scp500(), 4), ui("scp207_bottle", Items.HONEY_BOTTLE, 2), ui("amnestic_canister", Items.MILK_BUCKET, 4),
+                st(com.breachprotocol.registry.ModItems.PHONE.get(), 1));
     }
 }
