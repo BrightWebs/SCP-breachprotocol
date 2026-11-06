@@ -306,6 +306,75 @@ public final class UnleashedApi {
         return lang == null ? null : lang.toString();
     }
 
+    // ------------------------------------------------------------------ power wiring
+
+    /**
+     * Strings a creative-tier wire between two SCP Unleashed outlets/machines, the same way their
+     * wire coil does (WireCoilItem: a matched WireLink on each end). Returns false if either end
+     * isn't an outlet, has no free link, or the classes aren't there.
+     */
+    public static boolean wire(ServerLevel l, BlockPos a, BlockPos b) {
+        try {
+            Class<?> outlet = cls("block.entity.OutletBlockEntity"), linkCls = cls("wire.WireLink"), tierCls = cls("wire.WireTier");
+            if (outlet == null || linkCls == null || tierCls == null) return false;
+            Object A = l.getBlockEntity(a), B = l.getBlockEntity(b);
+            if (!outlet.isInstance(A) || !outlet.isInstance(B)) return false;
+            Method free = outlet.getMethod("hasFreeLink"), full = outlet.getMethod("isFullBlock"), facing = outlet.getMethod("getFacing"),
+                    links = outlet.getMethod("getLinks"), linked = outlet.getMethod("isLinkedTo", BlockPos.class), add = outlet.getMethod("addLink", linkCls);
+            if ((Boolean) linked.invoke(A, b)) return true;
+            if (!(Boolean) free.invoke(A) || !(Boolean) free.invoke(B)) return false;
+            @SuppressWarnings({"unchecked", "rawtypes"}) Object tier = Enum.valueOf((Class) tierCls, "Creative");
+            net.minecraft.core.Direction ab = net.minecraft.core.Direction.getNearest(b.getX() - a.getX(), b.getY() - a.getY(), b.getZ() - a.getZ());
+            boolean fa = (Boolean) full.invoke(A), fb = (Boolean) full.invoke(B);
+            net.minecraft.core.Direction faceA = fa ? ab : (net.minecraft.core.Direction) facing.invoke(A);
+            net.minecraft.core.Direction faceB = fb ? ab.getOpposite() : (net.minecraft.core.Direction) facing.invoke(B);
+            int slot = (Integer) linkCls.getMethod("freeSlot", java.util.Collection.class, java.util.Collection.class).invoke(null, links.invoke(A), links.invoke(B));
+            java.lang.reflect.Constructor<?> ctor = linkCls.getConstructor(BlockPos.class, net.minecraft.core.Direction.class, int.class, tierCls, boolean.class, net.minecraft.core.Direction.class);
+            add.invoke(A, ctor.newInstance(b.immutable(), faceB, slot, tier, fb, faceA));
+            add.invoke(B, ctor.newInstance(a.immutable(), faceA, slot, tier, fa, faceB));
+            return true;
+        } catch (Throwable t) {
+            BreachProtocol.LOGGER.warn("Could not wire {} to {}: {}", a, b, t.toString());
+            return false;
+        }
+    }
+
+    /**
+     * Places an SCP Unleashed launch platform (a multi-block) the way their item does: the placed cell,
+     * then setPlacedBy fills in the rest. Then fills its tank with their Heavy Fuel. Returns false on failure.
+     */
+    public static boolean placeLaunchPlatform(ServerLevel l, BlockPos pos, String id, net.minecraft.core.Direction facing) {
+        try {
+            net.minecraft.world.level.block.Block block = Unleashed.block(id, net.minecraft.world.level.block.Blocks.AIR);
+            if (block == net.minecraft.world.level.block.Blocks.AIR) return false;
+            Object layout = block.getClass().getMethod("layout").invoke(block);
+            int placePart = (Integer) layout.getClass().getMethod("getPlacePart").invoke(layout);
+            net.minecraft.world.level.block.state.properties.IntegerProperty part =
+                    (net.minecraft.world.level.block.state.properties.IntegerProperty) block.getClass().getMethod("partProperty").invoke(block);
+            net.minecraft.world.level.block.state.BlockState st = block.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING, facing).setValue(part, placePart);
+            l.setBlock(pos, st, net.minecraft.world.level.block.Block.UPDATE_ALL);
+            block.setPlacedBy(l, pos, st, null, ItemStack.EMPTY);
+            // fill the master's tank with Heavy Fuel
+            BlockPos master = (BlockPos) layout.getClass().getMethod("masterFromPlaced", BlockPos.class, net.minecraft.core.Direction.class).invoke(layout, pos, facing);
+            Object be = l.getBlockEntity(master);
+            Class<?> oil = cls("oil.OilRegistry");
+            if (be != null && oil != null) {
+                Object heavy = oil.getField("HeavyFuel").get(null);
+                Object tank = be.getClass().getMethod("getFuel").invoke(be);
+                if (tank instanceof net.neoforged.neoforge.fluids.capability.templates.FluidTank ft) {
+                    net.neoforged.neoforge.fluids.FluidStack fuel = (net.neoforged.neoforge.fluids.FluidStack) heavy.getClass().getMethod("stack", int.class).invoke(heavy, ft.getCapacity());
+                    ft.fill(fuel, net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction.EXECUTE);
+                    ((net.minecraft.world.level.block.entity.BlockEntity) be).setChanged();
+                }
+            }
+            return true;
+        } catch (Throwable t) {
+            BreachProtocol.LOGGER.warn("Could not place launch platform {}: {}", id, t.toString());
+            return false;
+        }
+    }
+
     // ------------------------------------------------------------------ rifts
 
     /** SCP Unleashed rifts (anything implementing anomaly.Extractable). */

@@ -1330,7 +1330,7 @@ public class PhoneScreen extends Screen {
             int cc = cls.equals("Safe") ? 0xFF3AA860 : cls.equals("Euclid") ? 0xFFC8A030 : 0xFFC0383F;
             rrect(g, x + w - 8 - font.width(cls) - 6, y + 4, font.width(cls) + 6, 10, 4, cc);
             text(g, cls, x + w - 5 - font.width(cls) - 6, y + 5, 0xFFFFFFFF);
-            String status = contained ? (a.getString("n").isEmpty() ? "In cell at " + a.getString("site") : a.getString("n")) : !a.getString("site").isEmpty() ? (containable ? "Loose inside " + a.getString("site") : "Loose, stasis-immune") : containable ? "Loose, outside any site" : "Loose, stasis-immune";
+            String status = !a.getString("cell").isEmpty() ? a.getString("cell") : contained ? (a.getString("n").isEmpty() ? "In cell at " + a.getString("site") : a.getString("n")) : !a.getString("site").isEmpty() ? (containable ? "Loose inside " + a.getString("site") : "Loose, stasis-immune") : containable ? "Loose, outside any site" : "Loose, stasis-immune";
             small(g, status.toUpperCase(Locale.ROOT), x + 20 + (int) (font.width(status.toUpperCase(Locale.ROOT)) * 0.375F), y + 18, contained ? 0xFF7FD6FF : containable ? 0xFFFF7A7A : 0xFF9AA6B2);
             String dist = a.getInt("m") + "m" + vertical(playerDy(a.getInt("y")));
             small(g, dist, x + w - 8 - (int) (font.width(dist) * 0.375F), y + 18, Guide.guidingEntity(id) ? Terminal.BRIGHT : 0xFF7A8794);

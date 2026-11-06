@@ -10,6 +10,7 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,6 +37,7 @@ import java.util.Locale;
  * /bp stability &lt;0-100&gt;          set Foundation stability
  * /bp site declare [radius]      declare a site here, any rank
  * /bp site clear                 remove every site
+ * /bp tower                      build a Foundation Site Tower here
  * /bp ascend                     become SCP-Ω
  * /bp phone                      give yourself a phone
  * /bp reset                      wipe your career back to a fresh Class-D
@@ -115,6 +117,12 @@ public final class BpCommands {
                             s.setDirty();
                             return done(p, c, "All sites removed.");
                         })))
+                .then(Commands.literal("tower").executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    BlockPos origin = com.breachprotocol.world.SiteTower.build(p.serverLevel(), p.blockPosition(), p.getUUID().toString(), p.getGameProfile().getName());
+                    p.teleportTo(origin.getX() + 15.5, origin.getY() + 1, origin.getZ() + 24.5);
+                    return done(p, c, "Site tower built at " + origin.toShortString() + ".");
+                }))
                 .then(Commands.literal("ascend").executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
                     CareerData data = Career.data(p);

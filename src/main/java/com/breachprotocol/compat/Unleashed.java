@@ -177,6 +177,10 @@ public final class Unleashed {
     public static boolean isContained(Mob mob) {
         if (UnleashedApi.isShyGuy(mob) && UnleashedApi.isBagged(mob)) return true;
         Level l = mob.level();
+        // its own assigned chamber in a Foundation site tower
+        com.breachprotocol.career.Sites.Cell own = com.breachprotocol.career.Sites.cellAt(l, mob.blockPosition());
+        ResourceLocation mid = idOf(mob);
+        if (own != null && mid != null && own.entity.equals(mid.getPath())) return true;
         // a cell only counts on Foundation ground: inside a declared site
         if (com.breachprotocol.career.Sites.at(l, mob.blockPosition()) == null) return false;
         Vec3 c = mob.position().add(0, Math.min(1.0, mob.getBbHeight() / 2), 0);

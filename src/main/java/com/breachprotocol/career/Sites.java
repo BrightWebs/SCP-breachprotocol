@@ -64,6 +64,52 @@ public final class Sites extends SavedData {
 
     public final List<Site> sites = new ArrayList<>();
 
+    /** A containment chamber assigned to one SCP (entity id path), e.g. the SCP-173 chamber. */
+    public static final class Cell {
+        public String name = "", entity = "", dim = "minecraft:overworld";
+        public int x0, y0, z0, x1, y1, z1;
+
+        boolean holds(Level l, BlockPos p) {
+            return l.dimension().location().toString().equals(dim) && p.getX() >= x0 && p.getX() <= x1 && p.getY() >= y0 && p.getY() <= y1 && p.getZ() >= z0 && p.getZ() <= z1;
+        }
+
+        CompoundTag save() {
+            CompoundTag t = new CompoundTag();
+            t.putString("n", name); t.putString("e", entity); t.putString("d", dim);
+            t.putIntArray("b", new int[]{x0, y0, z0, x1, y1, z1});
+            return t;
+        }
+
+        static Cell load(CompoundTag t) {
+            Cell c = new Cell();
+            c.name = t.getString("n"); c.entity = t.getString("e"); c.dim = t.getString("d");
+            int[] b = t.getIntArray("b");
+            if (b.length == 6) { c.x0 = b[0]; c.y0 = b[1]; c.z0 = b[2]; c.x1 = b[3]; c.y1 = b[4]; c.z1 = b[5]; }
+            return c;
+        }
+    }
+
+    public final List<Cell> cells = new ArrayList<>();
+
+    public static void addCell(Level l, String name, String entity, BlockPos a, BlockPos b) {
+        if (l.getServer() == null) return;
+        Cell c = new Cell();
+        c.name = name; c.entity = entity; c.dim = l.dimension().location().toString();
+        c.x0 = Math.min(a.getX(), b.getX()); c.y0 = Math.min(a.getY(), b.getY()); c.z0 = Math.min(a.getZ(), b.getZ());
+        c.x1 = Math.max(a.getX(), b.getX()); c.y1 = Math.max(a.getY(), b.getY()); c.z1 = Math.max(a.getZ(), b.getZ());
+        Sites all = get(l.getServer());
+        all.cells.add(c);
+        all.setDirty();
+    }
+
+    /** The chamber this position is in, or null. */
+    @Nullable
+    public static Cell cellAt(Level l, BlockPos p) {
+        if (l.getServer() == null) return null;
+        for (Cell c : get(l.getServer()).cells) if (c.holds(l, p)) return c;
+        return null;
+    }
+
     public static Sites get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(new SavedData.Factory<>(Sites::new, Sites::load, null), NAME);
     }
@@ -71,6 +117,7 @@ public final class Sites extends SavedData {
     private static Sites load(CompoundTag t, HolderLookup.Provider provider) {
         Sites s = new Sites();
         for (Tag e : t.getList("sites", Tag.TAG_COMPOUND)) s.sites.add(Site.load((CompoundTag) e));
+        for (Tag e : t.getList("cells", Tag.TAG_COMPOUND)) s.cells.add(Cell.load((CompoundTag) e));
         return s;
     }
 
@@ -79,6 +126,9 @@ public final class Sites extends SavedData {
         ListTag l = new ListTag();
         for (Site s : sites) l.add(s.save());
         t.put("sites", l);
+        ListTag cl = new ListTag();
+        for (Cell c : cells) cl.add(c.save());
+        t.put("cells", cl);
         return t;
     }
 

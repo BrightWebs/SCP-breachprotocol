@@ -914,6 +914,8 @@ public final class Career {
             at.putInt("id", mob.getId());
             Sites.Site site = Sites.at(p.level(), mob.blockPosition());
             at.putString("site", site == null ? "" : site.name);
+            Sites.Cell cell = Sites.cellAt(p.level(), mob.blockPosition());
+            if (cell != null) at.putString("cell", cell.name + (cell.entity.equals(Unleashed.idOf(mob).getPath()) ? "" : " (wrong cell)"));
             at.putString("type", net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(mob.getType()).toString());
             at.putInt("x", mob.getBlockX());
             at.putInt("y", mob.getBlockY());

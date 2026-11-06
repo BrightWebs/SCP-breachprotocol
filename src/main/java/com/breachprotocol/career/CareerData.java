@@ -119,6 +119,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
 
     public transient boolean dirty = true;
     public int testCounter;
+    public boolean builtTower;
     /** Next time the Council may add an assignment about an anomaly loose near you. */
     public long nextContext;
 
@@ -177,6 +178,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         t.putBoolean("ascended", ascended);
         t.putInt("stability", stability);
         t.putInt("tests", testCounter);
+        t.putBoolean("tower", builtTower);
         ListTag msgs = new ListTag();
         for (Message m : messages) {
             CompoundTag mt = new CompoundTag();
@@ -231,6 +233,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         ascended = t.getBoolean("ascended");
         stability = t.contains("stability") ? t.getInt("stability") : 70;
         testCounter = t.getInt("tests");
+        builtTower = t.getBoolean("tower");
         messages.clear();
         for (Tag e : t.getList("messages", Tag.TAG_COMPOUND)) {
             CompoundTag mt = (CompoundTag) e;

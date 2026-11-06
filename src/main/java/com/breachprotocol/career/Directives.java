@@ -34,6 +34,7 @@ public final class Directives {
             new Directive("alpha1", "Mobilise Alpha-1", "SCP Unleashed's Alpha-1 Detachment, the Red Right Hand, answers to you alone.", Rank.ADMINISTRATOR, 15 * 60),
             new Directive("fortify", "Order: Fortify All Sites", "Every site reinforces containment. Stability +8.", Rank.ADMINISTRATOR, 20 * 60),
             new Directive("global", "Global Recontainment", "Every anomaly within 128m that stasis can hold is pinned for 5 minutes.", Rank.ADMINISTRATOR, 30 * 60),
+            new Directive("tower", "Construct a Site Tower", "Builds a full Foundation site here: a ten-storey tower over Light and Heavy Containment. Clear space first. One per Overseer.", Rank.OVERSEER, 60),
             new Directive("site01", "Travel to Site-01", "Teleport to your secret sanctum.", Rank.ADMINISTRATOR, 10),
             new Directive("return", "Return from Site-01", "Go back to where you were.", Rank.ADMINISTRATOR, 10));
 
@@ -100,6 +101,22 @@ public final class Directives {
             case "global" -> {
                 int n = containAround(p, 128, 20 * 300);
                 Career.message(p, O5.O5_7, "Global Recontainment. " + n + " anomalies locked down. The world is quiet for five minutes.");
+                yield true;
+            }
+            case "tower" -> {
+                if (d.builtTower && !p.getAbilities().instabuild) {
+                    p.displayClientMessage(Component.literal("You already commissioned a tower. (Creative can build more.)").withStyle(ChatFormatting.RED), true);
+                    yield false;
+                }
+                if (p.level().dimension() != Level.OVERWORLD) {
+                    p.displayClientMessage(Component.literal("Towers are built in the Overworld.").withStyle(ChatFormatting.RED), true);
+                    yield false;
+                }
+                p.displayClientMessage(Component.literal("Construction under way. This takes a moment.").withStyle(ChatFormatting.GOLD), true);
+                BlockPos origin = com.breachprotocol.world.SiteTower.build(p.serverLevel(), p.blockPosition(), p.getUUID().toString(), p.getGameProfile().getName());
+                d.builtTower = true;
+                p.teleportTo(origin.getX() + 15.5, origin.getY() + 1, origin.getZ() + 24.5);
+                Career.message(p, O5.O5_6, "Your site is standing. Entrance Zone at ground level, containment below, the Council chamber and your office at the top. Cells are assigned and keyed.");
                 yield true;
             }
             case "site01" -> {
