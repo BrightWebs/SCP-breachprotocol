@@ -105,3 +105,37 @@ d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=(170, 26, 30, 120))
 wp = Image.alpha_composite(wp, emb)
 wp.save(os.path.join(OUT, "wallpaper.png"))
 print("phone art generated")
+
+# ---- apps added for the SCP Unleashed addon
+def camera(d, s):
+    d.rounded_rectangle([5 * s, 10 * s, 27 * s, 25 * s], radius=3 * s, fill=W)
+    d.rectangle([11 * s, 7 * s, 18 * s, 11 * s], fill=W)
+    d.ellipse([11 * s, 12 * s, 21 * s, 22 * s], fill=(40, 46, 56, 255))
+    d.ellipse([14 * s, 15 * s, 18 * s, 19 * s], fill=(120, 200, 255, 255))
+def gallery(d, s):
+    d.rounded_rectangle([6 * s, 7 * s, 26 * s, 25 * s], radius=3 * s, fill=W)
+    d.polygon([(8 * s, 23 * s), (14 * s, 15 * s), (18 * s, 20 * s), (21 * s, 17 * s), (24 * s, 23 * s)], fill=(110, 60, 170, 255))
+    d.ellipse([18 * s, 10 * s, 22 * s, 14 * s], fill=(240, 180, 60, 255))
+def archive(d, s):
+    d.rectangle([7 * s, 6 * s, 25 * s, 26 * s], fill=W)
+    for y in (10, 14, 18):
+        d.rectangle([10 * s, y * s, 22 * s, (y + 2) * s], fill=(20, 20, 24, 255) if y == 14 else (150, 150, 150, 255))
+    d.rectangle([10 * s, 21 * s, 17 * s, 23 * s], fill=(150, 150, 150, 255))
+def settings(d, s):
+    cx, cy = 16 * s, 16 * s
+    for i in range(8):
+        a = i * math.pi / 4
+        d.line([(cx, cy), (cx + math.cos(a) * 11 * s, cy + math.sin(a) * 11 * s)], fill=W, width=4 * s)
+    d.ellipse([cx - 8 * s, cy - 8 * s, cx + 8 * s, cy + 8 * s], fill=W)
+    d.ellipse([cx - 4 * s, cy - 4 * s, cx + 4 * s, cy + 4 * s], fill=(70, 78, 90, 255))
+def network(d, s):
+    d.ellipse([7 * s, 7 * s, 25 * s, 25 * s], outline=W, width=2 * s)
+    d.line([(16 * s, 7 * s), (16 * s, 25 * s)], fill=W, width=2 * s)
+    d.arc([10 * s, 7 * s, 22 * s, 25 * s], 0, 360, fill=W, width=2 * s)
+    d.line([(7 * s, 16 * s), (25 * s, 16 * s)], fill=W, width=2 * s)
+icon("app_camera", (70, 78, 92), (30, 34, 42), camera)
+icon("app_gallery", (170, 110, 240), (90, 40, 150), gallery)
+icon("app_archive", (220, 175, 70), (140, 100, 20), archive)
+icon("app_settings", (130, 140, 155), (60, 66, 78), settings)
+icon("app_network", (70, 200, 180), (20, 110, 110), network)
+print("addon app icons generated")

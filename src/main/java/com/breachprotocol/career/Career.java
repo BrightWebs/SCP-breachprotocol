@@ -1,11 +1,10 @@
 package com.breachprotocol.career;
 
-import com.breachprotocol.entity.Anomaly;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.event.BreachAlerts;
 import com.breachprotocol.network.CareerSyncPayload;
 import com.breachprotocol.registry.ModAttachments;
 import com.breachprotocol.registry.ModEffects;
-import com.breachprotocol.registry.ModEntities;
 import com.breachprotocol.registry.ModItems;
 import com.breachprotocol.registry.ModSounds;
 import com.breachprotocol.world.Site01;
@@ -171,13 +170,7 @@ public final class Career {
     }
 
     public static Item keycard(int level) {
-        return switch (level) {
-            case 1 -> ModItems.KEYCARD_1.get();
-            case 2 -> ModItems.KEYCARD_2.get();
-            case 3 -> ModItems.KEYCARD_3.get();
-            case 4 -> ModItems.KEYCARD_4.get();
-            default -> ModItems.KEYCARD_5.get();
-        };
+        return Unleashed.keycard(level);
     }
 
     public static void give(ServerPlayer p, Item item, int count) {
@@ -193,22 +186,23 @@ public final class Career {
 
     /** A containment field just took hold of an anomaly. */
     public static void onContained(ServerLevel level, BlockPos generator, Mob mob) {
-        if (!(mob instanceof Anomaly a)) return;
+        if (!Unleashed.isAnomaly(mob)) return;
         long now = level.getGameTime();
         CompoundTag pd = mob.getPersistentData();
         boolean fresh = now - pd.getLong("bp_last_contained") > 5 * MINUTE || !pd.contains("bp_last_contained");
         pd.putLong("bp_last_contained", now);
         if (!fresh) return;
-        int reward = switch (a.objectClass()) {
+        String designation = Unleashed.designation(mob);
+        int reward = switch (Unleashed.objectClass(mob)) {
             case "Safe" -> 10;
             case "Keter" -> 60;
             default -> 30;
         };
         for (ServerPlayer p : level.players()) {
             if (p.blockPosition().closerThan(generator, 48)) {
-                addXp(p, reward, a.designation() + " contained");
+                addXp(p, reward, designation + " contained");
                 for (Mission m : data(p).missions) {
-                    if (m.type == Mission.Type.RECOVER && !m.done() && m.designation.equals(a.designation())) {
+                    if (m.type == Mission.Type.RECOVER && !m.done() && m.designation.equals(designation)) {
                         m.progress++;
                         data(p).dirty = true;
                     }
@@ -219,8 +213,9 @@ public final class Career {
     }
 
     public static void onKill(ServerPlayer p, LivingEntity victim) {
-        if (!(victim instanceof Anomaly a)) return;
-        if ("SCP-049-2".equals(a.designation())) {
+        if (!Unleashed.isAnomaly(victim)) return;
+        String designation = Unleashed.designation(victim);
+        if ("SCP-049-2".equals(designation)) {
             addXp(p, 5, "SCP-049-2 neutralised");
             for (Mission m : data(p).missions) {
                 if (m.type == Mission.Type.TERMINATE && !m.done()) m.progress++;
@@ -228,22 +223,8 @@ public final class Career {
             data(p).dirty = true;
             completeFinished(p);
         } else {
-            addXp(p, 50, a.designation() + " neutralised");
+            addXp(p, 50, designation + " neutralised");
             if (!isAscended(p)) changeStability(p, -3); // the Foundation contains, it doesn't destroy
-        }
-    }
-
-    public static void onHug(ServerPlayer p) {
-        boolean any = false;
-        for (Mission m : data(p).missions) {
-            if (m.type == Mission.Type.CARE && !m.done()) {
-                m.progress++;
-                any = true;
-            }
-        }
-        if (any) {
-            data(p).dirty = true;
-            completeFinished(p);
         }
     }
 
@@ -290,25 +271,16 @@ public final class Career {
             {"minecraft:bread", "10"}, {"minecraft:gold_ingot", "6"}, {"minecraft:obsidian", "8"}, {"minecraft:glass", "24"},
             {"minecraft:diamond", "3"}, {"minecraft:ender_pearl", "4"}, {"minecraft:smooth_stone", "32"}, {"minecraft:book", "6"}};
 
-    public static Supplier<? extends EntityType<? extends Mob>> typeFor(String designation) {
-        return switch (designation) {
-            case "SCP-173" -> ModEntities.SCP_173;
-            case "SCP-096" -> ModEntities.SCP_096;
-            case "SCP-106" -> ModEntities.SCP_106;
-            case "SCP-999" -> ModEntities.SCP_999;
-            case "SCP-049-2" -> ModEntities.SCP_049_2;
-            default -> ModEntities.SCP_049;
-        };
-    }
-
-    /** SCPs the Council would trust you with at your rank. */
+    /** SCP Unleashed entities the Council would trust you to recover at your rank. Only ones that exist are offered. */
     public static List<String> recoverableFor(Rank r) {
         List<String> list = new ArrayList<>();
-        if (r.atLeast(Rank.LEVEL_2)) list.add("SCP-049");
-        if (r.atLeast(Rank.LEVEL_3)) list.add("SCP-173");
-        if (r.atLeast(Rank.LEVEL_4)) list.add("SCP-106");
-        if (r.atLeast(Rank.LEVEL_5)) list.add("SCP-096");
-        if (list.isEmpty()) list.add("SCP-049");
+        if (r.atLeast(Rank.LEVEL_2)) list.addAll(List.of("scp049", "scp131_pod", "scp066"));
+        if (r.atLeast(Rank.LEVEL_3)) list.addAll(List.of("scp173", "scp457"));
+        if (r.atLeast(Rank.LEVEL_4)) list.addAll(List.of("scp106", "scp939"));
+        if (r.atLeast(Rank.LEVEL_5)) list.add("scp096");
+        if (r.atLeast(Rank.OVERSEER)) list.add("scp682");
+        list.removeIf(id -> Unleashed.entity(id).isEmpty());
+        if (list.isEmpty()) list.add("scp049");
         return list;
     }
 
@@ -346,38 +318,47 @@ public final class Career {
                 m.xp = 30 + m.target * 8;
                 Vec3 spot = surfaceSpot(level, p.blockPosition(), 30, 55, rnd);
                 if (spot == null) return;
-                for (int i = 0; i < m.target; i++) spawnAt(level, ModEntities.SCP_049_2.get(), spot.add(rnd.nextInt(5) - 2, 0, rnd.nextInt(5) - 2));
+                var cured = Unleashed.entity("scp049_2");
+                if (cured.isEmpty()) return;
+                for (int i = 0; i < m.target; i++) spawnAt(level, cured.get(), spot.add(rnd.nextInt(5) - 2, 0, rnd.nextInt(5) - 2));
                 setPos(m, spot);
                 m.description = "Terminate " + m.target + " SCP-049-2 instances wandering near " + m.x + ", " + m.z + ".";
                 message(p, O5.O5_11, "A group of 049's former patients got out. Termination order signed. Coordinates on your phone.");
             }
             case CARE -> {
-                m.target = 3;
+                var blob = Unleashed.entity("scp999");
+                if (blob.isEmpty()) return;
+                m.target = 30;
                 m.giver = 2;
                 m.xp = 50 + tier * 5;
-                boolean have = !level.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), e -> e.getType() == ModEntities.SCP_999.get()).isEmpty();
+                boolean have = !level.getEntitiesOfClass(net.minecraft.world.entity.Entity.class, p.getBoundingBox().inflate(64), e -> e.getType() == blob.get()).isEmpty();
                 if (!have) {
                     Vec3 spot = surfaceSpot(level, p.blockPosition(), 10, 20, rnd);
                     if (spot == null) return;
-                    spawnAt(level, ModEntities.SCP_999.get(), spot);
+                    spawnAt(level, blob.get(), spot);
                     setPos(m, spot);
                 }
-                m.description = "Morale protocol: give SCP-999 three hugs (right-click it). It needs it. So do you.";
+                m.description = "Morale protocol: spend 30 seconds close to SCP-999. It needs the company. So do you.";
                 message(p, O5.O5_2, "SCP-999 has been asking for you. I'm told that's not possible, but here we are. Go and see it.");
             }
             case RECOVER -> {
                 List<String> options = recoverableFor(r);
-                m.designation = options.get(rnd.nextInt(options.size()));
+                String entityId = options.get(rnd.nextInt(options.size()));
+                var type = Unleashed.entity(entityId);
+                if (type.isEmpty()) return;
+                m.designation = Unleashed.designation(entityId);
+                m.item = entityId;
                 m.giver = rnd.nextBoolean() ? 6 : 8;
-                m.xp = switch (m.designation) {
-                    case "SCP-096" -> 280;
-                    case "SCP-106" -> 240;
-                    case "SCP-173" -> 160;
+                m.xp = switch (entityId) {
+                    case "scp682" -> 400;
+                    case "scp096" -> 280;
+                    case "scp106", "scp939" -> 240;
+                    case "scp173", "scp457" -> 160;
                     default -> 120;
                 };
                 Vec3 spot = surfaceSpot(level, p.blockPosition(), 45, 75, rnd);
                 if (spot == null) return;
-                spawnAt(level, typeFor(m.designation).get(), spot);
+                spawnAt(level, type.get(), spot);
                 setPos(m, spot);
                 m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". Bring it inside a powered Containment Field.";
                 message(p, O5.seat(m.giver), m.designation + " has surfaced outside containment near " + m.x + ", " + m.z + ". Bring it home. "
@@ -385,6 +366,8 @@ public final class Career {
                     case "SCP-173" -> "Do not blink.";
                     case "SCP-096" -> "Do NOT look at its face. Wear a pumpkin if you have to.";
                     case "SCP-106" -> "It will find you before you find it.";
+                    case "SCP-682" -> "Do not engage. Contain it, or run.";
+                    case "SCP-939" -> "If you hear a voice you know out there, it isn't them.";
                     default -> "And don't let it touch you.";
                 });
             }
@@ -416,22 +399,23 @@ public final class Career {
         return null;
     }
 
-    public static Mob spawnAt(ServerLevel level, EntityType<? extends Mob> type, Vec3 pos) {
-        Mob mob = type.create(level);
-        if (mob == null) return null;
-        mob.moveTo(pos.x, pos.y, pos.z, level.random.nextFloat() * 360F, 0);
-        mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()), MobSpawnType.EVENT, null);
-        level.addFreshEntity(mob);
-        return mob;
+    public static net.minecraft.world.entity.Entity spawnAt(ServerLevel level, EntityType<?> type, Vec3 pos) {
+        net.minecraft.world.entity.Entity e = type.create(level);
+        if (e == null) return null;
+        e.moveTo(pos.x, pos.y, pos.z, level.random.nextFloat() * 360F, 0);
+        if (e instanceof Mob mob) mob.finalizeSpawn(level, level.getCurrentDifficultyAt(mob.blockPosition()), MobSpawnType.EVENT, null);
+        level.addFreshEntity(e);
+        return e;
     }
 
     /** Spawns an uncontained SCP near the player and sounds the alarm. */
-    public static void breachNear(ServerPlayer p, String designation) {
+    public static void breachNear(ServerPlayer p, String entityId) {
         ServerLevel level = p.serverLevel();
+        var type = Unleashed.entity(entityId);
         Vec3 spot = surfaceSpot(level, p.blockPosition(), 25, 45, p.getRandom());
-        if (spot == null) return;
-        spawnAt(level, typeFor(designation).get(), spot);
-        BreachAlerts.announce(level, BlockPos.containing(spot), List.of(designation));
+        if (spot == null || type.isEmpty()) return;
+        spawnAt(level, type.get(), spot);
+        BreachAlerts.announce(level, BlockPos.containing(spot), List.of(Unleashed.designation(entityId)));
     }
 
     public static void completeFinished(ServerPlayer p) {
@@ -522,11 +506,20 @@ public final class Career {
         for (Mission m : d.missions) {
             if (m.type == Mission.Type.FOUNDERS_TRIAL) {
                 Set<String> held = new HashSet<>();
-                for (Mob mob : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), e -> e instanceof Anomaly a && a.canBeContained())) {
-                    if (ModEffects.has(mob, ModEffects.CONTAINED)) held.add(((Anomaly) mob).designation());
+                for (Mob mob : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), Unleashed::canBeContained)) {
+                    if (ModEffects.has(mob, ModEffects.CONTAINED)) held.add(Unleashed.designation(mob));
                 }
                 if (held.size() != m.progress) {
                     m.progress = held.size();
+                    d.dirty = true;
+                }
+            }
+        }
+        for (Mission m : d.missions) {
+            if (m.type == Mission.Type.CARE && !m.done()) {
+                var blob = Unleashed.entity("scp999");
+                if (blob.isPresent() && !p.level().getEntitiesOfClass(net.minecraft.world.entity.Entity.class, p.getBoundingBox().inflate(4), e -> e.getType() == blob.get()).isEmpty()) {
+                    m.progress++;
                     d.dirty = true;
                 }
             }
@@ -565,7 +558,7 @@ public final class Career {
                     breachNear(p, opts.get(p.getRandom().nextInt(opts.size())));
                 } else if (d.stability > 85) {
                     message(p, O5.O5_12, "Stability is excellent. The budget surplus is in your inventory.");
-                    give(p, ModItems.EYEDROPS.get(), 2);
+                    give(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 2);
                     give(p, Items.DIAMOND, 2);
                 }
             }
@@ -612,21 +605,21 @@ public final class Career {
             t.putBoolean("inSite", Site01.isInside(p));
         }
         ListTag near = new ListTag();
-        List<Mob> found = p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), e -> e instanceof Anomaly);
+        List<Mob> found = p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), Unleashed::isAnomaly);
         found.sort(java.util.Comparator.comparingDouble(p::distanceToSqr));
         for (Mob mob : found.subList(0, Math.min(16, found.size()))) {
-            Anomaly a = (Anomaly) mob;
             CompoundTag at = new CompoundTag();
-            at.putString("d", a.designation());
-            at.putString("o", a.objectClass());
+            at.putString("d", Unleashed.designation(mob));
+            at.putString("o", Unleashed.objectClass(mob));
             at.putBoolean("c", ModEffects.has(mob, ModEffects.CONTAINED));
-            at.putBoolean("k", a.canBeContained());
-            Component note = a.statusNote();
+            at.putBoolean("k", Unleashed.canBeContained(mob));
+            Component note = Unleashed.statusNote(mob);
             at.putString("n", note == null ? "" : note.getString());
             at.putInt("m", (int) Math.sqrt(p.distanceToSqr(mob)));
             near.add(at);
         }
         t.put("nearby", near);
+        com.breachprotocol.network.Command.addToSync(p, t);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));
     }
 

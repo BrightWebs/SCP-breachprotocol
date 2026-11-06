@@ -1,8 +1,0 @@
-{
-  "parent": "minecraft:block/orientable",
-  "textures": {
-    "front": "breachprotocol:block/coal_generator_front_on",
-    "side": "breachprotocol:block/coal_generator_side",
-    "top": "breachprotocol:block/coal_generator_top"
-  }
-}

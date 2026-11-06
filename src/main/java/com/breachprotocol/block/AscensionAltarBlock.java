@@ -3,7 +3,7 @@ package com.breachprotocol.block;
 import com.breachprotocol.career.Career;
 import com.breachprotocol.career.CareerEvents;
 import com.breachprotocol.career.Rank;
-import com.breachprotocol.registry.ModItems;
+import com.breachprotocol.compat.Unleashed;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -59,7 +59,7 @@ public class AscensionAltarBlock extends Block {
             sp.displayClientMessage(Component.literal("The altar does not answer you.").withStyle(ChatFormatting.DARK_GRAY), true);
             return ItemInteractionResult.SUCCESS;
         }
-        if (!stack.is(ModItems.SCP_500.get())) {
+        if (!stack.is(Unleashed.scp500())) {
             sp.displayClientMessage(Component.literal("The altar wants the cure for all things. Offer it SCP-500.").withStyle(ChatFormatting.GOLD), true);
             return ItemInteractionResult.SUCCESS;
         }

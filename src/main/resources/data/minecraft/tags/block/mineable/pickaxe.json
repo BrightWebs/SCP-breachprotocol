@@ -1,17 +1,7 @@
 {
   "replace": false,
   "values": [
-    "breachprotocol:keycard_reader",
     "breachprotocol:containment_generator",
-    "breachprotocol:containment_wall",
-    "breachprotocol:coal_generator",
-    "breachprotocol:battery",
-    "breachprotocol:power_outlet",
-    "breachprotocol:fission_reactor",
-    "breachprotocol:coolant_cell",
-    "breachprotocol:uranium_ore",
-    "breachprotocol:deepslate_uranium_ore",
-    "breachprotocol:reactor_slag",
-    "breachprotocol:heavy_wire"
+    "breachprotocol:containment_wall"
   ]
 }

@@ -1,6 +1,6 @@
 package com.breachprotocol.item;
 
-import com.breachprotocol.entity.Anomaly;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.registry.ModEffects;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -29,7 +29,7 @@ public class SiteTerminalItem extends Item {
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (!level.isClientSide) {
-            List<Mob> found = level.getEntitiesOfClass(Mob.class, player.getBoundingBox().inflate(RANGE), m -> m instanceof Anomaly);
+            List<Mob> found = level.getEntitiesOfClass(Mob.class, player.getBoundingBox().inflate(RANGE), Unleashed::isAnomaly);
             found.sort(Comparator.comparingDouble(player::distanceToSqr));
             player.sendSystemMessage(Component.translatable("message.breachprotocol.terminal.header").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
             if (found.isEmpty()) {
@@ -37,17 +37,17 @@ public class SiteTerminalItem extends Item {
             }
             int loose = 0;
             for (Mob mob : found) {
-                Anomaly a = (Anomaly) mob;
                 boolean contained = ModEffects.has(mob, ModEffects.CONTAINED);
-                if (!contained && a.canBeContained()) loose++;
+                if (!contained && Unleashed.canBeContained(mob)) loose++;
+                String cls = Unleashed.objectClass(mob);
                 MutableComponent status = contained
                         ? Component.translatable("message.breachprotocol.terminal.contained").withStyle(ChatFormatting.AQUA)
                         : Component.translatable("message.breachprotocol.terminal.loose").withStyle(ChatFormatting.RED);
-                MutableComponent line = Component.literal(" " + a.designation() + " ").withStyle(ChatFormatting.WHITE)
-                        .append(Component.literal("[" + a.objectClass() + "] ").withStyle(a.objectClassColor()))
+                MutableComponent line = Component.literal(" " + Unleashed.designation(mob) + " ").withStyle(ChatFormatting.WHITE)
+                        .append(Component.literal("[" + cls + "] ").withStyle(Unleashed.classColor(cls)))
                         .append(status)
                         .append(Component.literal(String.format("  %.0fm", Math.sqrt(player.distanceToSqr(mob)))).withStyle(ChatFormatting.DARK_GRAY));
-                Component extra = a.statusNote();
+                Component extra = Unleashed.statusNote(mob);
                 if (extra != null) line.append(Component.literal("  ")).append(extra);
                 player.sendSystemMessage(line);
             }

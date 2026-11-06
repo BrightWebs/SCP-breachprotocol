@@ -28,6 +28,47 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public long expires;
     }
 
+    /** A photo taken with the phone camera. */
+    public static class Photo {
+        public int id;
+        public long time;
+        public String subjects = "";
+        public boolean hazard;
+        public String hazardEntity = "";
+        public int x, z;
+        public String author = "";
+
+        public CompoundTag save() {
+            CompoundTag t = new CompoundTag();
+            t.putInt("id", id);
+            t.putLong("time", time);
+            t.putString("subjects", subjects);
+            t.putBoolean("hazard", hazard);
+            t.putString("hazardEntity", hazardEntity);
+            t.putInt("x", x);
+            t.putInt("z", z);
+            t.putString("author", author);
+            return t;
+        }
+
+        public static Photo load(CompoundTag t) {
+            Photo p = new Photo();
+            p.id = t.getInt("id");
+            p.time = t.getLong("time");
+            p.subjects = t.getString("subjects");
+            p.hazard = t.getBoolean("hazard");
+            p.hazardEntity = t.getString("hazardEntity");
+            p.x = t.getInt("x");
+            p.z = t.getInt("z");
+            p.author = t.getString("author");
+            return p;
+        }
+    }
+
+    public static final int MAX_PHOTOS = 24;
+    public final List<Photo> photos = new ArrayList<>();
+    public int nextPhotoId = 1;
+
     public boolean recruited;
     public int rank;
     public int xp;
@@ -85,6 +126,10 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public CompoundTag save() {
         CompoundTag t = new CompoundTag();
         t.putBoolean("recruited", recruited);
+        ListTag ph = new ListTag();
+        for (Photo p : photos) ph.add(p.save());
+        t.put("photos", ph);
+        t.putInt("nextPhoto", nextPhotoId);
         t.putInt("rank", rank);
         t.putInt("xp", xp);
         t.putBoolean("ascended", ascended);
@@ -127,6 +172,9 @@ public class CareerData implements INBTSerializable<CompoundTag> {
 
     public void load(CompoundTag t) {
         recruited = t.getBoolean("recruited");
+        photos.clear();
+        for (Tag e : t.getList("photos", Tag.TAG_COMPOUND)) photos.add(Photo.load((CompoundTag) e));
+        nextPhotoId = Math.max(1, t.getInt("nextPhoto"));
         rank = t.getInt("rank");
         xp = t.getInt("xp");
         ascended = t.getBoolean("ascended");

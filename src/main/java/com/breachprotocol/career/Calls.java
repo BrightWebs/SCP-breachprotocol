@@ -1,8 +1,6 @@
 package com.breachprotocol.career;
 
-import com.breachprotocol.blink.BlinkData;
-import com.breachprotocol.registry.ModAttachments;
-import com.breachprotocol.registry.ModItems;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.registry.ModSounds;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
@@ -84,7 +82,7 @@ public final class Calls {
                 List.of(
                         opt("Fund containment", (p, d) -> stab(p, 6, "Walls are cheaper than funerals.")),
                         opt("Fund research", (p, d) -> {
-                            Career.give(p, ModItems.EYEDROPS.get(), 4);
+                            Career.give(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 3);
                             Career.addXp(p, 40, "research grant");
                             return stab(p, -3, "Research sent you a gift basket. Containment sent a complaint.");
                         }))), true);
@@ -108,7 +106,8 @@ public final class Calls {
                         opt("Approve", (p, d) -> {
                             if (p.level().dimension() == Level.OVERWORLD) {
                                 var spot = Career.surfaceSpot(p.serverLevel(), p.blockPosition(), 4, 8, p.getRandom());
-                                if (spot != null) Career.spawnAt(p.serverLevel(), com.breachprotocol.registry.ModEntities.SCP_999.get(), spot);
+                                var blob = Unleashed.entity("scp999");
+                                if (spot != null && blob.isPresent()) Career.spawnAt(p.serverLevel(), blob.get(), spot);
                             }
                             return stab(p, 5, "It's already giggling. I sent one to you, too.");
                         }),
@@ -123,7 +122,7 @@ public final class Calls {
                         }),
                         opt("Postpone", (p, d) -> {
                             if (p.getRandom().nextFloat() < 0.35F && p.level().dimension() == Level.OVERWORLD && !d.ascended) {
-                                Career.breachNear(p, "SCP-173");
+                                Career.breachNear(p, "scp173");
                                 return stab(p, -5, "The waste built up. Something cracked. It's out, and it's near you.");
                             }
                             return stab(p, -2, "Postponed. The smell is getting worse.");
@@ -135,7 +134,7 @@ public final class Calls {
                         opt("Authorise it", (p, d) -> stab(p, 8, "It's done. We don't speak about it.")),
                         opt("Find another way", (p, d) -> {
                             if (p.getRandom().nextFloat() < 0.4F && p.level().dimension() == Level.OVERWORLD && !d.ascended) {
-                                Career.breachNear(p, "SCP-106");
+                                Career.breachNear(p, "scp106");
                                 return stab(p, -5, "There was no other way. It's coming up through the floor near you.");
                             }
                             return stab(p, -3, "We found a way. For now.");
@@ -145,7 +144,7 @@ public final class Calls {
                 "The Global Occult Coalition wants a joint operation. They're offering one of their own medical anomalies in exchange for intel.",
                 List.of(
                         opt("Share intel", (p, d) -> {
-                            Career.give(p, ModItems.SCP_500.get(), 1);
+                            Career.give(p, Unleashed.scp500(), 1);
                             return stab(p, 3, "A fair trade. They sent the pill. I'd keep it safe.");
                         }),
                         opt("Refuse", (p, d) -> {
@@ -157,7 +156,7 @@ public final class Calls {
                 "Research wants SCP-207's files declassified. If I open them, samples go out to the teams.",
                 List.of(
                         opt("Declassify", (p, d) -> {
-                            Career.give(p, ModItems.SCP_207.get(), 2);
+                            Career.give(p, Unleashed.item("scp207_bottle", Items.HONEY_BOTTLE), 2);
                             return stab(p, -2, "Two bottles found their way to your office. Do not drink both.");
                         }),
                         opt("Keep it sealed", (p, d) -> stab(p, 2, "Sealed. History will thank you. Or forget you.")))), true);
@@ -298,8 +297,6 @@ public final class Calls {
 
     /** Used by directive code to restore a player's eyes. */
     static void clearBlink(ServerPlayer p) {
-        BlinkData b = p.getData(ModAttachments.BLINK);
-        b.meter = BlinkData.MAX;
         p.removeEffect(MobEffects.DARKNESS);
         p.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 20 * 60, 0));
     }

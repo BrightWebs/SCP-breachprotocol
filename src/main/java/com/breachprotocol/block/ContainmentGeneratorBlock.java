@@ -1,6 +1,6 @@
 package com.breachprotocol.block;
 
-import com.breachprotocol.entity.Anomaly;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.event.BreachAlerts;
 import com.breachprotocol.registry.ModEffects;
 import com.breachprotocol.registry.ModSounds;
@@ -98,11 +98,11 @@ public class ContainmentGeneratorBlock extends Block {
     /** Frees everything held by this generator and returns their designations. */
     private static List<String> releaseAll(ServerLevel level, BlockPos pos) {
         List<String> names = new ArrayList<>();
-        for (Mob mob : level.getEntitiesOfClass(Mob.class, field(pos), m -> m instanceof Anomaly)) {
+        for (Mob mob : level.getEntitiesOfClass(Mob.class, field(pos), Unleashed::isAnomaly)) {
             if (ModEffects.has(mob, ModEffects.CONTAINED)) {
                 mob.removeEffect(ModEffects.h(ModEffects.CONTAINED));
                 mob.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 20 * 30, 0));
-                String d = ((Anomaly) mob).designation();
+                String d = Unleashed.designation(mob);
                 if (!names.contains(d)) names.add(d);
             }
         }
@@ -112,10 +112,10 @@ public class ContainmentGeneratorBlock extends Block {
     @Override
     protected void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
         if (state.getValue(ACTIVE)) {
-            List<Mob> held = level.getEntitiesOfClass(Mob.class, field(pos), m -> m instanceof Anomaly a && a.canBeContained());
+            List<Mob> held = level.getEntitiesOfClass(Mob.class, field(pos), Unleashed::canBeContained);
             for (Mob mob : held) {
                 if (!ModEffects.has(mob, ModEffects.CONTAINED)) com.breachprotocol.career.Career.onContained(level, pos, mob);
-                mob.addEffect(new MobEffectInstance(ModEffects.h(ModEffects.CONTAINED), FIELD_INTERVAL * 4, 0, false, false, true));
+                Unleashed.contain(mob, FIELD_INTERVAL * 4);
                 if (random.nextInt(3) == 0) {
                     level.sendParticles(ParticleTypes.ELECTRIC_SPARK, mob.getX(), mob.getY() + mob.getBbHeight() * random.nextFloat(), mob.getZ(),
                             3, mob.getBbWidth() * 0.6, 0.2, mob.getBbWidth() * 0.6, 0.05);

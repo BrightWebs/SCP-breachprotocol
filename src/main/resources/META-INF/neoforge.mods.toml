@@ -9,7 +9,7 @@ displayName = "${mod_name}"
 authors = "${mod_authors}"
 logoFile = "breachprotocol.png"
 credits = "SCP concepts are from the SCP Foundation wiki (scp-wiki.wikidot.com), licensed CC BY-SA 3.0. All models, textures and sounds in this mod are original."
-description = '''${mod_description}
+description = '''Addon for SCP Unleashed by Raikin. ${mod_description}
 
 Original Breach Protocol mechanics:
  - Blink meter (SCP-173 can only move while you blink)
@@ -35,5 +35,12 @@ side = "BOTH"
 modId = "geckolib"
 type = "required"
 versionRange = "[4.7,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "scp_unleashed"
+type = "required"
+versionRange = "[0.0.5,)"
 ordering = "AFTER"
 side = "BOTH"

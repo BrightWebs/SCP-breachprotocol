@@ -1,8 +1,7 @@
 package com.breachprotocol.career;
 
-import com.breachprotocol.entity.Anomaly;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.registry.ModEffects;
-import com.breachprotocol.registry.ModItems;
 import com.breachprotocol.world.Site01;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -62,8 +61,9 @@ public final class Directives {
                 Rank r = d.getRank();
                 Career.give(p, Items.BREAD, 8);
                 Career.give(p, Items.IRON_INGOT, 8);
-                Career.give(p, ModItems.EYEDROPS.get(), 2);
-                if (r.atLeast(Rank.OVERSEER)) Career.give(p, ModItems.SCP_500.get(), 1);
+                Career.give(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 2);
+                if (r.atLeast(Rank.OVERSEER)) Career.give(p, Unleashed.scp500(), 1);
+                if (r.atLeast(Rank.LEVEL_5)) Career.give(p, Unleashed.item("mtf_signal_radio", Items.COMPASS), 1);
                 if (r == Rank.ADMINISTRATOR) Career.give(p, Items.DIAMOND, 4);
                 Career.message(p, O5.O5_12, "Crate delivered. It's coming out of someone's budget. Not yours.");
                 yield true;
@@ -148,8 +148,8 @@ public final class Directives {
     /** Freeze anomalies around the player. Returns how many. */
     public static int containAround(ServerPlayer p, double radius, int ticks) {
         int n = 0;
-        for (Mob m : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(radius), e -> e instanceof Anomaly a && a.canBeContained())) {
-            m.addEffect(new MobEffectInstance(ModEffects.h(ModEffects.CONTAINED), ticks, 0, false, false, true));
+        for (Mob m : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(radius), Unleashed::canBeContained)) {
+            Unleashed.contain(m, ticks);
             n++;
         }
         return n;

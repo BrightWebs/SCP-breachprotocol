@@ -101,7 +101,7 @@ public class GateGuardianEntity extends PathfinderMob implements Anomaly , GeoEn
         }
         this.entityData.set(KNEEL, kneel);
         // nothing hostile lives in its sight
-        for (Monster m : server.getEntitiesOfClass(Monster.class, getBoundingBox().inflate(12), m -> !(m instanceof Anomaly))) {
+        for (Monster m : server.getEntitiesOfClass(Monster.class, getBoundingBox().inflate(12), m -> !(m instanceof Anomaly) && !com.breachprotocol.compat.Unleashed.isUnleashedAnomaly(m))) {
             server.sendParticles(ParticleTypes.FLAME, m.getX(), m.getY() + 1, m.getZ(), 20, 0.3, 0.6, 0.3, 0.05);
             m.hurt(damageSources().mobAttack(this), 1000F);
         }

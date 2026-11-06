@@ -1,7 +1,7 @@
 package com.breachprotocol.career;
 
 import com.breachprotocol.BreachProtocol;
-import com.breachprotocol.entity.Anomaly;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.entity.GateGuardianEntity;
 import com.breachprotocol.entity.O5MemberEntity;
 import com.breachprotocol.registry.ModEffects;
@@ -153,17 +153,22 @@ public final class CareerEvents {
     public static void onDamage(LivingIncomingDamageEvent event) {
         LivingEntity target = event.getEntity();
         if (event.getSource().getEntity() instanceof Player attacker && Career.isAscended(attacker)
-                && target instanceof Anomaly && !(target instanceof GateGuardianEntity) && !(target instanceof O5MemberEntity)) {
+                && Unleashed.isAnomaly(target) && !(target instanceof GateGuardianEntity) && !(target instanceof O5MemberEntity)) {
             event.setAmount(event.getAmount() * 8F); // nothing in the Foundation can survive its master
         }
         if (target instanceof Player p && Career.isAscended(p)) {
+            // Nothing in the Foundation's care may harm its master.
+            if (event.getSource().getEntity() != null && Unleashed.isAnomaly(event.getSource().getEntity())) {
+                event.setCanceled(true);
+                return;
+            }
             event.setAmount(event.getAmount() * 0.4F);
         }
     }
 
     @SubscribeEvent
     public static void onTarget(LivingChangeTargetEvent event) {
-        if (event.getEntity() instanceof Anomaly && event.getNewAboutToBeSetTarget() instanceof Player p && Career.isAscended(p)) {
+        if (Unleashed.isAnomaly(event.getEntity()) && event.getNewAboutToBeSetTarget() instanceof Player p && Career.isAscended(p)) {
             event.setCanceled(true);
         }
     }
@@ -174,11 +179,11 @@ public final class CareerEvents {
         if (event.getLevel().isClientSide || event.getHand() != InteractionHand.MAIN_HAND) return;
         if (!(event.getEntity() instanceof ServerPlayer p) || !Career.isAscended(p) || !p.isShiftKeyDown()) return;
         if (!p.getMainHandItem().isEmpty()) return;
-        if (event.getTarget() instanceof Mob mob && mob instanceof Anomaly a && a.canBeContained()) {
-            mob.addEffect(new MobEffectInstance(ModEffects.h(ModEffects.CONTAINED), 20 * 600, 0, false, false, true));
+        if (event.getTarget() instanceof Mob mob && Unleashed.canBeContained(mob)) {
+            Unleashed.contain(mob, 20 * 600);
             mob.setTarget(null);
             p.serverLevel().sendParticles(ParticleTypes.END_ROD, mob.getX(), mob.getY() + 1, mob.getZ(), 30, 0.5, 1, 0.5, 0.05);
-            p.displayClientMessage(Component.literal(a.designation() + " kneels before you.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+            p.displayClientMessage(Component.literal(Unleashed.designation(mob) + " kneels before you.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
             event.setCanceled(true);
             event.setCancellationResult(InteractionResult.SUCCESS);
         }

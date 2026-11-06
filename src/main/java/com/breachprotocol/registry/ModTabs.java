@@ -13,7 +13,7 @@ public final class ModTabs {
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MAIN = TABS.register("main", () -> CreativeModeTab.builder()
             .title(Component.translatable("itemGroup.breachprotocol"))
-            .icon(() -> new ItemStack(ModItems.KEYCARD_5.get()))
+            .icon(() -> new ItemStack(ModItems.PHONE.get()))
             .displayItems((params, output) -> ModItems.ITEMS.getEntries().forEach(item -> output.accept(item.get())))
             .build());
 

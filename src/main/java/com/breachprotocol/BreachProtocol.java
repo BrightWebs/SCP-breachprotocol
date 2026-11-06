@@ -19,15 +19,13 @@ public class BreachProtocol {
         ModEffects.EFFECTS.register(modBus);
         ModBlocks.BLOCKS.register(modBus);
         ModItems.ITEMS.register(modBus);
-        ModBlockEntities.BLOCK_ENTITIES.register(modBus);
         ModEntities.ENTITIES.register(modBus);
         ModAttachments.ATTACHMENTS.register(modBus);
         ModTabs.TABS.register(modBus);
 
         modBus.addListener(ModEntities::registerAttributes);
         modBus.addListener(ModNetwork::register);
-        modBus.addListener(ModBlockEntities::registerCapabilities);
-        LOGGER.info("Breach Protocol loaded. Keep the lights on.");
+        LOGGER.info("Breach Protocol (addon for SCP Unleashed) loaded. The Council is in session.");
     }
 
     public static ResourceLocation id(String path) {

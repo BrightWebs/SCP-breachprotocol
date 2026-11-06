@@ -1,7 +1,7 @@
 package com.breachprotocol.world;
 
 import com.breachprotocol.block.ContainmentGeneratorBlock;
-import com.breachprotocol.block.KeycardReaderBlock;
+import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.career.O5;
 import com.breachprotocol.entity.GateGuardianEntity;
 import com.breachprotocol.entity.O5MemberEntity;
@@ -234,8 +234,8 @@ public final class Site01 {
             fill(l, o, cx + 1, 0, 6, cx + 3, 2, 8, air);
             set(l, o, cx + 2, 3, 7, b(Blocks.SEA_LANTERN));
             door(l, o, cx + 2, 0, 9, Direction.SOUTH);
-            set(l, o, cx + 3, 1, 10, ModBlocks.KEYCARD_READER.get().defaultBlockState()
-                    .setValue(KeycardReaderBlock.FACING, Direction.SOUTH).setValue(KeycardReaderBlock.LEVEL, 5));
+            set(l, o, cx + 3, 1, 10, Blocks.LEVER.defaultBlockState()
+                    .setValue(LeverBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(LeverBlock.FACING, Direction.SOUTH));
             set(l, o, cx + 2, -2, 7, b(Blocks.REDSTONE_BLOCK));
             set(l, o, cx + 2, -1, 7, ModBlocks.CONTAINMENT_GENERATOR.get().defaultBlockState().setValue(ContainmentGeneratorBlock.ACTIVE, true));
         }
@@ -250,8 +250,9 @@ public final class Site01 {
         for (int x = 41; x <= 49; x += 4) set(l, o, x, 0, 9, b(Blocks.LECTERN));
         lights(l, o, 40, 50, 6, 14, 6, 4);
         chest(l, o, 45, 0, 5, Direction.SOUTH,
-                st(ModItems.SITE_TERMINAL.get(), 1), st(ModItems.PHONE.get(), 1), st(ModItems.KEYCARD_1.get(), 1), st(ModItems.KEYCARD_2.get(), 1),
-                st(ModItems.KEYCARD_3.get(), 1), st(ModItems.KEYCARD_4.get(), 1), st(ModItems.KEYCARD_5.get(), 2), st(Items.BOOK, 32), st(Items.PAPER, 64));
+                st(ModItems.SITE_TERMINAL.get(), 1), st(ModItems.PHONE.get(), 1), st(Unleashed.keycard(1), 1), st(Unleashed.keycard(2), 1),
+                st(Unleashed.keycard(3), 1), st(Unleashed.keycard(4), 1), st(Unleashed.keycard(5), 2), st(Unleashed.item("keycard_omni", Items.PAPER), 1),
+                st(Items.BOOK, 32), st(Items.PAPER, 64));
 
         // --- armory
         fill(l, o, 4, 0, 27, 14, 4, 40, air);
@@ -279,8 +280,8 @@ public final class Site01 {
         lights(l, o, 19, 25, 29, 39, 5, 3);
         for (int x = 18; x <= 24; x += 3) bed(l, o, x, 0, 38, Blocks.WHITE_BED, Direction.SOUTH);
         chest(l, o, 26, 0, 30, Direction.WEST,
-                st(ModItems.SCP_500.get(), 6), st(Items.GOLDEN_APPLE, 16), st(Items.ENCHANTED_GOLDEN_APPLE, 2),
-                st(ModItems.EYEDROPS.get(), 16), st(ModItems.SCP_207.get(), 2), st(Items.MILK_BUCKET, 1));
+                st(Unleashed.scp500(), 6), st(Items.GOLDEN_APPLE, 16), st(Items.ENCHANTED_GOLDEN_APPLE, 2),
+                st(Unleashed.item("amnestic_canister", Items.MILK_BUCKET), 8), st(Unleashed.item("scp207_bottle", Items.HONEY_BOTTLE), 2), st(Items.MILK_BUCKET, 1));
         set(l, o, 26, 0, 33, b(Blocks.BREWING_STAND));
 
         // --- quarters
@@ -307,7 +308,7 @@ public final class Site01 {
                 ench(l, Items.NETHERITE_SHOVEL, Enchantments.EFFICIENCY, 5, Enchantments.SILK_TOUCH, 1), st(Items.LAPIS_LAZULI, 64), st(Items.EXPERIENCE_BOTTLE, 64));
         chest(l, o, 33, 0, 39, Direction.NORTH,
                 st(ModItems.CONTAINMENT_GENERATOR.get(), 4), st(ModItems.CONTAINMENT_WALL.get(), 64), st(ModItems.CONTAINMENT_WALL.get(), 64),
-                st(ModItems.KEYCARD_READER.get(), 4), st(Items.IRON_DOOR, 8), st(Items.REDSTONE_BLOCK, 8), st(Items.LEVER, 8),
+                st(Unleashed.item("keycard_scanner", Items.STONE_BUTTON), 4), st(Items.IRON_DOOR, 8), st(Items.REDSTONE_BLOCK, 8), st(Items.LEVER, 8),
                 st(Items.BEACON, 1), st(Items.DIAMOND_BLOCK, 4), st(Items.IRON_BLOCK, 16), st(Items.OBSIDIAN, 32));
 
         // --- the Guardian, standing before the Gate
