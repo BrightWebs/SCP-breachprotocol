@@ -895,7 +895,7 @@ public class PhoneScreen extends Screen {
             card(g, x, y, w, h);
             rect(g, x, y + 6, 2, h - 12, chip);
             int cy = y + pad;
-            String lbl = type.replace('_', ' ');
+            String lbl = type.equals("RECOVER") && m.getInt("stage") == 1 ? "DELIVER" : type.replace('_', ' ');
             rrect(g, x + pad, cy, font.width(lbl) + 8, 11, 5, chip);
             text(g, lbl, x + pad + 4, cy + 2, 0xFFFFFFFF);
             String giver = "from O5-" + m.getInt("giver");
@@ -922,7 +922,8 @@ public class PhoneScreen extends Screen {
                 int half = (iw - 4) / 2, mx = m.getInt("x"), my2 = m.getInt("y"), mz = m.getInt("z");
                 boolean on = Guide.guiding(mx, mz);
                 String gl = type.replace('_', ' ') + " " + mx + ", " + mz;
-                pill(g, x + pad, cy, half, 14, on ? "Stop guide" : "Guide me", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.start(mx, my2, mz, gl); });
+                boolean deliver = type.equals("RECOVER") && m.getInt("stage") == 1;
+                pill(g, x + pad, cy, half, 14, on ? "Stop guide" : deliver ? "Guide to site" : "Guide me", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.start(mx, my2, mz, deliver ? "Deliver to site" : gl); });
                 pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
             } else if (!trial) {
                 pill(g, x + pad, cy, iw, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));

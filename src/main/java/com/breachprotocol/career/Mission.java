@@ -21,6 +21,8 @@ public class Mission {
     public boolean hasPos;
     public String designation = ""; // RECOVER
     public String item = "";        // SUPPLY: item id
+    /** RECOVER: 0 = catch it, 1 = sealed in a stasis pod, deliver it to a site. */
+    public int stage;
 
     public boolean done() {
         return progress >= target;
@@ -41,6 +43,7 @@ public class Mission {
         t.putInt("z", z);
         t.putString("designation", designation);
         t.putString("item", item);
+        t.putInt("stage", stage);
         return t;
     }
 
@@ -63,6 +66,7 @@ public class Mission {
         m.z = t.getInt("z");
         m.designation = t.getString("designation");
         m.item = t.getString("item");
+            m.stage = t.getInt("stage");
         return m;
     }
 }

@@ -278,6 +278,27 @@ public final class UnleashedApi {
         return true;
     }
 
+    /**
+     * Would SCP Unleashed's stasis pod take this creature right now? Mirrors the checks in
+     * StasisPods.refusal that don't depend on the pod: addon/creature vetoes (SCP-001 until it's
+     * locked, a full-grown SCP-682, ...), the stasis_immune tag, multipart and unsaveable entities.
+     */
+    public static boolean stasisCanHold(Entity e) {
+        if (!(e instanceof net.minecraft.world.entity.Mob) || !e.isAlive()) return false;
+        Object vetoed = call(method("stasis.StasisPods", "isVetoed", Entity.class), null, e);
+        if (vetoed instanceof Boolean b && b) return false;
+        if (e.getType().is(Unleashed.STASIS_IMMUNE) || e.isMultipartEntity() || !e.getType().canSerialize()) return false;
+        return true;
+    }
+
+    /** Entity type id sealed inside an SCP Unleashed stasis pod stack, or null if it isn't an occupied pod. */
+    public static String podContents(ItemStack s) {
+        if (s.isEmpty()) return null;
+        Object held = call(method("stasis.StasisPodItem", "contents", ItemStack.class), null, s);
+        Object data = held == null ? null : call(method("stasis.StasisContents", "copyData"), held);
+        return data instanceof net.minecraft.nbt.CompoundTag t && t.contains("id") ? t.getString("id") : null;
+    }
+
     /** The anomaly dossier an Anomaly Dossier item holds (its language key), or null. */
     public static String dossierOf(ItemStack s) {
         Object doc = call(method("archive.AnomalyDocumentItem", "lookup", ItemStack.class), null, s);

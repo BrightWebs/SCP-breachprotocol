@@ -215,13 +215,24 @@ public final class Career {
         CareerData d = data(p);
         String designation = Unleashed.designation(target);
         boolean any = false;
+        Sites.Site site = nearestSite(p);
         for (Mission m : d.missions) {
-            if (m.type == Mission.Type.RECOVER && !m.done() && (m.item.isEmpty() ? m.designation.equals(designation) : Unleashed.is(target, m.item))) {
-                m.progress = m.target;
+            if (m.type == Mission.Type.RECOVER && !m.done() && m.stage == 0 && (m.item.isEmpty() ? m.designation.equals(designation) : Unleashed.is(target, m.item))) {
                 any = true;
+                m.stage = 1;
+                m.expires = Math.max(m.expires, level.getGameTime() + 15 * MINUTE);
+                if (site != null) {
+                    m.x = site.x; m.y = site.y; m.z = site.z; m.hasPos = true;
+                    m.description = "Stage 2: deliver " + designation + " to " + site.name + " (" + site.x + ", " + site.z + "). Get inside the site with the pod. Watch its timer.";
+                    message(p, O5.seat(m.giver), designation + " is in the pod. Bring it to " + site.name + ". Missions > Guide me points the way. The field won't last forever.");
+                } else {
+                    m.hasPos = false;
+                    m.description = "Stage 2: deliver " + designation + " to a Foundation site. You have none: declare one (Settings, Level 3+), then bring the pod inside it.";
+                    message(p, O5.seat(m.giver), designation + " is in the pod, but there's no site to take it to. Declare one, fast.");
+                }
             }
         }
-        changeStability(p, any ? 4 : 2);
+        changeStability(p, any ? 3 : 2);
         if (!any) message(p, O5.O5_6, designation + " sealed in stasis. Get it to a cell before the pod runs out.");
         d.dirty = true;
         completeFinished(p);
@@ -249,7 +260,8 @@ public final class Career {
             Mob loose = looseNear(p, 48);
             if (loose != null) {
                 Rank r = cd.getRank();
-                Mission.Type type = r == Rank.CLASS_D || r == Rank.LEVEL_1 ? Mission.Type.EXPOSURE : r == Rank.LEVEL_2 ? Mission.Type.DOCUMENT : Mission.Type.RECOVER;
+                Mission.Type type = r == Rank.CLASS_D || r == Rank.LEVEL_1 ? Mission.Type.EXPOSURE : r == Rank.LEVEL_2 ? Mission.Type.DOCUMENT
+                        : recoverable(loose) ? Mission.Type.RECOVER : Mission.Type.DOCUMENT;
                 assign(p, type, loose);
                 cd.nextContext = now + 4 * MINUTE;
             }
@@ -363,9 +375,9 @@ public final class Career {
         // only count when walled into a real cell.
         if (r.atLeast(Rank.LEVEL_2)) list.addAll(List.of(Unleashed.SCP_049, Unleashed.SCP_131, Unleashed.SCP_066));
         if (r.atLeast(Rank.LEVEL_3)) list.addAll(List.of(Unleashed.SCP_173, Unleashed.SCP_457));
-        if (r.atLeast(Rank.LEVEL_4)) list.addAll(List.of(Unleashed.SCP_106, Unleashed.SCP_939));
+        if (r.atLeast(Rank.LEVEL_4)) list.add(Unleashed.SCP_939);
         if (r.atLeast(Rank.LEVEL_5)) list.add(Unleashed.SCP_096);
-        if (r.atLeast(Rank.OVERSEER)) list.add(Unleashed.SCP_682);
+
         list.removeIf(id -> Unleashed.entity(id).isEmpty());
         if (list.isEmpty()) list.add(Unleashed.SCP_049);
         return list;
@@ -398,6 +410,33 @@ public final class Career {
         if (!overworld) pool.removeIf(t -> t != Mission.Type.SUPPLY && t != Mission.Type.FILES);
         if (pool.isEmpty()) pool.add(Mission.Type.SUPPLY);
         assign(p, pool.get(p.getRandom().nextInt(pool.size())), null);
+    }
+
+    /** What will actually hold this creature, by SCP Unleashed's own rules. */
+    public static String howToContain(Mob m) {
+        boolean pod = UnleashedApi.stasisCanHold(m), cell = Unleashed.canBeContained(m);
+        if (UnleashedApi.isShyGuy(m)) return "Get the Containment Hood on it" + (pod ? ", or seal it in a stasis pod," : "") + " and bring it to a site.";
+        if (pod) return "Seal it in a stasis pod and deliver it to one of your sites" + (cell ? ", or wall it into a cell inside a site." : ".");
+        if (cell) return "Stasis won't take it right now. Wall it into a cell inside one of your sites.";
+        return "Nothing we have holds it. Keep it away from staff.";
+    }
+
+    public static boolean recoverable(Mob m) {
+        return UnleashedApi.stasisCanHold(m) || Unleashed.canBeContained(m) || UnleashedApi.isShyGuy(m);
+    }
+
+    /** Nearest declared site in your dimension, or null. */
+    @org.jetbrains.annotations.Nullable
+    public static Sites.Site nearestSite(ServerPlayer p) {
+        Sites.Site best = null;
+        double bd = Double.MAX_VALUE;
+        String dim = p.level().dimension().location().toString();
+        for (Sites.Site s : Sites.get(p.server).sites) {
+            if (!s.dim.equals(dim)) continue;
+            double d = Math.pow(s.x - p.getX(), 2) + Math.pow(s.z - p.getZ(), 2);
+            if (d < bd) { bd = d; best = s; }
+        }
+        return best;
     }
 
     /** A loose anomaly near you, outside every site, that no assignment of yours covers yet. */
@@ -497,14 +536,14 @@ public final class Career {
                 fill(p, m, r, rnd, level);
             }
             case RECOVER -> {
-                if (focus != null && Unleashed.canBeContained(focus) || focus != null && r.atLeast(Rank.LEVEL_4)) {
+                if (focus != null && recoverable(focus)) {
                     String id = Unleashed.idOf(focus).getPath();
                     m.designation = Unleashed.designation(id);
                     m.item = id;
                     m.giver = rnd.nextBoolean() ? 6 : 8;
                     setPos(m, focus.position());
-                    m.description = "Recover " + m.designation + ", loose near " + m.x + ", " + m.z + ". Seal it in a stasis pod, or hold it in a cell inside one of your sites.";
-                    message(p, O5.seat(m.giver), m.designation + " is loose near you, outside any site. Bring it in: a stasis pod, or a cell on Foundation ground.");
+                    m.description = "Recover " + m.designation + ", loose near " + m.x + ", " + m.z + ". " + howToContain(focus);
+                    message(p, O5.seat(m.giver), m.designation + " is loose near you, outside any site. " + howToContain(focus));
                 } else {
                     fill(p, m, r, rnd, level);
                 }
@@ -576,9 +615,10 @@ public final class Career {
                 };
                 Vec3 spot = surfaceSpot(level, p.blockPosition(), 45, 75, rnd);
                 if (spot == null) return;
-                spawnAt(level, type.get(), spot);
+                net.minecraft.world.entity.Entity spawned = spawnAt(level, type.get(), spot);
                 setPos(m, spot);
-                m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". Seal it in a stasis pod, or hold it in a cell inside one of your sites.";
+                m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". "
+                        + (spawned instanceof Mob sm ? howToContain(sm) : "Bring it to one of your sites.");
                 message(p, O5.seat(m.giver), m.designation + " has surfaced outside containment near " + m.x + ", " + m.z + ". Bring it home. "
                         + switch (m.designation) {
                     case "SCP-173" -> "Do not blink.";
@@ -734,6 +774,27 @@ public final class Career {
             }
         }
         if (p.tickCount % 100 < 20) scanContainment(p);
+        Sites.Site here = Sites.at(p.level(), p.blockPosition());
+        for (Mission m : d.missions) {
+            if (m.type != Mission.Type.RECOVER || m.stage != 1 || m.done()) continue;
+            boolean carrying = false;
+            for (net.minecraft.world.item.ItemStack st : p.getInventory().items) {
+                String held = UnleashedApi.podContents(st);
+                if (held != null && held.endsWith(":" + m.item)) { carrying = true; break; }
+            }
+            if (!carrying) {
+                String held = UnleashedApi.podContents(p.getOffhandItem());
+                carrying = held != null && held.endsWith(":" + m.item);
+            }
+            if (here != null && carrying) {
+                m.progress = m.target;
+                d.dirty = true;
+                message(p, O5.seat(m.giver), m.designation + " delivered to " + here.name + ". Release it into a cell before the pod gives out.");
+            } else if (here == null && m.hasPos) {
+                Sites.Site site = nearestSite(p);
+                if (site != null && (site.x != m.x || site.z != m.z)) { m.x = site.x; m.y = site.y; m.z = site.z; d.dirty = true; }
+            }
+        }
         for (Mission m : d.missions) {
             if (m.type != Mission.Type.EXPOSURE || m.done()) continue;
             Mob near = null;
