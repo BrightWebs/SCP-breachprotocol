@@ -611,6 +611,22 @@ public final class Career {
             t.putString("site", s.getX() + ", " + s.getY() + ", " + s.getZ());
             t.putBoolean("inSite", Site01.isInside(p));
         }
+        ListTag near = new ListTag();
+        List<Mob> found = p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), e -> e instanceof Anomaly);
+        found.sort(java.util.Comparator.comparingDouble(p::distanceToSqr));
+        for (Mob mob : found.subList(0, Math.min(16, found.size()))) {
+            Anomaly a = (Anomaly) mob;
+            CompoundTag at = new CompoundTag();
+            at.putString("d", a.designation());
+            at.putString("o", a.objectClass());
+            at.putBoolean("c", ModEffects.has(mob, ModEffects.CONTAINED));
+            at.putBoolean("k", a.canBeContained());
+            Component note = a.statusNote();
+            at.putString("n", note == null ? "" : note.getString());
+            at.putInt("m", (int) Math.sqrt(p.distanceToSqr(mob)));
+            near.add(at);
+        }
+        t.put("nearby", near);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));
     }
 

@@ -1,0 +1,107 @@
+"""Original phone UI art: app icons and wallpaper."""
+import math, os, random
+from PIL import Image, ImageDraw, ImageFilter
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+OUT = os.path.join(ROOT, "src/main/resources/assets/breachprotocol/textures/gui/phone")
+os.makedirs(OUT, exist_ok=True)
+S = 4  # supersample for smooth shapes
+
+def icon(name, top, bottom, draw_glyph):
+    big = Image.new("RGBA", (32 * S, 32 * S), (0, 0, 0, 0))
+    grad = Image.new("RGBA", big.size)
+    gp = grad.load()
+    for y in range(big.height):
+        k = y / (big.height - 1)
+        c = tuple(int(top[i] * (1 - k) + bottom[i] * k) for i in range(3))
+        for x in range(big.width):
+            gp[x, y] = c + (255,)
+    mask = Image.new("L", big.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, big.width - 1, big.height - 1], radius=8 * S, fill=255)
+    big.paste(grad, (0, 0), mask)
+    shine = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shine).rounded_rectangle([0, 0, big.width - 1, big.height // 2], radius=8 * S, fill=(255, 255, 255, 34))
+    shine.putalpha(Image.composite(shine.getchannel("A"), Image.new("L", big.size, 0), mask))
+    big = Image.alpha_composite(big, shine)
+    d = ImageDraw.Draw(big)
+    draw_glyph(d, S)
+    big.resize((32, 32), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
+
+W = (255, 255, 255, 255)
+def messages(d, s):
+    d.rounded_rectangle([6 * s, 7 * s, 26 * s, 21 * s], radius=6 * s, fill=W)
+    d.polygon([(10 * s, 20 * s), (9 * s, 26 * s), (15 * s, 21 * s)], fill=W)
+def missions(d, s):
+    d.rounded_rectangle([8 * s, 6 * s, 24 * s, 27 * s], radius=2 * s, fill=W)
+    d.rectangle([12 * s, 4 * s, 20 * s, 8 * s], fill=(90, 60, 20, 255))
+    for i, y in enumerate((12, 17, 22)):
+        d.line([(11 * s, y * s), (13 * s, (y + 2) * s), (16 * s, (y - 2) * s)], fill=(230, 120, 30, 255), width=2 * s)
+        d.line([(18 * s, y * s), (22 * s, y * s)], fill=(160, 160, 160, 255), width=s)
+def phone(d, s):
+    d.arc([5 * s, 5 * s, 27 * s, 27 * s], 100, 170, fill=W, width=0)
+    pts = [(8, 9), (12, 7), (15, 12), (13, 14), (18, 19), (20, 17), (25, 20), (23, 24), (19, 25), (8, 14)]
+    d.polygon([(x * s, y * s) for x, y in pts], fill=W)
+def command(d, s):
+    cx, cy, r1, r2 = 16 * s, 17 * s, 10 * s, 4 * s
+    pts = []
+    for i in range(10):
+        a = -math.pi / 2 + i * math.pi / 5
+        r = r1 if i % 2 == 0 else r2
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    d.polygon(pts, fill=W)
+def personnel(d, s):
+    d.rounded_rectangle([5 * s, 8 * s, 27 * s, 24 * s], radius=3 * s, fill=W)
+    d.ellipse([8 * s, 11 * s, 14 * s, 17 * s], fill=(60, 110, 200, 255))
+    d.rectangle([8 * s, 18 * s, 14 * s, 21 * s], fill=(60, 110, 200, 255))
+    for y in (12, 16, 20):
+        d.line([(17 * s, y * s), (24 * s, y * s)], fill=(150, 160, 175, 255), width=s)
+def containment(d, s):
+    pts = [(16 * s + math.cos(math.radians(a)) * 11 * s, 16 * s + math.sin(math.radians(a)) * 11 * s) for a in range(30, 390, 60)]
+    d.polygon(pts, outline=W, width=2 * s)
+    d.ellipse([12 * s, 12 * s, 20 * s, 20 * s], fill=W)
+def site01(d, s):
+    d.rectangle([9 * s, 8 * s, 23 * s, 27 * s], fill=W)
+    d.rectangle([12 * s, 12 * s, 20 * s, 27 * s], fill=(80, 30, 120, 255))
+    d.ellipse([14 * s, 16 * s, 18 * s, 20 * s], fill=(255, 210, 90, 255))
+def settings_dummy(d, s):
+    pass
+
+icon("app_messages", (90, 220, 110), (30, 150, 60), messages)
+icon("app_missions", (255, 180, 60), (220, 110, 20), missions)
+icon("app_phone", (100, 230, 120), (20, 160, 70), phone)
+icon("app_command", (240, 80, 80), (150, 20, 30), command)
+icon("app_personnel", (110, 160, 250), (40, 80, 190), personnel)
+icon("app_containment", (90, 220, 240), (20, 120, 170), containment)
+icon("app_site01", (190, 110, 255), (90, 30, 160), site01)
+
+# wallpaper 156 x 300
+rng = random.Random(5)
+w, h = 156, 300
+wp = Image.new("RGBA", (w, h))
+p = wp.load()
+for y in range(h):
+    for x in range(w):
+        k = y / h
+        r = int(10 + 22 * k); g = int(18 + 10 * k); b = int(34 + 30 * (1 - abs(0.5 - x / w)))
+        p[x, y] = (r, g, b, 255)
+grid = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+d = ImageDraw.Draw(grid)
+for row in range(-1, 40):
+    for col in range(-1, 12):
+        cx = col * 16 + (8 if row % 2 else 0); cy = row * 14
+        pts = [(cx + math.cos(math.radians(a)) * 8, cy + math.sin(math.radians(a)) * 8) for a in range(30, 390, 60)]
+        d.polygon(pts, outline=(255, 255, 255, 14))
+wp = Image.alpha_composite(wp, grid)
+glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+ImageDraw.Draw(glow).ellipse([18, 150, 138, 270], fill=(230, 60, 60, 60))
+wp = Image.alpha_composite(wp, glow.filter(ImageFilter.GaussianBlur(18)))
+emb = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+d = ImageDraw.Draw(emb)
+cx, cy = 78, 214
+hexa = [(cx + 30 * math.cos(math.radians(a)), cy + 30 * math.sin(math.radians(a))) for a in range(30, 390, 60)]
+d.polygon(hexa, outline=(230, 190, 40, 120))
+d.ellipse([cx - 18, cy - 9, cx + 18, cy + 9], outline=(236, 234, 226, 110))
+d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=(170, 26, 30, 120))
+wp = Image.alpha_composite(wp, emb)
+wp.save(os.path.join(OUT, "wallpaper.png"))
+print("phone art generated")
