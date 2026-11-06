@@ -379,14 +379,15 @@ public class PhoneScreen extends Screen {
 
     private void drawHome(GuiGraphics g) {
         g.blit(WALLPAPER, SX, SY, SW, SH, 0, 0, 156, 300, 156, 300);
-        big(g, clock(), SX + SW / 2, SY + 26, 3.2F, 0xFFFFFFFF);
+        big(g, clock(), SX + SW / 2, SY + 24, 3.2F, 0xFFFFFFFF);
         long day = t().getLong("now") / 24000 + 1;
-        textC(g, ellipsize("Site Day " + day + "  ·  " + t().getString("title"), SW - 12), SX + SW / 2, SY + 58, 0xFFB8C6D6);
+        small(g, "SITE DAY " + day, SX + SW / 2, SY + 52, 0xFF9FB1C2);
+        small(g, ellipsize(t().getString("title"), (int) ((SW - 16) / 0.75F)), SX + SW / 2, SY + 60, 0xFFD6E0EA);
 
         int ny = SY + 72;
         if (t().contains("callText")) {
             rrect(g, SX + 8, ny, SW - 16, 26, 9, over(SX + 8, ny, SW - 16, 26) ? 0xEE1F6E3A : 0xDD17502C);
-            text(g, "☎ Incoming call", SX + 14, ny + 4, 0xFFB8FFCC);
+            text(g, "\u260E Incoming call", SX + 14, ny + 4, 0xFFB8FFCC);
             text(g, ellipsize(t().getString("callFrom"), SW - 30), SX + 14, ny + 14, 0xFFFFFFFF);
             hit(SX + 8, ny, SW - 16, 26, () -> go(View.CALL));
         } else {
@@ -404,26 +405,56 @@ public class PhoneScreen extends Screen {
         List<App> apps = new ArrayList<>();
         for (App a : GRID) if (allowed(a) && !DOCK.contains(a)) apps.add(a);
         int cols = 4, cell = (SW - 8) / cols;
+        App hovered = null;
+        int hx = 0, hy = 0;
         for (int i = 0; i < apps.size(); i++) {
-            int x = SX + 4 + (i % cols) * cell + (cell - 28) / 2, y = SY + 108 + (i / cols) * 46;
-            drawIcon(g, apps.get(i), x, y, true);
+            int x = SX + 4 + (i % cols) * cell + (cell - 28) / 2, y = SY + 106 + (i / cols) * 44;
+            if (drawIcon(g, apps.get(i), x, y, cell)) { hovered = apps.get(i); hx = x; hy = y; }
         }
+        small(g, "FOUNDATION SECURE NETWORK", SX + SW / 2, SY + SH - NAV - 58, 0x99C8D2DC);
         int dy = SY + SH - NAV - 44;
         rrect(g, SX + 6, dy, SW - 12, 40, 14, 0x55FFFFFF);
         int dc = (SW - 12) / DOCK.size();
-        for (int i = 0; i < DOCK.size(); i++) drawIcon(g, DOCK.get(i), SX + 6 + i * dc + (dc - 28) / 2, dy + 6, false);
+        for (int i = 0; i < DOCK.size(); i++) {
+            int x = SX + 6 + i * dc + (dc - 28) / 2;
+            if (drawIcon(g, DOCK.get(i), x, dy + 6, 0)) { hovered = DOCK.get(i); hx = x; hy = dy + 6; }
+        }
+        if (hovered != null) {
+            // name bubble above the icon you're pointing at
+            String n = hovered.label();
+            int bw = font.width(n) + 10, bx = Mth.clamp(hx + 14 - bw / 2, SX + 3, SX + SW - 3 - bw), by = hy - 17;
+            rrect(g, bx, by, bw, 13, 6, 0xF0F2F5F8);
+            rect(g, hx + 12, by + 13, 4, 1, 0xF0F2F5F8);
+            rect(g, hx + 13, by + 14, 2, 1, 0xF0F2F5F8);
+            text(g, n, bx + 5, by + 3, 0xFF10161D);
+        }
     }
 
-    private void drawIcon(GuiGraphics g, App a, int x, int y, boolean showLabel) {
-        if (over(x, y, 28, 28)) rrect(g, x - 2, y - 2, 32, 32, 9, 0x44FFFFFF);
+    /** Draws an app icon; returns true while the cursor is on it. {@code cell} > 0 also draws a small label. */
+    private boolean drawIcon(GuiGraphics g, App a, int x, int y, int cell) {
+        boolean hov = over(x - 2, y - 2, 32, 32);
+        if (hov) rrect(g, x - 3, y - 3, 34, 34, 10, 0x40FFFFFF);
         g.blit(tex(a.icon()), x, y, 28, 28, 0, 0, 32, 32, 32, 32);
         int b = badge(a);
         if (b > 0) {
             circle(g, x + 27, y + 2, 5, RED);
             textC(g, b > 9 ? "9+" : String.valueOf(b), x + 27, y - 2, 0xFFFFFFFF);
         }
-        if (showLabel) textC(g, ellipsize(a.label(), 42), x + 14, y + 31, 0xFFFFFFFF);
-        hit(x - 4, y - 4, 36, showLabel ? 44 : 36, () -> go(a.view()));
+        if (cell > 0) {
+            String lbl = ellipsize(a.label(), (int) ((cell - 2) / 0.75F));
+            small(g, lbl, x + 14, y + 31, hov ? 0xFFFFFFFF : 0xFFE6ECF2);
+        }
+        hit(x - 4, y - 4, 36, cell > 0 ? 42 : 36, () -> go(a.view()));
+        return hov;
+    }
+
+    /** Small (3/4 size) centred text with a soft shadow, for labels on the wallpaper. */
+    private void small(GuiGraphics g, String s, int cx, int y, int c) {
+        g.pose().pushPose();
+        g.pose().translate(cx, y, 0);
+        g.pose().scale(0.75F, 0.75F, 1);
+        g.drawString(font, s, -font.width(s) / 2, 0, c, true);
+        g.pose().popPose();
     }
 
     private void drawRecents(GuiGraphics g) {
@@ -575,6 +606,11 @@ public class PhoneScreen extends Screen {
                     : rank() >= 7 ? "The Administrator assigns, not receives. Answer the Council's calls." : "Stand by. Orders arrive every few minutes.");
             return y + 90;
         }
+        int toNext = t().getInt("toNext");
+        if (toNext > 0 && !t().getBoolean("ascended")) {
+            small(g, toNext == 1 ? "ONE MORE ASSIGNMENT UNTIL YOUR REVIEW" : toNext + " MORE ASSIGNMENTS UNTIL YOUR REVIEW", SX + SW / 2, y, MUTED);
+            y += 10;
+        }
         for (int i = 0; i < ms.size(); i++) {
             CompoundTag m = ms.getCompound(i);
             String type = m.getString("type");
@@ -582,29 +618,43 @@ public class PhoneScreen extends Screen {
                 case "RECOVER" -> RED; case "TERMINATE" -> 0xFF8E3BC4; case "CARE" -> 0xFFE58A2A; case "SUPPLY" -> 0xFF2F8FD8; default -> 0xFFB04FE0;
             };
             String desc = m.getString("desc");
-            int x = SX + 6, w = SW - 12;
-            int h = 30 + wrapHeight(desc, w - 12) + (type.equals("FOUNDERS_TRIAL") ? 0 : 20);
-            card(g, x, y, w, h);
-            String lbl = type.replace('_', ' ');
-            rrect(g, x + 6, y + 5, font.width(lbl) + 8, 11, 5, chip);
-            text(g, lbl, x + 10, y + 7, 0xFFFFFFFF);
-            String giver = "O5-" + m.getInt("giver");
-            text(g, giver, x + w - 6 - font.width(giver), y + 7, 0xFF7A8794);
-            int dy = y + 20 + wrap(g, desc, x + 6, y + 20, w - 12, 0xFFE2E8EE);
-            float pct = m.getInt("progress") / (float) Math.max(1, m.getInt("target"));
-            rrect(g, x + 6, dy + 2, w - 12, 4, 2, 0xFF2A323D);
-            rrect(g, x + 6, dy + 2, Math.max(4, (int) ((w - 12) * pct)), 4, 2, chip);
-            String info = m.getInt("progress") + "/" + m.getInt("target");
-            if (m.getBoolean("hasPos")) info += "   ⌖ " + m.getInt("x") + ", " + m.getInt("z");
+            boolean trial = type.equals("FOUNDERS_TRIAL");
+            int x = SX + 6, w = SW - 12, pad = 7, iw = w - pad * 2;
+            // measure first so nothing overlaps
+            int descH = wrapHeight(desc, iw);
+            List<String> meta = new ArrayList<>();
+            if (m.getBoolean("hasPos")) meta.add("\u2316 " + m.getInt("x") + ", " + m.getInt("z"));
             long exp = m.getLong("expires");
-            if (exp < Long.MAX_VALUE / 2) { long s = Math.max(0, (exp - now) / 20); info += "   " + s / 60 + ":" + String.format("%02d", s % 60); }
-            text(g, ellipsize(info, w - 12), x + 6, dy + 9, 0xFF94A3B0);
+            if (exp < Long.MAX_VALUE / 2) { long sec = Math.max(0, (exp - now) / 20); meta.add("\u23F1 " + sec / 60 + ":" + String.format("%02d", sec % 60)); }
+            int h = pad + 16 + descH + 6 + 10 + (meta.isEmpty() ? 0 : 12) + (trial ? 0 : 18) + pad - 2;
+            card(g, x, y, w, h);
+            rect(g, x, y + 6, 2, h - 12, chip);
+            int cy = y + pad;
+            String lbl = type.replace('_', ' ');
+            rrect(g, x + pad, cy, font.width(lbl) + 8, 11, 5, chip);
+            text(g, lbl, x + pad + 4, cy + 2, 0xFFFFFFFF);
+            String giver = "from O5-" + m.getInt("giver");
+            small(g, giver, x + w - pad - (int) (font.width(giver) * 0.375F), cy + 3, 0xFF7A8794);
+            cy += 16;
+            cy += wrap(g, desc, x + pad, cy, iw, 0xFFE2E8EE) + 6;
+            float pct = Mth.clamp(m.getInt("progress") / (float) Math.max(1, m.getInt("target")), 0, 1);
+            String prog = m.getInt("progress") + "/" + m.getInt("target");
+            int bw = iw - font.width(prog) - 6;
+            rrect(g, x + pad, cy + 1, bw, 4, 2, 0xFF2A323D);
+            rrect(g, x + pad, cy + 1, Math.max(4, (int) (bw * pct)), 4, 2, chip);
+            text(g, prog, x + pad + iw - font.width(prog), cy - 1, 0xFFC8D2DC);
+            cy += 10;
+            if (!meta.isEmpty()) {
+                text(g, ellipsize(String.join("   ", meta), iw), x + pad, cy, 0xFF94A3B0);
+                cy += 12;
+            }
             final int idx = i;
             if (type.equals("SUPPLY")) {
-                pill(g, x + 6, y + h - 17, (w - 18) / 2, 13, "Submit", 0xFF2E9E57, true, () -> send("submit", idx));
-                pill(g, x + 12 + (w - 18) / 2, y + h - 17, (w - 18) / 2, 13, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
-            } else if (!type.equals("FOUNDERS_TRIAL")) {
-                pill(g, x + 6, y + h - 17, w - 12, 13, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
+                int half = (iw - 4) / 2;
+                pill(g, x + pad, cy, half, 14, "Submit", 0xFF2E9E57, true, () -> send("submit", idx));
+                pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
+            } else if (!trial) {
+                pill(g, x + pad, cy, iw, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
             }
             y += h + 6;
         }
@@ -659,37 +709,50 @@ public class PhoneScreen extends Screen {
     // ---------------------------------------------------------------- Camera
 
     private void drawCamera(GuiGraphics g) {
-        // the viewfinder is see-through: you're aiming at the real world behind the phone
-        int vf = SY + STATUS, bottom = SY + SH - NAV - 56;
+        // The screen is see-through: the square viewfinder shows the world behind the phone, and the
+        // shutter captures exactly that square.
+        int vf = SY + STATUS, bottom = SY + SH - NAV - 58;
         rect(g, SX, SY, SW, STATUS, 0xCC06090D);
-        int c = 0xCCFFFFFF;
-        for (int[] k : new int[][]{{SX + 10, vf + 10, 1}, {SX + SW - 20, vf + 10, -1}}) {
-            rect(g, k[0], k[1], 10, 1, c); rect(g, k[0] + (k[2] < 0 ? 9 : 0), k[1], 1, 10, c);
+        int side = SW - 16, fx = SX + 8, fy = vf + Math.max(4, (bottom - vf - side) / 2);
+        rect(g, SX, vf, SW, fy - vf, 0xB006090D);
+        rect(g, SX, fy + side, SW, bottom - fy - side, 0xB006090D);
+        rect(g, SX, fy, 8, side, 0xB006090D);
+        rect(g, fx + side, fy, SX + SW - fx - side, side, 0xB006090D);
+        int c = 0xDDFFFFFF, k = 12;
+        rect(g, fx, fy, k, 1, c); rect(g, fx, fy, 1, k, c);
+        rect(g, fx + side - k, fy, k, 1, c); rect(g, fx + side - 1, fy, 1, k, c);
+        rect(g, fx, fy + side - 1, k, 1, c); rect(g, fx, fy + side - k, 1, k, c);
+        rect(g, fx + side - k, fy + side - 1, k, 1, c); rect(g, fx + side - 1, fy + side - k, 1, k, c);
+        for (int i = 1; i < 3; i++) {
+            rect(g, fx + side * i / 3, fy, 1, side, 0x22FFFFFF);
+            rect(g, fx, fy + side * i / 3, side, 1, 0x22FFFFFF);
         }
-        rect(g, SX + 10, bottom - 11, 10, 1, c); rect(g, SX + 10, bottom - 20, 1, 10, c);
-        rect(g, SX + SW - 20, bottom - 11, 10, 1, c); rect(g, SX + SW - 11, bottom - 20, 1, 10, c);
-        int mx = SX + SW / 2, my = (vf + bottom) / 2;
-        rect(g, mx - 6, my, 13, 1, c); rect(g, mx, my - 6, 1, 13, c);
         String face = faceInView();
         if (face != null) {
-            rrect(g, SX + 8, vf + 24, SW - 16, 30, 9, 0xE03C0C10);
-            text(g, "FACE DETECTED · " + face, SX + 14, vf + 29, 0xFFFF8A8F);
-            wrap(g, "A photo will hold a lethal trigger.", SX + 14, vf + 40, SW - 28, 0xFFF3D6D8);
-            rrect(g, mx - 14, my - 14, 28, 28, 4, 0x30E5484D);
+            rrect(g, fx + 4, fy + 4, side - 8, 28, 8, 0xE03C0C10);
+            text(g, "\u26A0 FACE IN FRAME \u00B7 " + face, fx + 9, fy + 8, 0xFFFF8A8F);
+            small(g, "Taking this photo means seeing it.", fx + side / 2, fy + 20, 0xFFF3D6D8);
         }
-        text(g, "Aim with your view · photos go to Gallery", SX + 8, bottom - 30, 0xCCC8D2DC);
-        rect(g, SX, bottom, SW, 56, 0xF006090D);
-        int sy = bottom + 28;
+        if (System.currentTimeMillis() < PhotoCache.flashUntil) rect(g, fx, fy, side, side, 0xCCFFFFFF);
+        small(g, "PHOTO", SX + SW / 2, fy + side + 6, 0xFFF2C14E);
+        rect(g, SX, bottom, SW, 58, 0xF406090D);
+        int sy = bottom + 29, mx = SX + SW / 2;
+        // last photo thumbnail
         ListTag photos = t().getList("photos", Tag.TAG_COMPOUND);
-        rrect(g, SX + 22, sy - 11, 22, 22, 5, photos.isEmpty() ? 0xFF1E242C : photos.getCompound(0).getBoolean("hazard") ? 0xFF5A1E24 : 0xFF2A3440);
-        hit(SX + 22, sy - 11, 22, 22, () -> go(View.GALLERY));
+        int tx = SX + 18, ty = sy - 12;
+        rrect(g, tx - 1, ty - 1, 26, 26, 6, 0xFF3A4450);
+        if (!photos.isEmpty()) drawPicture(g, photos.getCompound(0), tx, ty, 24, true);
+        else rrect(g, tx, ty, 24, 24, 5, 0xFF1E242C);
+        hit(tx, ty, 24, 24, () -> go(View.GALLERY));
         boolean hs = over(mx - 18, sy - 18, 36, 36);
         circle(g, mx, sy, 18, 0xFFE8EEF4);
         circle(g, mx, sy, 15, 0xFF06090D);
-        circle(g, mx, sy, 13, hs ? 0xFFFFFFFF : 0xFFE8EEF4);
+        circle(g, mx, sy, hs ? 14 : 13, 0xFFE8EEF4);
+        final int cfx = fx, cfy = fy, cside = side;
         hit(mx - 18, sy - 18, 36, 36, () -> {
             Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, 1.8F));
-            send("photo_take", 0);
+            double gs = Minecraft.getInstance().getWindow().getGuiScale();
+            PhotoCache.shoot((int) ((ox + cfx * scale) * gs), (int) ((oy + cfy * scale) * gs), (int) (cside * scale * gs));
         });
     }
 
@@ -717,25 +780,46 @@ public class PhoneScreen extends Screen {
     private int drawGallery(GuiGraphics g, int y) {
         ListTag ps = t().getList("photos", Tag.TAG_COMPOUND);
         if (ps.isEmpty()) { empty(g, y, "No photos", "Open Camera to document anomalies."); return y + 80; }
-        int cols = 3, gap = 4, tw = (SW - 12 - gap * (cols - 1)) / cols, th = tw;
+        small(g, ps.size() + (ps.size() == 1 ? " PHOTO" : " PHOTOS"), SX + SW / 2, y, MUTED);
+        y += 10;
+        int cols = 3, gap = 3, tw = (SW - 12 - gap * (cols - 1)) / cols;
         for (int i = 0; i < ps.size(); i++) {
             CompoundTag p = ps.getCompound(i);
-            int x = SX + 6 + (i % cols) * (tw + gap), ty = y + (i / cols) * (th + gap);
-            boolean hz = p.getBoolean("hazard");
-            rrect(g, x, ty, tw, th, 6, hz ? 0xFF3A1A1E : 0xFF1E2630);
-            if (hz) {
-                rrect(g, x, ty, tw, th, 6, RED);
-                rrect(g, x + 1, ty + 1, tw - 2, th - 2, 5, 0xFF2A1215);
-                textC(g, "HAZARD", x + tw / 2, ty + th / 2 - 4, 0xFFFF8A8F);
-            } else {
-                rect(g, x + 4, ty + th - 14, tw - 8, 1, 0xFF3A4654);
-                text(g, ellipsize(p.getString("subjects"), tw - 8), x + 4, ty + 6, 0xFFB8C6D6);
-                text(g, ago(p.getLong("time")), x + 4, ty + th - 11, 0xFF6F7C88);
-            }
+            int x = SX + 6 + (i % cols) * (tw + gap), ty = y + (i / cols) * (tw + gap);
+            drawPicture(g, p, x, ty, tw, true);
+            if (over(x, ty, tw, tw)) rect(g, x, ty, tw, tw, 0x30FFFFFF);
             final int id = p.getInt("id");
-            hit(x, ty, tw, th, () -> { photoId = id; go(View.PHOTO); });
+            hit(x, ty, tw, tw, () -> { photoId = id; revealed = false; go(View.PHOTO); });
         }
-        return y + ((ps.size() + cols - 1) / cols) * (th + gap);
+        return y + ((ps.size() + cols - 1) / cols) * (tw + gap);
+    }
+
+    private boolean revealed;
+
+    /**
+     * A photo's picture. Cognitohazards are covered unless {@code covered} is false. Photos from
+     * before pictures existed (or whose picture never reached the server) get a labelled card.
+     */
+    private void drawPicture(GuiGraphics g, CompoundTag p, int x, int y, int size, boolean covered) {
+        boolean hz = p.getBoolean("hazard");
+        ResourceLocation tex = PhotoCache.texture(p.getInt("img"));
+        if (tex != null && !(hz && covered)) {
+            g.blit(tex, x, y, size, size, 0, 0, 1, 1, 1, 1);
+        } else if (hz) {
+            rect(g, x, y, size, size, 0xFF2A1215);
+            for (int q = 3; q < size; q += 6) rect(g, x, y + q, size, 2, 0x30E5484D);
+            rect(g, x, y, size, 1, RED); rect(g, x, y + size - 1, size, 1, RED);
+            rect(g, x, y, 1, size, RED); rect(g, x + size - 1, y, 1, size, RED);
+            if (size >= 30) {
+                textC(g, "\u26A0", x + size / 2, y + size / 2 - 9, 0xFFFF8A8F);
+                small(g, "HAZARD", x + size / 2, y + size / 2 + 2, 0xFFFF8A8F);
+            }
+        } else {
+            rect(g, x, y, size, size, 0xFF1E2630);
+            if (size >= 30) {
+                small(g, PhotoCache.missing(p.getInt("img")) ? "NO IMAGE" : "LOADING", x + size / 2, y + size / 2 - 3, 0xFF6F7C88);
+            }
+        }
     }
 
     private int drawPhoto(GuiGraphics g, int y) {
@@ -743,30 +827,33 @@ public class PhoneScreen extends Screen {
         if (p == null) { empty(g, y, "Deleted", ""); return y + 60; }
         int x = SX + 6, w = SW - 12;
         boolean hz = p.getBoolean("hazard");
+        drawPicture(g, p, x, y, w, hz && !revealed);
+        if (hz && !revealed) {
+            rrect(g, x + 8, y + w - 44, w - 16, 36, 8, 0xE01A1012);
+            text(g, "\u26A0 Cognitohazard", x + 14, y + w - 40, 0xFFFFD7DA);
+            wrap(g, "SCP-096's face. Viewing it counts as seeing it.", x + 14, y + w - 29, w - 28, 0xFFF0D9DB);
+        }
+        y += w + 6;
+        y += wrap(g, p.getString("subjects"), x, y, w, 0xFFE2E8EE) + 2;
+        small(g, (p.getString("author") + "  \u00B7  " + p.getInt("x") + ", " + p.getInt("z") + "  \u00B7  " + ago(p.getLong("time")) + " ago").toUpperCase(Locale.ROOT), SX + SW / 2, y, MUTED);
+        y += 12;
+        int half = (w - 4) / 2;
         if (hz) {
-            int h = 112;
-            rrect(g, x, y, w, h, 10, 0xFF5A2229);
-            rrect(g, x + 1, y + 1, w - 2, h - 2, 9, 0xFF1A1012);
-            text(g, "⚠ Cognitohazard", x + 8, y + 8, 0xFFFFD7DA);
-            wrap(g, "This photo shows the face of SCP-096. Whoever views it - here, printed, or framed - will be hunted.", x + 8, y + 22, w - 16, 0xFFF0D9DB);
-            text(g, "Taken by " + p.getString("author") + " · " + p.getInt("x") + ", " + p.getInt("z"), x + 8, y + h - 14, 0xFFC9A0A5);
-            y += h + 8;
             pill(g, x, y, w, 16, "Delete permanently", RED, true, () -> { send("photo_delete", photoId); goBack(); });
             y += 20;
-            pill(g, x, y, w, 16, "Open anyway", 0xFF3A1A1E, 0xFFFFB3B8, true, () -> send("photo_open", photoId));
+            pill(g, x, y, half, 16, revealed ? "Viewed" : "Open anyway", 0xFF3A1A1E, 0xFFFFB3B8, !revealed, () -> { revealed = true; send("photo_open", photoId); });
+            pill(g, x + half + 4, y, half, 16, "Print face down", 0xFF3C6FB8, true, () -> send("photo_print", photoId));
             y += 20;
         } else {
-            rrect(g, x, y, w, 90, 10, 0xFF1E2630);
-            rect(g, x + 10, y + 60, w - 20, 1, 0xFF3A4654);
-            wrap(g, p.getString("subjects"), x + 8, y + 8, w - 16, 0xFFE2E8EE);
-            text(g, p.getString("author") + " · " + p.getInt("x") + ", " + p.getInt("z"), x + 8, y + 70, 0xFF8794A0);
-            y += 98;
-            pill(g, x, y, w, 16, "Delete", 0xFF2A3038, true, () -> { send("photo_delete", photoId); goBack(); });
+            pill(g, x, y, half, 16, "Send nearby", 0xFF6B3FA0, true, () -> send("photo_share", photoId));
+            pill(g, x + half + 4, y, half, 16, "Delete", 0xFF2A3038, true, () -> { send("photo_delete", photoId); goBack(); });
             y += 20;
         }
-        pill(g, x, y, (w - 4) / 2, 16, hz ? "Print (face down)" : "Print", 0xFF3C6FB8, hz, () -> send("photo_print", photoId));
-        pill(g, x + (w + 4) / 2, y, (w - 4) / 2, 16, "Send nearby", 0xFF6B3FA0, true, () -> send("photo_share", photoId));
-        return y + 20;
+        if (hz) {
+            pill(g, x, y, w, 16, "Send nearby", 0xFF6B3FA0, true, () -> send("photo_share", photoId));
+            y += 20;
+        }
+        return y;
     }
 
     // ---------------------------------------------------------------- Archive
@@ -776,13 +863,37 @@ public class PhoneScreen extends Screen {
         return e == null ? "File" : e.designation();
     }
 
+    private String query = "";
+    private boolean searchFocused;
+
     private int drawArchive(GuiGraphics g, int y) {
         List<ArchiveFiles.Entry> all = ArchiveFiles.all();
-        text(g, "SCP Unleashed dossiers \u00B7 " + clrLabel(clr()), SX + 8, y, MUTED);
-        y += 14;
+        int x = SX + 6, w = SW - 12;
+        // search bar
+        boolean hov = over(x, y, w, 16);
+        rrect(g, x, y, w, 16, 8, searchFocused ? 0xFF233040 : hov ? 0xFF1C2430 : CARD);
+        if (searchFocused) rrect(g, x, y + 15, w, 1, 0, TEAL);
+        text(g, "\u2315", x + 6, y + 4, MUTED);
+        boolean caret = searchFocused && (System.currentTimeMillis() / 500) % 2 == 0;
+        text(g, query.isEmpty() && !searchFocused ? "Search SCP number or name" : ellipsize(query, w - 30) + (caret ? "_" : ""), x + 16, y + 4, query.isEmpty() && !searchFocused ? 0xFF6F7C88 : 0xFFE8EEF4);
+        if (!query.isEmpty()) {
+            text(g, "\u00D7", x + w - 11, y + 4, MUTED);
+            hit(x + w - 16, y, 16, 16, () -> { query = ""; scroll = 0; });
+        }
+        hit(x, y, w - (query.isEmpty() ? 0 : 16), 16, () -> searchFocused = true);
+        y += 22;
         if (all.isEmpty()) { empty(g, y - 20, "Archive offline", "SCP Unleashed hasn't sent its dossiers yet. Rejoin the world."); return y + 60; }
+        String q = query.toLowerCase(Locale.ROOT).trim();
+        String qDigits = q.replaceAll("[^0-9]", "");
+        int shown = 0;
         for (ArchiveFiles.Entry e : all) {
-            int x = SX + 6, w = SW - 12, h = 30;
+            if (!q.isEmpty()) {
+                String hay = (e.designation() + " " + e.title() + " " + e.objectClass()).toLowerCase(Locale.ROOT);
+                boolean numHit = !qDigits.isEmpty() && e.designation().replaceAll("[^0-9]", "").startsWith(qDigits) && q.replaceAll("[0-9scp\\- ]", "").isEmpty();
+                if (!hay.contains(q) && !numHit) continue;
+            }
+            shown++;
+            int h = 30;
             boolean ok = ArchiveFiles.clears(clr(), e.required());
             rrect(g, x, y, w, h, 8, over(x, y, w, h) ? 0xFF1C2430 : CARD);
             text(g, ellipsize(e.designation(), w - 70), x + 8, y + 5, ok ? 0xFFFFFFFF : 0xFF8794A0);
@@ -792,9 +903,10 @@ public class PhoneScreen extends Screen {
             text(g, cls, x + w - 3 - cw, y + 5, 0xFFFFFFFF);
             text(g, ok ? ellipsize(e.title(), w - 16) : "\u26BF Level " + e.required() + " clearance", x + 8, y + 17, ok ? 0xFF9FB1C2 : 0xFFC9A0A5);
             final String id = e.id();
-            if (ok) hit(x, y, w, h, () -> { fileId = id; go(View.FILE); });
+            if (ok) hit(x, y, w, h, () -> { fileId = id; searchFocused = false; go(View.FILE); });
             y += h + 4;
         }
+        if (shown == 0) { empty(g, y - 24, "No match", "Nothing in the archive matches \"" + query + "\"."); y += 50; }
         return y;
     }
 
@@ -803,6 +915,22 @@ public class PhoneScreen extends Screen {
         if (e == null) return y;
         int x = SX + 6, w = SW - 12;
         boolean omni = clr() >= 6;
+        // the anomaly itself, slowly turning (SCP-096's image is withheld, as in its own dossier)
+        boolean shy = e.id().endsWith(":scp_096");
+        if (shy || ArchiveModels.has(e.id())) {
+            int mh = 96;
+            rrect(g, x, y, w, mh, 10, 0xFF0F151C);
+            for (int gy = y + 8; gy < y + mh; gy += 8) rect(g, x + 4, gy, w - 8, 1, 0x0FFFFFFF);
+            rect(g, x + 20, y + mh - 14, w - 40, 1, 0x33FFFFFF);
+            if (shy) {
+                rect(g, x + w / 2 - 30, y + 30, 60, 24, 0xFF000000);
+                small(g, "IMAGE WITHHELD", x + w / 2, y + 60, 0xFFFF8A8F);
+            } else {
+                ArchiveModels.draw(g, e.id(), x, y + 2, w, mh - 14);
+            }
+            small(g, e.designation().toUpperCase(Locale.ROOT), x + w / 2, y + mh - 10, MUTED);
+            y += mh + 6;
+        }
         text(g, ellipsize(e.title(), w), x, y, 0xFFE2E8EE);
         y += 12;
         text(g, "Class: " + e.objectClass() + (omni ? "  \u00B7  unredacted" : ""), x, y, ArchiveFiles.classColor(e.classKey()));
@@ -890,14 +1018,12 @@ public class PhoneScreen extends Screen {
         g.drawString(font, clrText, -font.width(clrText), 0, band, false);
         g.pose().popPose();
         y += 92;
-        int next = t.getInt("nextXp"), cur = t.getInt("curXp"), xp = t.getInt("xp");
-        if (!asc && next > 0) {
-            text(g, "Career XP", x, y, 0xFFB8C6D6);
-            String v = xp + " / " + next;
-            text(g, v, x + w - font.width(v), y, 0xFF7FD6FF);
-            rrect(g, x, y + 11, w, 5, 2, 0xFF27303A);
-            rrect(g, x, y + 11, Math.max(5, (int) (w * Mth.clamp((xp - cur) / (float) Math.max(1, next - cur), 0, 1))), 5, 2, TEAL);
-            y += 22;
+        int toNext = t.getInt("toNext");
+        if (!asc && toNext >= 0) {
+            card(g, x, y, w, 28);
+            text(g, "Promotion review", x + 8, y + 5, 0xFFE8EEF4);
+            small(g, toNext == 0 ? "THE COUNCIL IS CONSIDERING YOU" : "AFTER " + toNext + " MORE ASSIGNMENT" + (toNext == 1 ? "" : "S"), x + w / 2, y + 17, 0xFF7FD6FF);
+            y += 34;
         }
         if (r >= 5) {
             int st = t.getInt("stability");
@@ -1094,6 +1220,7 @@ public class PhoneScreen extends Screen {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int lx = (int) ((mouseX - ox) / scale), ly = (int) ((mouseY - oy) / scale);
         if (button == 0) {
+            searchFocused = false;
             for (int i = hits.size() - 1; i >= 0; i--) {
                 Hit h = hits.get(i);
                 if (lx >= h.x() && lx < h.x() + h.w() && ly >= h.y() && ly < h.y() + h.h()) {
@@ -1113,7 +1240,22 @@ public class PhoneScreen extends Screen {
     }
 
     @Override
+    public boolean charTyped(char c, int mods) {
+        if (view == View.ARCHIVE && searchFocused && c >= ' ' && query.length() < 32) {
+            query += c;
+            scroll = 0;
+            return true;
+        }
+        return super.charTyped(c, mods);
+    }
+
+    @Override
     public boolean keyPressed(int key, int scan, int mods) {
+        if (view == View.ARCHIVE && searchFocused) {
+            if (key == 259) { if (!query.isEmpty()) query = query.substring(0, query.length() - 1); return true; }
+            if (key == 256 || key == 257) { searchFocused = false; return true; } // Esc / Enter leave the box
+            if (minecraft != null && minecraft.options.keyInventory.matches(key, scan)) return true; // typing 'e' must not close
+        }
         if (key == 259) { goBack(); return true; } // backspace = Back button
         return super.keyPressed(key, scan, mods);
     }

@@ -31,6 +31,8 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     /** A photo taken with the phone camera. */
     public static class Photo {
         public int id;
+        /** Picture id (breachprotocol_photos/<img>.png), 0 = none. */
+        public int img;
         public long time;
         public String subjects = "";
         public boolean hazard;
@@ -41,6 +43,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public CompoundTag save() {
             CompoundTag t = new CompoundTag();
             t.putInt("id", id);
+            t.putInt("img", img);
             t.putLong("time", time);
             t.putString("subjects", subjects);
             t.putBoolean("hazard", hazard);
@@ -54,6 +57,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public static Photo load(CompoundTag t) {
             Photo p = new Photo();
             p.id = t.getInt("id");
+            p.img = t.getInt("img");
             p.time = t.getLong("time");
             p.subjects = t.getString("subjects");
             p.hazard = t.getBoolean("hazard");
@@ -132,6 +136,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         t.putInt("nextPhoto", nextPhotoId);
         t.putInt("rank", rank);
         t.putInt("xp", xp);
+        t.putBoolean("commendations", true);
         t.putBoolean("ascended", ascended);
         t.putInt("stability", stability);
         ListTag msgs = new ListTag();
@@ -177,6 +182,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         nextPhotoId = Math.max(1, t.getInt("nextPhoto"));
         rank = t.getInt("rank");
         xp = t.getInt("xp");
+        if (!t.getBoolean("commendations")) xp = Rank.values()[Math.max(0, Math.min(Rank.values().length - 1, t.getInt("rank")))].xpRequired; // old XP saves
         ascended = t.getBoolean("ascended");
         stability = t.contains("stability") ? t.getInt("stability") : 70;
         messages.clear();

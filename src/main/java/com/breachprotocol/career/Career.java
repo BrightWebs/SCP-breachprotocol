@@ -81,17 +81,20 @@ public final class Career {
 
     // ------------------------------------------------------------------ xp + ranks
 
+    /**
+     * There is no XP. Good work still matters: for the Administrator it steadies the Foundation.
+     * Promotions only come from completed assignments (see {@link #commend}).
+     */
     public static void addXp(ServerPlayer p, int amount, String reason) {
         CareerData d = data(p);
-        if (d.getRank() == Rank.ADMINISTRATOR && amount > 0) {
-            // The Administrator's "xp" is the Foundation's stability instead.
-            changeStability(p, Math.max(1, amount / 30));
-            return;
-        }
-        d.xp = Math.max(d.getRank().xpRequired, d.xp + amount);
+        if (d.getRank() == Rank.ADMINISTRATOR && amount > 0) changeStability(p, Math.max(1, amount / 30));
+    }
+
+    /** A completed assignment goes on your record. Enough of them and the Council promotes you. */
+    public static void commend(ServerPlayer p) {
+        CareerData d = data(p);
+        d.xp++;
         d.dirty = true;
-        p.displayClientMessage(Component.literal((amount >= 0 ? "+" : "") + amount + " Clearance XP  ").withStyle(amount >= 0 ? ChatFormatting.GREEN : ChatFormatting.RED)
-                .append(Component.literal(reason).withStyle(ChatFormatting.GRAY)), true);
         checkPromotion(p);
     }
 
@@ -450,7 +453,7 @@ public final class Career {
                 case RECOVER -> m.designation + " is back where it belongs. Good work.";
                 default -> "Mission complete.";
             });
-            addXp(p, m.xp, "mission complete");
+            commend(p);
             changeStability(p, 2);
         }
         d.dirty = true;
@@ -489,7 +492,6 @@ public final class Career {
         if (m.type == Mission.Type.FOUNDERS_TRIAL) return;
         d.missions.remove(index);
         message(p, O5.seat(m.giver), "Noted. It will be on your record.");
-        addXp(p, -10, "mission abandoned");
         changeStability(p, -2);
     }
 
@@ -507,7 +509,6 @@ public final class Career {
             if (m.expires < now) {
                 it.remove();
                 message(p, O5.seat(m.giver), "Deadline passed: \"" + m.description + "\" Disappointing.");
-                d.xp = Math.max(r.xpRequired, d.xp - 10);
                 changeStability(p, -3);
             }
         }
@@ -586,8 +587,7 @@ public final class Career {
         t.putString("title", d.ascended ? "SCP-Ω \"The Ascendant\"" : r.title);
         t.putString("personnel", personnelId(p));
         Rank next = r.next();
-        t.putInt("nextXp", next == null ? -1 : next.xpRequired);
-        t.putInt("curXp", r.xpRequired);
+        t.putInt("toNext", next == null ? -1 : Math.max(0, next.xpRequired - d.xp));
         t.putLong("now", p.level().getGameTime());
         if (d.call != null) {
             Calls.Template tpl = Calls.get(d.call.templateId);

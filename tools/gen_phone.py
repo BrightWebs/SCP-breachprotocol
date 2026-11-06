@@ -25,7 +25,14 @@ def icon(name, top, bottom, draw_glyph):
     big = Image.alpha_composite(big, shine)
     d = ImageDraw.Draw(big)
     draw_glyph(d, S)
-    big.resize((32, 32), Image.LANCZOS).save(os.path.join(OUT, name + ".png"))
+    small = big.resize((32, 32), Image.LANCZOS)
+    px = small.load()
+    for y in range(32):
+        for x in range(32):
+            r, g, b, a = px[x, y]
+            if a < 48:
+                px[x, y] = (0, 0, 0, 0)  # stray near-transparent edge pixels show up as coloured dots in-game
+    small.save(os.path.join(OUT, name + ".png"))
 
 W = (255, 255, 255, 255)
 def messages(d, s):
@@ -93,15 +100,29 @@ for row in range(-1, 40):
         d.polygon(pts, outline=(255, 255, 255, 14))
 wp = Image.alpha_composite(wp, grid)
 glow = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-ImageDraw.Draw(glow).ellipse([18, 150, 138, 270], fill=(230, 60, 60, 60))
+ImageDraw.Draw(glow).ellipse([18, 160, 138, 270], fill=(150, 40, 50, 46))
 wp = Image.alpha_composite(wp, glow.filter(ImageFilter.GaussianBlur(18)))
-emb = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+# Original Foundation emblem: an octagonal containment-vault door with a locking wheel
+E = 8
+cx, cy, R = 78 * E, 214 * E, 34 * E
+emb = Image.new("RGBA", (w * E, h * E), (0, 0, 0, 0))
 d = ImageDraw.Draw(emb)
-cx, cy = 78, 214
-hexa = [(cx + 30 * math.cos(math.radians(a)), cy + 30 * math.sin(math.radians(a))) for a in range(30, 390, 60)]
-d.polygon(hexa, outline=(230, 190, 40, 120))
-d.ellipse([cx - 18, cy - 9, cx + 18, cy + 9], outline=(236, 234, 226, 110))
-d.ellipse([cx - 6, cy - 6, cx + 6, cy + 6], fill=(170, 26, 30, 120))
+col = (226, 230, 236, 150)
+dim = (226, 230, 236, 70)
+octa = lambda r: [(cx + r * math.cos(math.radians(22.5 + k * 45)), cy + r * math.sin(math.radians(22.5 + k * 45))) for k in range(8)]
+d.polygon(octa(R), outline=col, width=5 * E)
+d.polygon(octa(R - 9 * E), outline=dim, width=2 * E)
+for k in range(8):  # bolts
+    a = math.radians(k * 45)
+    bx, by = cx + (R - 4.5 * E) * math.cos(a), cy + (R - 4.5 * E) * math.sin(a)
+    d.ellipse([bx - 2 * E, by - 2 * E, bx + 2 * E, by + 2 * E], fill=col)
+rw = 13 * E  # locking wheel: rim, four spokes, hub
+d.ellipse([cx - rw, cy - rw, cx + rw, cy + rw], outline=col, width=3 * E)
+for k in range(4):
+    a = math.radians(45 + k * 90)
+    d.line([(cx, cy), (cx + (rw + 5 * E) * math.cos(a), cy + (rw + 5 * E) * math.sin(a))], fill=col, width=3 * E)
+d.ellipse([cx - 4 * E, cy - 4 * E, cx + 4 * E, cy + 4 * E], fill=(170, 30, 36, 190))
+emb = emb.resize((w, h), Image.LANCZOS)
 wp = Image.alpha_composite(wp, emb)
 wp.save(os.path.join(OUT, "wallpaper.png"))
 print("phone art generated")

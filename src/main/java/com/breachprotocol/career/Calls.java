@@ -58,7 +58,7 @@ public final class Calls {
                         }),
                         opt("Not yet", (p, d) -> {
                             d.o5OfferPending = false;
-                            d.xp = Math.min(d.xp, Rank.OVERSEER.xpRequired - 40);
+                            d.xp = Math.min(d.xp, Rank.OVERSEER.xpRequired - 3);
                             return "Few people refuse. Earn it again, and we'll ask again.";
                         }))), false);
 

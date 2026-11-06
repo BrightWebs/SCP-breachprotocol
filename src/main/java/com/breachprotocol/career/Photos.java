@@ -24,7 +24,7 @@ import java.util.List;
 public final class Photos {
     private Photos() {}
 
-    public static void take(ServerPlayer p) {
+    public static void take(ServerPlayer p, int img) {
         CareerData d = Career.data(p);
         Vec3 eye = p.getEyePosition(), look = p.getViewVector(1.0F);
         List<String> subjects = new ArrayList<>();
@@ -38,6 +38,7 @@ public final class Photos {
         }
         CareerData.Photo photo = new CareerData.Photo();
         photo.id = d.nextPhotoId++;
+        photo.img = img;
         photo.time = p.level().getGameTime();
         photo.subjects = subjects.isEmpty() ? "Nothing of note" : String.join(", ", subjects);
         photo.hazard = hazard != null;
@@ -49,8 +50,7 @@ public final class Photos {
         while (d.photos.size() > CareerData.MAX_PHOTOS) d.photos.remove(d.photos.size() - 1);
         d.dirty = true;
         p.level().playSound(null, p.blockPosition(), SoundEvents.UI_CARTOGRAPHY_TABLE_TAKE_RESULT, SoundSource.PLAYERS, 0.9F, 1.6F);
-        p.displayClientMessage(Component.literal(photo.hazard ? "Photo saved. You saw its face through the lens." : "Photo saved: " + photo.subjects)
-                .withStyle(photo.hazard ? ChatFormatting.RED : ChatFormatting.GRAY), true);
+        if (photo.hazard) p.displayClientMessage(Component.literal("You saw its face through the lens.").withStyle(ChatFormatting.RED), true);
         // SCP Unleashed's dossier: viewing its face "directly, through a camera or in a photograph" triggers it.
         if (hazard != null && !Career.isAscended(p)) UnleashedApi.reportSighting(hazard, p);
     }

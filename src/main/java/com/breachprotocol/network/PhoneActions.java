@@ -33,7 +33,7 @@ public final class PhoneActions {
             case "submit" -> Career.submitSupply(p, arg);
             case "abandon" -> Career.abandon(p, arg);
             case "fuse" -> com.breachprotocol.career.Clearance.fuse(p);
-            case "photo_take" -> com.breachprotocol.career.Photos.take(p);
+            case "photo_take" -> com.breachprotocol.career.Photos.take(p, arg);
             case "photo_open" -> com.breachprotocol.career.Photos.open(p, arg);
             case "photo_delete" -> com.breachprotocol.career.Photos.delete(p, arg);
             case "photo_print" -> com.breachprotocol.career.Photos.print(p, arg);

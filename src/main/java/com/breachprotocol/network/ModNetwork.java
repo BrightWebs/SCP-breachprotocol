@@ -18,5 +18,15 @@ public final class ModNetwork {
                 ctx.enqueueWork(() -> {
                     if (ctx.player() instanceof ServerPlayer sp) PhoneActions.handle(sp, payload.action(), payload.arg());
                 }));
+        registrar.playToServer(PhotoUploadPayload.TYPE, PhotoUploadPayload.STREAM_CODEC, (payload, ctx) ->
+                ctx.enqueueWork(() -> {
+                    if (ctx.player() instanceof ServerPlayer sp) com.breachprotocol.career.PhotoStore.upload(sp, payload.img(), payload.png());
+                }));
+        registrar.playToServer(PhotoRequestPayload.TYPE, PhotoRequestPayload.STREAM_CODEC, (payload, ctx) ->
+                ctx.enqueueWork(() -> {
+                    if (ctx.player() instanceof ServerPlayer sp) com.breachprotocol.career.PhotoStore.request(sp, payload.img());
+                }));
+        registrar.playToClient(PhotoDataPayload.TYPE, PhotoDataPayload.STREAM_CODEC, (payload, ctx) ->
+                ctx.enqueueWork(() -> ClientPhotoBridge.received(payload.img(), payload.png())));
     }
 }
