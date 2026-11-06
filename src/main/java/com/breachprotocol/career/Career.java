@@ -60,8 +60,30 @@ public final class Career {
         return data(p).getRank();
     }
 
+    /**
+     * How the Council addresses you. Class-D are numbers; staff have names; the Council's own
+     * members and the Administrator are "sir" to most of the Foundation.
+     */
+    public static String address(Player p) {
+        CareerData d = data(p);
+        String name = p.getGameProfile().getName();
+        if (d.ascended) return "Master";
+        return switch (d.getRank()) {
+            case CLASS_D -> personnelId(p);
+            case LEVEL_1 -> name;
+            case LEVEL_2 -> "Dr. " + name;
+            case LEVEL_3 -> "Officer " + name;
+            case LEVEL_4 -> "Specialist " + name;
+            case LEVEL_5 -> "Director " + name;
+            case OVERSEER -> p.getRandom().nextBoolean() ? "Thirteen" : "sir";
+            case ADMINISTRATOR -> p.getRandom().nextBoolean() ? "Administrator" : "sir";
+        };
+    }
+
+    /** Personnel file number: Class-D get a D-number; staff keep the same digits on a Foundation number. */
     public static String personnelId(Player p) {
-        return "D-" + (1000 + Math.abs(p.getUUID().hashCode() % 9000));
+        int n = 1000 + Math.abs(p.getUUID().hashCode() % 9000);
+        return (data(p).getRank() == Rank.CLASS_D && !data(p).ascended ? "D-" : "FDN-") + n;
     }
 
     // ------------------------------------------------------------------ messages
@@ -149,7 +171,7 @@ public final class Career {
             give(p, keycard(r.clearance), 1);
         }
         switch (r) {
-            case LEVEL_1 -> message(p, O5.O5_3, "> PERSONNEL FILE UPDATED. " + personnelId(p) + " RECLASSIFIED: STAFF. CLEARANCE 1. YOUR D-CLASS TERMINATION DATE HAS BEEN... POSTPONED.");
+            case LEVEL_1 -> message(p, O5.O5_3, "> PERSONNEL FILE UPDATED. " + p.getGameProfile().getName().toUpperCase() + " RECLASSIFIED: STAFF, " + personnelId(p) + ". CLEARANCE 1. YOUR D-CLASS TERMINATION DATE HAS BEEN... POSTPONED.");
             case LEVEL_3 -> message(p, O5.O5_6, "You've got a steady hand. Security is yours now. Keep the doors shut and the lights on.");
             case LEVEL_5 -> message(p, O5.O5_7, "Site Director. Your site, your responsibility. The Council will be watching. Lockdown authority has been added to your phone.");
             case OVERSEER -> {
@@ -425,7 +447,7 @@ public final class Career {
                 m.giver = 5;
                 setPos(m, spot);
                 m.description = "Test " + d.nextTestNumber() + ": stand within 8m of " + m.designation + " for " + m.target + " seconds. Survive. Report what you saw.";
-                message(p, O5.O5_5, personnelId(p) + ", you're on the testing roster. " + m.designation + ", " + m.x + ", " + m.z + ". Get close, stay close, try to come back.");
+                message(p, O5.O5_5, address(p) + ", you're on the testing roster. " + m.designation + ", " + m.x + ", " + m.z + ". Get close, stay close, try to come back.");
             }
             case DOCUMENT -> {
                 String id;
@@ -506,7 +528,7 @@ public final class Career {
                 m.xp = 25 + tier * 12;
                 Item it = BuiltInRegistries.ITEM.get(ResourceLocation.parse(m.item));
                 m.description = "Supply run: deliver " + m.target + " x " + it.getDescription().getString() + ". Submit from your phone.";
-                message(p, O5.O5_12, "The numbers don't add up, " + personnelId(p) + ". I need " + m.target + " " + it.getDescription().getString() + ". Submit them from your phone.");
+                message(p, O5.O5_12, "The numbers don't add up, " + address(p) + ". I need " + m.target + " " + it.getDescription().getString() + ". Submit them from your phone.");
             }
             case TERMINATE -> {
                 m.target = 3 + tier;
