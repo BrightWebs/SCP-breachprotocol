@@ -10,28 +10,33 @@ content by registry ID and calls their public classes at runtime. SCP concepts c
 
 ## Features
 
+Checked against SCP Unleashed **0.0.5.2**.
+
 - **Career ladder:** Class-D through Level 1-5, then O5-13 "The Tiebreaker", then The Administrator.
-  - You earn XP by recontaining or terminating SCP Unleashed anomalies, and by completing O5 assignments.
-  - The O5 Council messages and orders you until you take the top seat. After that they call you and ask what to do.
+  - The O5 Council messages and orders you until you take the top seat. After that they call you for decisions.
+  - Assignments use SCP Unleashed's anomalies: recover SCP-173, SCP-096, SCP-106 and others, keep SCP-999 company, terminate SCP-049-2.
+- **Containment** uses SCP Unleashed's own building blocks. An anomaly counts as contained when either:
+  - a working Forcefield is next to it, or
+  - SCP Unleashed containment blocks (reinforced containment wall, HCZ/LCZ walls, containment doors, reinforced glass) box it in on four sides and above.
+  - SCP-096 with the Containment Hood on counts too.
+  - Anything in Unleashed's `stasis_immune` tag can't be held by Lockdown.
+- **Clearance** follows SCP Unleashed's keycard rules: Level 1-5, Omni = 6. It's the highest of your carried keycard, your fused card, and your rank (O5 and above count as Omni).
 - **Foundation Phone:** a smartphone with Back, Home and Recents buttons. You only see the apps your clearance allows.
-  - *Messages, Missions, Phone:* Council orders, assignments, and calls that ask you to decide.
-  - *Camera and Gallery:* photograph anomalies.
-    - A photo of SCP-096's face is a cognitohazard. Whoever opens it, prints it, or looks at it framed triggers SCP Unleashed's 096 against themselves.
-    - From the Gallery you can delete, print, or send photos to a nearby player.
-  - *Archive:* redacted files on Unleashed's SCPs. Sections above your clearance stay blacked out.
-  - *Containment:* live status of anomalies within 64 m.
-  - *Settings:* **fuse a keycard into your phone.** It consumes an SCP Unleashed keycard from your inventory, and the phone keeps that level permanently.
-  - *Command (Level 4+):*
-    - call SCP Unleashed MTF squads by threat tier
-    - request squad reports and extraction
-    - give Follow, Hold or Release orders to nearby D-Class
-  - *Network (Level 5+):* SCP Unleashed's orbital array status, with strikes at your crosshair, plus the facility network hub count.
-  - *Site-01 (Administrator):* travel to your secret site.
-- **Clearance:** the highest of your carried SCP Unleashed keycard, your fused card, and your rank. O5 and above count as Level 6.
-- **Containment Field Generator:** freezes Unleashed anomalies in place.
-- **Site-01 and Ascension:** the Administrator's generated sanctum.
-  - Offer SCP Unleashed's SCP-500 at the Ascension Altar to become SCP-Ω.
-  - After Ascension, anomalies stop targeting you and the Gate Guardian kneels.
+  - *Settings:* fuse your best keycard into the phone. Hold the phone on an SCP Unleashed **Keycard Scanner** to swipe that card.
+  - *Archive:* SCP Unleashed's own anomaly dossiers.
+    - SCP Unleashed's clearance rule gates each file (Safe/Euclid need Level 2, Keter 3, Thaumiel 4, the rest 5).
+    - Redacted passages stay black unless you hold Omni-level clearance.
+  - *Camera and Gallery:* catching SCP-096's face counts as seeing it, using SCP Unleashed's own sighting check.
+    - Opening that photo, or printing it as SCP Unleashed's Face-Down Photograph, goes through SCP Unleashed's own photo handling.
+  - *Containment:* nearby anomalies, and whether each one is in a cell.
+  - *Command (Level 4+):* call SCP Unleashed MTF squads.
+    - It works like the MTF Signal Radio: a squad costs an Unstable Fragment of the matching rarity and shares the same cooldown.
+    - Also request squad reports and extraction, and give Follow, Hold or Release orders to nearby D-Class.
+  - *Network (Level 5+):* SCP Unleashed's orbital array (status, plus strikes at your crosshair) and the network hub count.
+- **Council directives:** O5 can deploy the Nu-7 Strike Team immediately. The Administrator can deploy the Alpha-1 Detachment.
+- **Site-01 and Ascension:** the Administrator's sanctum, built with SCP Unleashed cell walls and stocked with their gear.
+  - Offer SCP-500 at the Ascension Altar to become SCP-Ω.
+  - After that, anomalies won't target or hurt you, and SCP-001-1, the Gate Guardian, holds its blades for you.
 
 ## Building
 
