@@ -2,9 +2,7 @@ package com.breachprotocol.career;
 
 import com.breachprotocol.BreachProtocol;
 import com.breachprotocol.compat.Unleashed;
-import com.breachprotocol.entity.GateGuardianEntity;
 import com.breachprotocol.entity.O5MemberEntity;
-import com.breachprotocol.registry.ModEffects;
 import com.breachprotocol.registry.ModItems;
 import com.breachprotocol.registry.ModSounds;
 import net.minecraft.ChatFormatting;
@@ -153,12 +151,13 @@ public final class CareerEvents {
     public static void onDamage(LivingIncomingDamageEvent event) {
         LivingEntity target = event.getEntity();
         if (event.getSource().getEntity() instanceof Player attacker && Career.isAscended(attacker)
-                && Unleashed.isAnomaly(target) && !(target instanceof GateGuardianEntity) && !(target instanceof O5MemberEntity)) {
+                && Unleashed.isAnomaly(target) && !(target instanceof O5MemberEntity)) {
             event.setAmount(event.getAmount() * 8F); // nothing in the Foundation can survive its master
         }
         if (target instanceof Player p && Career.isAscended(p)) {
             // Nothing in the Foundation's care may harm its master.
-            if (event.getSource().getEntity() != null && Unleashed.isAnomaly(event.getSource().getEntity())) {
+            net.minecraft.world.entity.Entity src = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
+            if (src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src))) {
                 event.setCanceled(true);
                 return;
             }
@@ -180,7 +179,7 @@ public final class CareerEvents {
         if (!(event.getEntity() instanceof ServerPlayer p) || !Career.isAscended(p) || !p.isShiftKeyDown()) return;
         if (!p.getMainHandItem().isEmpty()) return;
         if (event.getTarget() instanceof Mob mob && Unleashed.canBeContained(mob)) {
-            Unleashed.contain(mob, 20 * 600);
+            mob.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.MOVEMENT_SLOWDOWN, 20 * 600, 9, false, false));
             mob.setTarget(null);
             p.serverLevel().sendParticles(ParticleTypes.END_ROD, mob.getX(), mob.getY() + 1, mob.getZ(), 30, 0.5, 1, 0.5, 0.05);
             p.displayClientMessage(Component.literal(Unleashed.designation(mob) + " kneels before you.").withStyle(ChatFormatting.LIGHT_PURPLE), true);

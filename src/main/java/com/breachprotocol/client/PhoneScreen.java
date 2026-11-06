@@ -244,7 +244,8 @@ public class PhoneScreen extends Screen {
     }
 
     private static String clrLabel(int c) {
-        return c >= 6 ? (t().getBoolean("ascended") ? "Ω" : rank() >= 7 ? "ADMIN" : "O5") : "CLR " + c;
+        if (c < 6) return "CLR " + c;
+        return t().getBoolean("ascended") ? "\u03A9" : rank() >= 7 ? "ADMIN" : rank() >= 6 ? "O5" : "OMNI";
     }
 
     private static int clrColor(int c) {
@@ -464,7 +465,28 @@ public class PhoneScreen extends Screen {
         viewportHeight = bottom - top;
         scissor(g, SX, top, SW, viewportHeight);
         int y0 = top + 6 - scroll;
-        int end = switch (view) {
+        int end;
+        try {
+            end = drawView(g, y0, top);
+        } catch (Throwable t) {
+            com.breachprotocol.BreachProtocol.LOGGER.error("Phone app {} failed to draw", view, t);
+            empty(g, y0, "App crashed", t.getClass().getSimpleName() + ". Press Home.");
+            end = y0 + 80;
+        }
+        contentHeight = end - y0 + 8;
+        if (scrollToBottom) { scroll = Math.max(0, contentHeight - viewportHeight); scrollToBottom = false; }
+        scroll = Mth.clamp(scroll, 0, Math.max(0, contentHeight - viewportHeight));
+        hits.removeIf(h -> h.y() + h.h() < vtop || h.y() > bottom);
+        g.disableScissor();
+        if (contentHeight > viewportHeight) {
+            int thumb = Math.max(14, viewportHeight * viewportHeight / contentHeight);
+            int pos = (int) ((viewportHeight - thumb) * (scroll / (float) Math.max(1, contentHeight - viewportHeight)));
+            rrect(g, SX + SW - 4, top + pos, 2, thumb, 1, 0x66FFFFFF);
+        }
+    }
+
+    private int drawView(GuiGraphics g, int y0, int top) {
+        return switch (view) {
             case MESSAGES -> drawMessages(g, y0);
             case THREAD -> drawThread(g, y0);
             case MISSIONS -> drawMissions(g, y0);
@@ -480,16 +502,6 @@ public class PhoneScreen extends Screen {
             case NETWORK -> drawNetwork(g, y0);
             default -> drawSite(g, y0);
         };
-        contentHeight = end - y0 + 8;
-        if (scrollToBottom) { scroll = Math.max(0, contentHeight - viewportHeight); scrollToBottom = false; }
-        scroll = Mth.clamp(scroll, 0, Math.max(0, contentHeight - viewportHeight));
-        hits.removeIf(h -> h.y() + h.h() < vtop || h.y() > bottom);
-        scissor(g, SX, SY, SW, SH);
-        if (contentHeight > viewportHeight) {
-            int thumb = Math.max(14, viewportHeight * viewportHeight / contentHeight);
-            int pos = (int) ((viewportHeight - thumb) * (scroll / (float) Math.max(1, contentHeight - viewportHeight)));
-            rrect(g, SX + SW - 4, top + pos, 2, thumb, 1, 0x66FFFFFF);
-        }
     }
 
     private void empty(GuiGraphics g, int y, String title, String sub) {
@@ -681,17 +693,16 @@ public class PhoneScreen extends Screen {
         });
     }
 
-    /** Client-side warning: is SCP-096's face in frame? */
+    /** Client-side warning: is SCP-096's face (SCP Unleashed's Scp096Sight.faceOf) in frame? */
     private static String faceInView() {
         Minecraft mc = Minecraft.getInstance();
         if (mc.player == null || mc.level == null) return null;
         Vec3 eye = mc.player.getEyePosition(), look = mc.player.getViewVector(1.0F);
-        for (Entity e : mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(40))) {
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType());
-            if (!"scp_unleashed".equals(id.getNamespace()) || !id.getPath().equals("scp096") || !(e instanceof LivingEntity le)) continue;
-            Vec3 to = e.position().add(0, e.getBbHeight() * 0.7, 0).subtract(eye);
-            if (look.dot(to.normalize()) < 0.93) continue;
-            if (Vec3.directionFromRotation(0, le.getYHeadRot()).dot(to.scale(-1).normalize()) > 0.25) return "SCP-096";
+        for (Entity e : mc.level.getEntities(mc.player, mc.player.getBoundingBox().inflate(40), com.breachprotocol.compat.UnleashedApi::isShyGuy)) {
+            Vec3 face = com.breachprotocol.compat.UnleashedApi.faceOf(e), facing = com.breachprotocol.compat.UnleashedApi.facingOf(e);
+            if (face == null || facing == null) continue;
+            if (look.dot(face.subtract(eye).normalize()) < 0.93) continue;
+            if (facing.normalize().dot(eye.subtract(face).normalize()) > 0.3) return e.getType().getDescription().getString();
         }
         return null;
     }
@@ -753,7 +764,7 @@ public class PhoneScreen extends Screen {
             pill(g, x, y, w, 16, "Delete", 0xFF2A3038, true, () -> { send("photo_delete", photoId); goBack(); });
             y += 20;
         }
-        pill(g, x, y, (w - 4) / 2, 16, "Print", 0xFF3C6FB8, true, () -> send("photo_print", photoId));
+        pill(g, x, y, (w - 4) / 2, 16, hz ? "Print (face down)" : "Print", 0xFF3C6FB8, hz, () -> send("photo_print", photoId));
         pill(g, x + (w + 4) / 2, y, (w - 4) / 2, 16, "Send nearby", 0xFF6B3FA0, true, () -> send("photo_share", photoId));
         return y + 20;
     }
@@ -766,21 +777,22 @@ public class PhoneScreen extends Screen {
     }
 
     private int drawArchive(GuiGraphics g, int y) {
-        text(g, "Files cleared for " + clrLabel(clr()), SX + 8, y, MUTED);
+        List<ArchiveFiles.Entry> all = ArchiveFiles.all();
+        text(g, "SCP Unleashed dossiers \u00B7 " + clrLabel(clr()), SX + 8, y, MUTED);
         y += 14;
-        for (ArchiveFiles.Entry e : ArchiveFiles.ENTRIES) {
-            if (!e.present()) continue;
+        if (all.isEmpty()) { empty(g, y - 20, "Archive offline", "SCP Unleashed hasn't sent its dossiers yet. Rejoin the world."); return y + 60; }
+        for (ArchiveFiles.Entry e : all) {
             int x = SX + 6, w = SW - 12, h = 30;
-            int locked = 0;
-            for (ArchiveFiles.Section s : e.sections()) if (s.clearance() > clr()) locked++;
+            boolean ok = ArchiveFiles.clears(clr(), e.required());
             rrect(g, x, y, w, h, 8, over(x, y, w, h) ? 0xFF1C2430 : CARD);
-            text(g, e.designation(), x + 8, y + 5, 0xFFFFFFFF);
-            int cc = switch (e.objectClass()) { case "Safe" -> 0xFF3AA860; case "Euclid" -> 0xFFC8A030; case "Thaumiel" -> 0xFF3FB8FF; default -> 0xFFC0383F; };
-            rrect(g, x + 12 + font.width(e.designation()), y + 4, font.width(e.objectClass()) + 6, 10, 4, cc);
-            text(g, e.objectClass(), x + 15 + font.width(e.designation()), y + 5, 0xFFFFFFFF);
-            text(g, locked == 0 ? "Full access" : locked + " section" + (locked > 1 ? "s" : "") + " redacted", x + 8, y + 17, locked == 0 ? 0xFF7FD6A0 : 0xFFC9A0A5);
+            text(g, ellipsize(e.designation(), w - 70), x + 8, y + 5, ok ? 0xFFFFFFFF : 0xFF8794A0);
+            String cls = e.objectClass().isEmpty() ? e.classKey() : e.objectClass();
+            int cw = font.width(cls) + 6;
+            rrect(g, x + w - 6 - cw, y + 4, cw, 10, 4, ArchiveFiles.classColor(e.classKey()));
+            text(g, cls, x + w - 3 - cw, y + 5, 0xFFFFFFFF);
+            text(g, ok ? ellipsize(e.title(), w - 16) : "\u26BF Level " + e.required() + " clearance", x + 8, y + 17, ok ? 0xFF9FB1C2 : 0xFFC9A0A5);
             final String id = e.id();
-            hit(x, y, w, h, () -> { fileId = id; go(View.FILE); });
+            if (ok) hit(x, y, w, h, () -> { fileId = id; go(View.FILE); });
             y += h + 4;
         }
         return y;
@@ -790,30 +802,44 @@ public class PhoneScreen extends Screen {
         ArchiveFiles.Entry e = ArchiveFiles.get(fileId);
         if (e == null) return y;
         int x = SX + 6, w = SW - 12;
-        for (ArchiveFiles.Section s : e.sections()) {
-            boolean ok = s.clearance() <= clr();
-            int bodyH = ok ? wrapHeight(s.text(), w - 16) : Math.max(30, wrapHeight(s.text(), w - 16) * 2 / 3);
-            int h = 22 + bodyH + (ok ? 6 : 18);
-            rrect(g, x, y, w, h, 8, ok ? CARD : 0xFF1A1418);
-            String head = s.title().toUpperCase(Locale.ROOT) + (s.clearance() > 1 ? "  ·  L" + s.clearance() : "");
-            text(g, head, x + 8, y + 7, ok ? MUTED : RED);
-            if (ok) {
-                wrap(g, s.text(), x + 8, y + 20, w - 16, 0xFFDFE7EE);
-            } else {
-                Random r = new Random(s.text().hashCode());
-                for (int ly = 0; ly < bodyH; ly += 10) rect(g, x + 8, y + 21 + ly, (int) ((w - 16) * (0.55 + r.nextFloat() * 0.45)), 7, 0xFF000000);
-                text(g, "Requires Level " + s.clearance() + " clearance", x + 8, y + h - 14, 0xFFC99AA4);
+        boolean omni = clr() >= 6;
+        text(g, ellipsize(e.title(), w), x, y, 0xFFE2E8EE);
+        y += 12;
+        text(g, "Class: " + e.objectClass() + (omni ? "  \u00B7  unredacted" : ""), x, y, ArchiveFiles.classColor(e.classKey()));
+        y += 14;
+        for (ArchiveFiles.Section sec : e.sections()) {
+            if (!sec.heading().isEmpty()) {
+                y += wrap(g, sec.heading().toUpperCase(Locale.ROOT), x, y, w, MUTED) + 2;
             }
-            y += h + 6;
+            for (String para : sec.text().split("\n")) {
+                if (para.isBlank()) continue;
+                y = drawRuns(g, ArchiveFiles.runs(para), x, y, w, omni) + 4;
+            }
+            y += 6;
         }
         return y;
+    }
+
+    /** Word-wrapped dossier text where redacted words become black bars (or red text for Omni). */
+    private int drawRuns(GuiGraphics g, List<ArchiveFiles.Run> runs, int x0, int y, int w, boolean reveal) {
+        int x = x0;
+        for (ArchiveFiles.Run r : runs) {
+            for (String word : r.text().split("(?<= )")) {
+                int ww = font.width(word);
+                if (x > x0 && x + font.width(word.stripTrailing()) > x0 + w) { x = x0; y += 10; }
+                if (r.redacted() && !reveal) rect(g, x, y, Math.max(2, font.width(word.stripTrailing())), 8, 0xFF000000);
+                else text(g, word, x, y, r.redacted() ? 0xFFFF8A8F : 0xFFDFE7EE);
+                x += ww;
+            }
+        }
+        return y + 10;
     }
 
     // ---------------------------------------------------------------- Containment
 
     private int drawContainment(GuiGraphics g, int y) {
         ListTag list = t().getList("nearby", Tag.TAG_COMPOUND);
-        text(g, "Anomalies within 64m", SX + 8, y, MUTED);
+        text(g, "Anomalies within 64m \u00B7 cells count", SX + 8, y, MUTED);
         y += 14;
         if (list.isEmpty()) { empty(g, y - 20, "All quiet", "No anomalies detected nearby."); return y + 60; }
         for (Tag tg : list) {
@@ -822,12 +848,13 @@ public class PhoneScreen extends Screen {
             int x = SX + 6, w = SW - 12;
             card(g, x, y, w, 26);
             circle(g, x + 10, y + 13, 4, contained ? TEAL : containable ? RED : 0xFF8A96A2);
-            text(g, ellipsize(a.getString("d"), w - 70), x + 20, y + 4, 0xFFFFFFFF);
+            String nm = a.contains("dk") ? Component.translatable(a.getString("dk")).getString() : a.getString("d");
+            text(g, ellipsize(nm, w - 70), x + 20, y + 4, 0xFFFFFFFF);
             String cls = a.getString("o");
             int cc = cls.equals("Safe") ? 0xFF3AA860 : cls.equals("Euclid") ? 0xFFC8A030 : 0xFFC0383F;
             rrect(g, x + w - 8 - font.width(cls) - 6, y + 3, font.width(cls) + 6, 10, 4, cc);
             text(g, cls, x + w - 5 - font.width(cls) - 6, y + 4, 0xFFFFFFFF);
-            String status = contained ? "CONTAINED" : containable ? "NOT CONTAINED" : a.getString("n").isEmpty() ? "-" : a.getString("n");
+            String status = contained ? (a.getString("n").isEmpty() ? "IN CELL" : a.getString("n").toUpperCase(Locale.ROOT)) : containable ? "LOOSE" : "STASIS-IMMUNE, LOOSE";
             text(g, ellipsize(status, w - 60), x + 20, y + 15, contained ? 0xFF7FD6FF : containable ? 0xFFFF7A7A : 0xFF9AA6B2);
             String dist = a.getInt("m") + "m";
             text(g, dist, x + w - 6 - font.width(dist), y + 15, 0xFF7A8794);
@@ -887,13 +914,18 @@ public class PhoneScreen extends Screen {
     // ---------------------------------------------------------------- Settings (keycard fusing)
 
     private void keycard(GuiGraphics g, int x, int y, int level) {
-        int[] fill = {0xFFC8C8C4, 0xFFC8C8C4, 0xFF5A96D2, 0xFFE6C04A, 0xFFE08A3A, 0xFF2A2A2E};
-        int[] stripe = {0xFF787878, 0xFF787878, 0xFF1E468C, 0xFF9B2A2A, 0xFF6E2A82, 0xFFC8A028};
-        int l = Mth.clamp(level, 0, 5);
+        int[] fill = {0xFFC8C8C4, 0xFFC8C8C4, 0xFF5A96D2, 0xFFE6C04A, 0xFFE08A3A, 0xFF2A2A2E, 0xFF14161A};
+        int[] stripe = {0xFF787878, 0xFF787878, 0xFF1E468C, 0xFF9B2A2A, 0xFF6E2A82, 0xFFC8A028, 0xFFE8E8F0};
+        int l = Mth.clamp(level, 0, 6);
         rrect(g, x, y, 46, 30, 4, fill[l]);
         rect(g, x, y + 4, 46, 5, stripe[l]);
         rrect(g, x + 4, y + 13, 8, 7, 2, 0xFFD6B24A);
-        text(g, String.valueOf(level), x + 38 - font.width(String.valueOf(level)), y + 16, l == 5 ? 0xFFFFFFFF : 0xFF10161D);
+        String lv = level >= 6 ? "\u03A9" : String.valueOf(level);
+        text(g, lv, x + 38 - font.width(lv), y + 16, l >= 5 ? 0xFFFFFFFF : 0xFF10161D);
+    }
+
+    private static String cardName(int level) {
+        return level >= 6 ? "Omni Keycard" : "Level " + level + " Keycard";
     }
 
     private int drawSettings(GuiGraphics g, int y) {
@@ -905,15 +937,15 @@ public class PhoneScreen extends Screen {
         card(g, x, y, w, 42);
         if (fused > 0) keycard(g, x + 6, y + 6, fused); else rrect(g, x + 6, y + 6, 46, 30, 4, 0xFF222A34);
         text(g, fused > 0 ? "Fused to this phone" : "No card fused", x + 58, y + 8, fused > 0 ? 0xFF5BE36F : MUTED);
-        text(g, fused > 0 ? "Level " + fused + " · can't be lost" : "Fuse a keycard to keep it", x + 58, y + 20, 0xFF9FB1C2);
+        text(g, fused > 0 ? cardName(fused) + " · swipes scanners" : "Fuse a keycard to keep it", x + 58, y + 20, 0xFF9FB1C2);
         y += 48;
         if (carried > fused) {
             rrect(g, x, y, w, 74, 8, 0xFF5A4A1E);
             rrect(g, x + 1, y + 1, w - 2, 72, 7, 0xFF1D1A12);
             keycard(g, x + 6, y + 6, carried);
             text(g, "In your inventory", x + 58, y + 8, AMBER);
-            text(g, "Level " + carried + " keycard", x + 58, y + 20, 0xFFE8EEF4);
-            pill(g, x + 6, y + 42, w - 12, 16, "Fuse Level " + carried + " card", AMBER, 0xFF1A1206, true, () -> send("fuse", 0));
+            text(g, cardName(carried), x + 58, y + 20, 0xFFE8EEF4);
+            pill(g, x + 6, y + 42, w - 12, 16, "Fuse " + cardName(carried), AMBER, 0xFF1A1206, true, () -> send("fuse", 0));
             text(g, "Consumes the card. Can't be undone.", x + 6, y + 61, 0xFFA8987A);
             y += 80;
         }
@@ -950,17 +982,22 @@ public class PhoneScreen extends Screen {
             long cd = t().getLong("mtfCd");
             card(g, x, y, w, 30);
             text(g, "Mobile Task Force", x + 8, y + 5, 0xFFFFFFFF);
-            text(g, cd > 0 ? "Next squad in " + cd / 60 + ":" + String.format("%02d", cd % 60) : "A squad can be called now", x + 8, y + 17, cd > 0 ? AMBER : 0xFF5BE36F);
+            text(g, cd > 0 ? "Command regrouping: " + cd / 60 + ":" + String.format("%02d", cd % 60) : "Command is ready", x + 8, y + 17, cd > 0 ? AMBER : 0xFF5BE36F);
             y += 36;
-            label(g, "Call by threat tier", x + 2, y);
+            label(g, "Spend an Unstable Fragment", x + 2, y);
             y += 12;
-            ListTag tiers = t().getList("mtfTiers", Tag.TAG_STRING);
+            boolean busy = t().getBoolean("mtfBusy");
+            ListTag tiers = t().getList("mtfTiers", Tag.TAG_COMPOUND);
             for (int i = 0; i < tiers.size(); i++) {
-                String tier = tiers.getString(i);
-                int col = switch (i) { case 0 -> 0xFF2B5FB8; case 1 -> 0xFF2E8F6A; case 2 -> 0xFFB07A22; case 3 -> 0xFFA8323A; default -> 0xFF6A2AA8; };
-                pill(g, x, y, w, 16, "Call MTF · " + tier, col, cd <= 0, () -> send("mtf:" + tier, 0));
+                CompoundTag tt = tiers.getCompound(i);
+                String tier = tt.getString("tier");
+                int frags = tt.getInt("frags");
+                String squad = tt.getString("name").isEmpty() ? tier : Component.translatable(tt.getString("name")).getString();
+                int col = 0xFF000000 | ((tt.getInt("colour") >> 1) & 0x7F7F7F); // darkened so white text reads
+                pill(g, x, y, w, 16, squad + " \u00B7 " + frags + " " + tier, col, cd <= 0 && !busy && frags > 0, () -> send("mtf:" + tier, 0));
                 y += 20;
             }
+            if (busy) { text(g, "A squad is already deployed.", x + 2, y, AMBER); y += 12; }
             y += 4;
             pill(g, x, y, (w - 4) / 2, 16, "Squad report", 0xFF262E38, true, () -> send("mtf_report", 0));
             pill(g, x + (w + 4) / 2, y, (w - 4) / 2, 16, "Extraction", 0xFF262E38, true, () -> send("mtf_extract", 0));

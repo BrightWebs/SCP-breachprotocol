@@ -106,7 +106,7 @@ public final class Calls {
                         opt("Approve", (p, d) -> {
                             if (p.level().dimension() == Level.OVERWORLD) {
                                 var spot = Career.surfaceSpot(p.serverLevel(), p.blockPosition(), 4, 8, p.getRandom());
-                                var blob = Unleashed.entity("scp999");
+                                var blob = Unleashed.entity(Unleashed.SCP_999);
                                 if (spot != null && blob.isPresent()) Career.spawnAt(p.serverLevel(), blob.get(), spot);
                             }
                             return stab(p, 5, "It's already giggling. I sent one to you, too.");
@@ -122,7 +122,7 @@ public final class Calls {
                         }),
                         opt("Postpone", (p, d) -> {
                             if (p.getRandom().nextFloat() < 0.35F && p.level().dimension() == Level.OVERWORLD && !d.ascended) {
-                                Career.breachNear(p, "scp173");
+                                Career.breachNear(p, Unleashed.SCP_173);
                                 return stab(p, -5, "The waste built up. Something cracked. It's out, and it's near you.");
                             }
                             return stab(p, -2, "Postponed. The smell is getting worse.");
@@ -134,7 +134,7 @@ public final class Calls {
                         opt("Authorise it", (p, d) -> stab(p, 8, "It's done. We don't speak about it.")),
                         opt("Find another way", (p, d) -> {
                             if (p.getRandom().nextFloat() < 0.4F && p.level().dimension() == Level.OVERWORLD && !d.ascended) {
-                                Career.breachNear(p, "scp106");
+                                Career.breachNear(p, Unleashed.SCP_106);
                                 return stab(p, -5, "There was no other way. It's coming up through the floor near you.");
                             }
                             return stab(p, -3, "We found a way. For now.");

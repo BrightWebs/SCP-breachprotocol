@@ -38,22 +38,8 @@ neoForge {
     }
 }
 
-repositories {
-    maven {
-        name = 'GeckoLib'
-        url = 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
-        content { includeGroupByRegex('software\\.bernie.*') }
-    }
-}
-
 dependencies {
-    // Animation library for entity models. Bundled inside our jar (jar-in-jar), so players need only one file.
-    jarJar(implementation("software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}")) {
-        version {
-            strictly "[${geckolib_version},4.8)"
-            prefer geckolib_version
-        }
-    }
+    // No compile dependencies: SCP Unleashed is reached at runtime by registry ID and reflection.
 }
 
 tasks.withType(ProcessResources).configureEach {

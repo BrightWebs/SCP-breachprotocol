@@ -1,10 +1,10 @@
 package com.breachprotocol.career;
 
 import com.breachprotocol.compat.Unleashed;
+import com.breachprotocol.compat.UnleashedApi;
 import com.breachprotocol.event.BreachAlerts;
 import com.breachprotocol.network.CareerSyncPayload;
 import com.breachprotocol.registry.ModAttachments;
-import com.breachprotocol.registry.ModEffects;
 import com.breachprotocol.registry.ModItems;
 import com.breachprotocol.registry.ModSounds;
 import com.breachprotocol.world.Site01;
@@ -184,7 +184,14 @@ public final class Career {
 
     // ------------------------------------------------------------------ hooks from gameplay
 
-    /** A containment field just took hold of an anomaly. */
+    /** Every 5 seconds: anomalies around the player that are now held in a cell. */
+    public static void scanContainment(ServerPlayer p) {
+        for (Mob mob : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(48), Unleashed::isAnomaly)) {
+            if (Unleashed.isContained(mob)) onContained(p.serverLevel(), p.blockPosition(), mob);
+        }
+    }
+
+    /** An anomaly was found held in a cell near {@code where}. */
     public static void onContained(ServerLevel level, BlockPos generator, Mob mob) {
         if (!Unleashed.isAnomaly(mob)) return;
         long now = level.getGameTime();
@@ -202,7 +209,7 @@ public final class Career {
             if (p.blockPosition().closerThan(generator, 48)) {
                 addXp(p, reward, designation + " contained");
                 for (Mission m : data(p).missions) {
-                    if (m.type == Mission.Type.RECOVER && !m.done() && m.designation.equals(designation)) {
+                    if (m.type == Mission.Type.RECOVER && !m.done() && (m.item.isEmpty() ? m.designation.equals(designation) : Unleashed.is(mob, m.item))) {
                         m.progress++;
                         data(p).dirty = true;
                     }
@@ -274,13 +281,15 @@ public final class Career {
     /** SCP Unleashed entities the Council would trust you to recover at your rank. Only ones that exist are offered. */
     public static List<String> recoverableFor(Rank r) {
         List<String> list = new ArrayList<>();
-        if (r.atLeast(Rank.LEVEL_2)) list.addAll(List.of("scp049", "scp131_pod", "scp066"));
-        if (r.atLeast(Rank.LEVEL_3)) list.addAll(List.of("scp173", "scp457"));
-        if (r.atLeast(Rank.LEVEL_4)) list.addAll(List.of("scp106", "scp939"));
-        if (r.atLeast(Rank.LEVEL_5)) list.add("scp096");
-        if (r.atLeast(Rank.OVERSEER)) list.add("scp682");
+        // SCP Unleashed 0.0.5.2 entity IDs; SCP-106 and SCP-682 are stasis-immune there, so they
+        // only count when walled into a real cell.
+        if (r.atLeast(Rank.LEVEL_2)) list.addAll(List.of(Unleashed.SCP_049, Unleashed.SCP_131, Unleashed.SCP_066));
+        if (r.atLeast(Rank.LEVEL_3)) list.addAll(List.of(Unleashed.SCP_173, Unleashed.SCP_457));
+        if (r.atLeast(Rank.LEVEL_4)) list.addAll(List.of(Unleashed.SCP_106, Unleashed.SCP_939));
+        if (r.atLeast(Rank.LEVEL_5)) list.add(Unleashed.SCP_096);
+        if (r.atLeast(Rank.OVERSEER)) list.add(Unleashed.SCP_682);
         list.removeIf(id -> Unleashed.entity(id).isEmpty());
-        if (list.isEmpty()) list.add("scp049");
+        if (list.isEmpty()) list.add(Unleashed.SCP_049);
         return list;
     }
 
@@ -318,7 +327,7 @@ public final class Career {
                 m.xp = 30 + m.target * 8;
                 Vec3 spot = surfaceSpot(level, p.blockPosition(), 30, 55, rnd);
                 if (spot == null) return;
-                var cured = Unleashed.entity("scp049_2");
+                var cured = Unleashed.entity(Unleashed.SCP_049_2);
                 if (cured.isEmpty()) return;
                 for (int i = 0; i < m.target; i++) spawnAt(level, cured.get(), spot.add(rnd.nextInt(5) - 2, 0, rnd.nextInt(5) - 2));
                 setPos(m, spot);
@@ -326,7 +335,7 @@ public final class Career {
                 message(p, O5.O5_11, "A group of 049's former patients got out. Termination order signed. Coordinates on your phone.");
             }
             case CARE -> {
-                var blob = Unleashed.entity("scp999");
+                var blob = Unleashed.entity(Unleashed.SCP_999);
                 if (blob.isEmpty()) return;
                 m.target = 30;
                 m.giver = 2;
@@ -350,21 +359,21 @@ public final class Career {
                 m.item = entityId;
                 m.giver = rnd.nextBoolean() ? 6 : 8;
                 m.xp = switch (entityId) {
-                    case "scp682" -> 400;
-                    case "scp096" -> 280;
-                    case "scp106", "scp939" -> 240;
-                    case "scp173", "scp457" -> 160;
+                    case Unleashed.SCP_682 -> 400;
+                    case Unleashed.SCP_096 -> 280;
+                    case Unleashed.SCP_106, Unleashed.SCP_939 -> 240;
+                    case Unleashed.SCP_173, Unleashed.SCP_457 -> 160;
                     default -> 120;
                 };
                 Vec3 spot = surfaceSpot(level, p.blockPosition(), 45, 75, rnd);
                 if (spot == null) return;
                 spawnAt(level, type.get(), spot);
                 setPos(m, spot);
-                m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". Bring it inside a powered Containment Field.";
+                m.description = "Recover " + m.designation + ", last seen near " + m.x + ", " + m.z + ". Hold it in a cell built from SCP Unleashed containment blocks, or behind a forcefield.";
                 message(p, O5.seat(m.giver), m.designation + " has surfaced outside containment near " + m.x + ", " + m.z + ". Bring it home. "
                         + switch (m.designation) {
                     case "SCP-173" -> "Do not blink.";
-                    case "SCP-096" -> "Do NOT look at its face. Wear a pumpkin if you have to.";
+                    case "SCP-096" -> "Do NOT look at its face. Scramble Goggles, and get the Containment Hood on it.";
                     case "SCP-106" -> "It will find you before you find it.";
                     case "SCP-682" -> "Do not engage. Contain it, or run.";
                     case "SCP-939" -> "If you hear a voice you know out there, it isn't them.";
@@ -507,7 +516,7 @@ public final class Career {
             if (m.type == Mission.Type.FOUNDERS_TRIAL) {
                 Set<String> held = new HashSet<>();
                 for (Mob mob : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(64), Unleashed::canBeContained)) {
-                    if (ModEffects.has(mob, ModEffects.CONTAINED)) held.add(Unleashed.designation(mob));
+                    if (Unleashed.isContained(mob)) held.add(Unleashed.designation(mob));
                 }
                 if (held.size() != m.progress) {
                     m.progress = held.size();
@@ -515,9 +524,10 @@ public final class Career {
                 }
             }
         }
+        if (p.tickCount % 100 < 20) scanContainment(p);
         for (Mission m : d.missions) {
             if (m.type == Mission.Type.CARE && !m.done()) {
-                var blob = Unleashed.entity("scp999");
+                var blob = Unleashed.entity(Unleashed.SCP_999);
                 if (blob.isPresent() && !p.level().getEntitiesOfClass(net.minecraft.world.entity.Entity.class, p.getBoundingBox().inflate(4), e -> e.getType() == blob.get()).isEmpty()) {
                     m.progress++;
                     d.dirty = true;
@@ -611,10 +621,10 @@ public final class Career {
             CompoundTag at = new CompoundTag();
             at.putString("d", Unleashed.designation(mob));
             at.putString("o", Unleashed.objectClass(mob));
-            at.putBoolean("c", ModEffects.has(mob, ModEffects.CONTAINED));
+            at.putString("dk", mob.getType().getDescriptionId());
+            at.putBoolean("c", Unleashed.isContained(mob));
             at.putBoolean("k", Unleashed.canBeContained(mob));
-            Component note = Unleashed.statusNote(mob);
-            at.putString("n", note == null ? "" : note.getString());
+            at.putString("n", UnleashedApi.isShyGuy(mob) && UnleashedApi.isBagged(mob) ? "Hooded" : "");
             at.putInt("m", (int) Math.sqrt(p.distanceToSqr(mob)));
             near.add(at);
         }

@@ -1,9 +1,7 @@
 package com.breachprotocol.world;
 
-import com.breachprotocol.block.ContainmentGeneratorBlock;
 import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.career.O5;
-import com.breachprotocol.entity.GateGuardianEntity;
 import com.breachprotocol.entity.O5MemberEntity;
 import com.breachprotocol.registry.ModBlocks;
 import com.breachprotocol.registry.ModEntities;
@@ -39,7 +37,7 @@ import java.util.Random;
  * Site-01: the Administrator's sanctum. One per world, carved deep under the overworld at a
  * seed-derived spot 1.4-2km from spawn the first time someone becomes The Administrator.
  * Council chamber with the twelve Overseers, armory, medical bay, archive, quarters,
- * a two-cell containment wing - and at the far end, the Gate, its Guardian, and the Altar.
+ * a two-cell containment wing - and at the far end, the Gate and the Altar.
  */
 public final class Site01 {
     private Site01() {}
@@ -166,7 +164,7 @@ public final class Site01 {
             for (int cz = (o.getZ() - 2) >> 4; cz <= (o.getZ() + SZ + 2) >> 4; cz++)
                 l.getChunk(cx, cz);
 
-        BlockState wall = b(ModBlocks.CONTAINMENT_WALL.get());
+        BlockState wall = b(Unleashed.cellWall());
         BlockState air = b(Blocks.AIR);
         fill(l, o, 0, -1, 0, SX, SY - 1, SZ, wall);
 
@@ -224,7 +222,7 @@ public final class Site01 {
             }
         }
 
-        // --- containment wing: two cells, each with its own powered generator and a level-5 reader
+        // --- containment wing: two cells walled in SCP Unleashed reinforced containment wall
         fill(l, o, 4, 0, 4, 16, 5, 17, air);
         fill(l, o, 9, 0, 18, 11, 3, 18, air);
         fill(l, o, 4, -1, 4, 16, -1, 17, b(Blocks.SMOOTH_STONE));
@@ -236,8 +234,6 @@ public final class Site01 {
             door(l, o, cx + 2, 0, 9, Direction.SOUTH);
             set(l, o, cx + 3, 1, 10, Blocks.LEVER.defaultBlockState()
                     .setValue(LeverBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(LeverBlock.FACING, Direction.SOUTH));
-            set(l, o, cx + 2, -2, 7, b(Blocks.REDSTONE_BLOCK));
-            set(l, o, cx + 2, -1, 7, ModBlocks.CONTAINMENT_GENERATOR.get().defaultBlockState().setValue(ContainmentGeneratorBlock.ACTIVE, true));
         }
 
         // --- archive
@@ -248,10 +244,11 @@ public final class Site01 {
         fill(l, o, 52, 0, 4, 52, 3, 15, b(Blocks.BOOKSHELF));
         fill(l, o, 39, 0, 4, 51, 3, 4, b(Blocks.BOOKSHELF));
         for (int x = 41; x <= 49; x += 4) set(l, o, x, 0, 9, b(Blocks.LECTERN));
+        set(l, o, 45, 0, 12, b(Unleashed.block("archive", Blocks.LECTERN))); // SCP Unleashed's Archive Terminal
         lights(l, o, 40, 50, 6, 14, 6, 4);
         chest(l, o, 45, 0, 5, Direction.SOUTH,
-                st(ModItems.SITE_TERMINAL.get(), 1), st(ModItems.PHONE.get(), 1), st(Unleashed.keycard(1), 1), st(Unleashed.keycard(2), 1),
-                st(Unleashed.keycard(3), 1), st(Unleashed.keycard(4), 1), st(Unleashed.keycard(5), 2), st(Unleashed.item("keycard_omni", Items.PAPER), 1),
+                st(Unleashed.item("facility_tablet", Items.MAP), 1), st(ModItems.PHONE.get(), 1), st(Unleashed.keycard(1), 1), st(Unleashed.keycard(2), 1),
+                st(Unleashed.keycard(3), 1), st(Unleashed.keycard(4), 1), st(Unleashed.keycard(5), 2), st(Unleashed.keycard(6), 1),
                 st(Items.BOOK, 32), st(Items.PAPER, 64));
 
         // --- armory
@@ -307,17 +304,11 @@ public final class Site01 {
                 ench(l, Items.NETHERITE_AXE, Enchantments.EFFICIENCY, 5, Enchantments.UNBREAKING, 3),
                 ench(l, Items.NETHERITE_SHOVEL, Enchantments.EFFICIENCY, 5, Enchantments.SILK_TOUCH, 1), st(Items.LAPIS_LAZULI, 64), st(Items.EXPERIENCE_BOTTLE, 64));
         chest(l, o, 33, 0, 39, Direction.NORTH,
-                st(ModItems.CONTAINMENT_GENERATOR.get(), 4), st(ModItems.CONTAINMENT_WALL.get(), 64), st(ModItems.CONTAINMENT_WALL.get(), 64),
-                st(Unleashed.item("keycard_scanner", Items.STONE_BUTTON), 4), st(Items.IRON_DOOR, 8), st(Items.REDSTONE_BLOCK, 8), st(Items.LEVER, 8),
+                st(Unleashed.item("reinforced_containment_wall", Items.POLISHED_DEEPSLATE), 64), st(Unleashed.item("reinforced_containment_wall", Items.POLISHED_DEEPSLATE), 64),
+                st(Unleashed.item("forcefield_emitter", Items.BEACON), 4), st(Unleashed.item("keycard_scanner", Items.STONE_BUTTON), 4),
+                st(Unleashed.item("containment_door", Items.IRON_DOOR), 4), st(Unleashed.item("rift_extractor", Items.SPYGLASS), 1),
+                st(Unleashed.item("mtf_signal_radio", Items.COMPASS), 1), st(Unleashed.item("scramble_goggles", Items.CARVED_PUMPKIN), 1),
+                st(Unleashed.item("scp096_bag", Items.LEATHER), 1), st(Items.REDSTONE_BLOCK, 8),
                 st(Items.BEACON, 1), st(Items.DIAMOND_BLOCK, 4), st(Items.IRON_BLOCK, 16), st(Items.OBSIDIAN, 32));
-
-        // --- the Guardian, standing before the Gate
-        GateGuardianEntity g = ModEntities.GATE_GUARDIAN.get().create(l);
-        if (g != null) {
-            g.moveTo(o.getX() + 49.5, o.getY() + 0.2, o.getZ() + 22.5, 90F, 0);
-            g.setYHeadRot(90F);
-            g.setYBodyRot(90F);
-            l.addFreshEntity(g);
-        }
     }
 }

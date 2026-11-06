@@ -16,7 +16,6 @@ public class BreachProtocol {
 
     public BreachProtocol(IEventBus modBus, ModContainer container) {
         ModSounds.SOUNDS.register(modBus);
-        ModEffects.EFFECTS.register(modBus);
         ModBlocks.BLOCKS.register(modBus);
         ModItems.ITEMS.register(modBus);
         ModEntities.ENTITIES.register(modBus);

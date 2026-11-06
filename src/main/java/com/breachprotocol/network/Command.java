@@ -9,7 +9,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.StringTag;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -25,27 +25,57 @@ import java.util.List;
 public final class Command {
     private Command() {}
 
-    /** Which MTF threat tiers you may call, by clearance. */
+    /** Which MTF threat tiers your clearance lets you request from the phone. */
     public static List<String> mtfTiers(ServerPlayer p) {
         int c = Clearance.effective(p);
-        Rank r = Career.rank(p);
-        if (r == Rank.ADMINISTRATOR || Career.isAscended(p)) return List.of(UnleashedApi.MTF_TIERS);
+        if (Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p)) return List.of(UnleashedApi.MTF_TIERS);
         if (c >= 6) return List.of("Faint", "Wavering", "Volatile", "Severe");
         if (c >= 5) return List.of("Faint", "Wavering", "Volatile");
-        if (c >= 4) return List.of("Faint");
+        if (c >= 4) return List.of("Faint", "Wavering");
         return List.of();
     }
 
+    /** The first unstable fragment in your inventory that calls this tier (MtfTier.fromFragment). */
+    private static ItemStack fragmentFor(ServerPlayer p, String tier) {
+        for (ItemStack s : p.getInventory().items) if (tier.equals(UnleashedApi.tierOfFragment(s))) return s;
+        if (tier.equals(UnleashedApi.tierOfFragment(p.getOffhandItem()))) return p.getOffhandItem();
+        return ItemStack.EMPTY;
+    }
+
+    private static void deny(ServerPlayer p, String key) {
+        p.displayClientMessage(Component.translatable("message.scp_unleashed.mtf.deny." + key).withStyle(ChatFormatting.RED), false);
+    }
+
+    /**
+     * Calls a squad exactly like SCP Unleashed's MTF Signal Radio does: it spends an unstable
+     * fragment of the matching rarity and goes through MtfMissions.call, with the same cooldown.
+     */
     public static void callMtf(ServerPlayer p, String tier) {
         if (!mtfTiers(p).contains(tier)) return;
+        if (UnleashedApi.mtfBusy(p)) { deny(p, "busy"); return; }
+        long cd = UnleashedApi.mtfCooldown(p);
+        if (cd > 0) {
+            p.displayClientMessage(Component.translatable("message.scp_unleashed.mtf.deny.cooldown", (cd / 20) + "s").withStyle(ChatFormatting.RED), false);
+            return;
+        }
+        ItemStack frag = fragmentFor(p, tier);
+        if (frag.isEmpty()) {
+            p.displayClientMessage(Component.literal("You need a " + tier + " Unstable Fragment for that squad.").withStyle(ChatFormatting.RED), false);
+            return;
+        }
         String out = UnleashedApi.callMtf(p, tier);
-        String msg = out == null ? "MTF line is down (SCP Unleashed did not answer)." : switch (out) {
-            case "Called" -> "MTF inbound. Threat tier: " + tier + ".";
-            case "Busy" -> "A squad is already deployed or on cooldown.";
-            case "NoSky" -> "The helicopter needs open sky above you.";
-            default -> "The request failed.";
-        };
-        p.displayClientMessage(Component.literal(msg).withStyle("Called".equals(out) ? ChatFormatting.AQUA : ChatFormatting.RED), true);
+        if (out == null) { deny(p, "failed"); return; }
+        switch (out) {
+            case "Called" -> { if (!p.getAbilities().instabuild) frag.shrink(1); }
+            case "Busy" -> deny(p, "busy");
+            case "NoSky" -> deny(p, "no_sky");
+            default -> deny(p, "failed");
+        }
+    }
+
+    public static void extract(ServerPlayer p) {
+        if (UnleashedApi.mtfExtract(p)) p.displayClientMessage(Component.translatable("message.scp_unleashed.mtf.dismissed").withStyle(ChatFormatting.GRAY), false);
+        else p.displayClientMessage(Component.translatable("message.scp_unleashed.mtf.none").withStyle(ChatFormatting.GRAY), false);
     }
 
     public static void orbitalStrike(ServerPlayer p) {
@@ -83,8 +113,19 @@ public final class Command {
         t.putInt("rankClr", Clearance.fromRank(p));
         if (clr >= 4) {
             ListTag tiers = new ListTag();
-            for (String s : mtfTiers(p)) tiers.add(StringTag.valueOf(s));
+            for (String s : mtfTiers(p)) {
+                CompoundTag tt = new CompoundTag();
+                tt.putString("tier", s);
+                tt.putString("name", UnleashedApi.tierNameKey(s));
+                tt.putInt("colour", UnleashedApi.tierColour(s));
+                int n = 0;
+                for (ItemStack st : p.getInventory().items) if (s.equals(UnleashedApi.tierOfFragment(st))) n += st.getCount();
+                if (s.equals(UnleashedApi.tierOfFragment(p.getOffhandItem()))) n += p.getOffhandItem().getCount();
+                tt.putInt("frags", n);
+                tiers.add(tt);
+            }
             t.put("mtfTiers", tiers);
+            t.putBoolean("mtfBusy", UnleashedApi.mtfBusy(p));
             t.putLong("mtfCd", UnleashedApi.mtfCooldown(p) / 20);
             ListTag ds = new ListTag();
             for (Entity e : p.level().getEntities(p, p.getBoundingBox().inflate(48), UnleashedApi::isDClass)) {

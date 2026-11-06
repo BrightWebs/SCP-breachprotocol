@@ -1,78 +1,112 @@
 package com.breachprotocol.client;
 
-import com.breachprotocol.compat.Unleashed;
+import com.breachprotocol.compat.UnleashedApi;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.StringRepresentable;
 
-import java.util.List;
+import java.util.*;
 
 /**
- * The phone's Archive: short, original summaries of the anomalies SCP Unleashed adds.
- * Sections above your clearance are drawn as redaction bars. Only files whose entity is
- * actually registered by the installed SCP Unleashed are listed.
+ * The phone's Archive reads SCP Unleashed's own anomaly dossiers (AnomalyDocuments / DossierContent)
+ * and applies its own clearance rule (DossierClearance): Safe and Euclid need Level 2, Keter 3,
+ * Thaumiel 4, anything stranger 5, and Omni opens everything. Passages SCP Unleashed marks as
+ * redacted stay blacked out unless you hold Omni-level clearance (Omni keycard, O5 or above).
  */
 public final class ArchiveFiles {
-    public record Section(String title, int clearance, String text) {}
+    private ArchiveFiles() {}
 
-    public record Entry(String id, String designation, String objectClass, List<Section> sections) {
-        public boolean present() {
-            if (id.equals("omega")) return true;
-            if (id.equals("scp500")) return Unleashed.scp500() != net.minecraft.world.item.Items.ENCHANTED_GOLDEN_APPLE;
-            return Unleashed.entity(id).isPresent();
+    public record Section(String heading, String text) {}
+
+    public record Entry(String id, String designation, String title, String objectClass, String classKey, int required, List<Section> sections) {}
+
+    private static List<Entry> cache = List.of();
+    private static int cacheSize = -1;
+
+    @SuppressWarnings("unchecked")
+    public static List<Entry> all() {
+        Object mapObj = UnleashedApi.call(UnleashedApi.method("archive.document.AnomalyDocuments", "client"), null);
+        if (!(mapObj instanceof Map<?, ?> map)) return List.of();
+        if (map.size() == cacheSize) return cache;
+        List<Entry> out = new ArrayList<>();
+        Class<?> docCls = UnleashedApi.cls("archive.document.AnomalyDocument");
+        for (Map.Entry<?, ?> e : new TreeMap<>((Map<ResourceLocation, Object>) map).entrySet()) {
+            Object doc = e.getValue();
+            Object listed = UnleashedApi.call(UnleashedApi.method("archive.document.AnomalyDocument", "isListed"), doc);
+            if (Boolean.FALSE.equals(listed)) continue;
+            Object content = UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent", "client", docCls), null, doc);
+            if (content == null) continue;
+            Object cls = UnleashedApi.call(UnleashedApi.method("archive.document.AnomalyDocument", "Classification"), doc);
+            Object req = UnleashedApi.call(UnleashedApi.method("archive.document.DossierClearance", "required", docCls), null, doc);
+            List<Section> sections = new ArrayList<>();
+            Object secs = UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent", "Sections"), content);
+            if (secs instanceof List<?> l) {
+                for (Object s : l) {
+                    Object h = UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent$Section", "Heading"), s);
+                    Object t = UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent$Section", "Text"), s);
+                    String head = h instanceof Optional<?> o && o.isPresent() ? resolve(String.valueOf(o.get())) : "";
+                    sections.add(new Section(head, t == null ? "" : String.valueOf(t)));
+                }
+            }
+            out.add(new Entry(e.getKey().toString(),
+                    str(UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent", "Designation"), content)),
+                    str(UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent", "Title"), content)),
+                    str(UnleashedApi.call(UnleashedApi.method("archive.document.DossierContent", "ObjectClass"), content)),
+                    cls instanceof StringRepresentable sr ? sr.getSerializedName() : "unknown",
+                    req instanceof Integer i ? i : 5, sections));
         }
+        cache = out;
+        cacheSize = map.size();
+        return out;
     }
 
-    private static Section s(String title, int clr, String text) { return new Section(title, clr, text); }
+    private static String str(Object o) {
+        return o == null ? "" : resolve(String.valueOf(o));
+    }
 
-    public static final List<Entry> ENTRIES = List.of(
-            new Entry("scp999", "SCP-999", "Safe", List.of(
-                    s("Description", 1, "A friendly orange gelatinous organism. Contact reliably improves mood."),
-                    s("Procedures", 2, "May roam its wing freely. Staff on long shifts are encouraged to visit."),
-                    s("Notes", 3, "Career note: thirty seconds of care near SCP-999 completes a CARE assignment."))),
-            new Entry("scp131_pod", "SCP-131", "Safe", List.of(
-                    s("Description", 1, "Small one-eyed teardrop creatures that follow personnel they like."),
-                    s("Procedures", 2, "Recoverable at Level 2. Keep away from moving machinery."))),
-            new Entry("scp066", "SCP-066", "Euclid", List.of(
-                    s("Description", 1, "A mass of braided yarn that greets people with very loud noise."),
-                    s("Procedures", 2, "Ear protection required. Recoverable at Level 2."))),
-            new Entry("scp173", "SCP-173", "Euclid", List.of(
-                    s("Description", 1, "A concrete statue that only moves when unobserved."),
-                    s("Procedures", 3, "Never break line of sight. Enter its cell in groups and keep eye contact."),
-                    s("Incident log", 4, "Breaches near staff are announced by O5 and must be recontained quickly."))),
-            new Entry("scp049", "SCP-049", "Euclid", List.of(
-                    s("Description", 1, "A humanoid in plague doctor garb who speaks of curing 'the Pestilence'."),
-                    s("Procedures", 2, "Keep personnel at a distance. Recoverable at Level 2."),
-                    s("SCP-049-2", 3, "Those it 'cures' rise as hostile instances. Terminate on sight."))),
-            new Entry("scp457", "SCP-457", "Euclid", List.of(
-                    s("Description", 1, "A sentient fire in a roughly human shape that grows as it burns."),
-                    s("Procedures", 3, "No flammable materials in or near its cell."))),
-            new Entry("scp106", "SCP-106", "Keter", List.of(
-                    s("Description", 1, "An elderly humanoid that passes through solid matter and corrodes it."),
-                    s("Procedures", 4, "Recontainment requires a lure and a sealed cell. Level 4 to recover."),
-                    s("Pocket dimension", 5, "Victims are dragged to a separate space. Few find their way back."))),
-            new Entry("scp939", "SCP-939", "Keter", List.of(
-                    s("Description", 1, "Pack predators that lure prey by imitating human voices."),
-                    s("Procedures", 4, "Do not answer voices you can't see. Level 4 to recover."))),
-            new Entry("scp096", "SCP-096", "Euclid", List.of(
-                    s("Description", 1, "A pale, emaciated humanoid. Docile unless its face is seen."),
-                    s("Procedures", 3, "No cameras, mirrors or windows facing it. Bagging the head prevents triggers."),
-                    s("Photographs", 4, "Any image of its face triggers it against the viewer, wherever they are. Phone photos count. Delete on sight."),
-                    s("Notes", 5, "Recovery is a Level 5 assignment. The Administrator is not recognised as prey."))),
-            new Entry("scp682", "SCP-682", "Keter", List.of(
-                    s("Description", 1, "A large hostile reptile that adapts to whatever harms it."),
-                    s("Procedures", 4, "Termination attempts are logged and repeated. None have worked."),
-                    s("O5 directive", 6, "The Council treats its recovery as an O5-level assignment."))),
-            new Entry("scp500", "SCP-500", "Safe", List.of(
-                    s("Description", 1, "Red pills that cure the person who takes one of any disease."),
-                    s("Procedures", 3, "Stocked in Site-01 and kept in limited supply."),
-                    s("Ascension", 6, "The Ascension Altar at Site-01 accepts one pill as its final offering."))),
-            new Entry("omega", "SCP-Ω", "Thaumiel", List.of(
-                    s("Description", 1, "[DATA EXPUNGED]"),
-                    s("Identity", 6, "The Administrator, after Ascension. Anomalies recognise them as master and will not harm them."),
-                    s("Gate Guardian", 6, "The guardian of Site-01 kneels to SCP-Ω and lets them pass."))));
+    /** Some fields are language keys rather than text. */
+    private static String resolve(String s) {
+        if (!s.contains(" ") && s.contains(".")) return Component.translatable(s).getString();
+        return s;
+    }
 
     public static Entry get(String id) {
-        for (Entry e : ENTRIES) if (e.id().equals(id)) return e;
+        for (Entry e : all()) if (e.id().equals(id)) return e;
         return null;
     }
 
-    private ArchiveFiles() {}
+    /** DossierClearance.clears: Omni (6) opens anything, otherwise you need at least the required level. */
+    public static boolean clears(int have, int required) {
+        return have >= 6 || have >= required;
+    }
+
+    /** A run of dossier text: plain, or redacted (SCP Unleashed's %r ... %r marks). Bold marks are dropped. */
+    public record Run(String text, boolean redacted) {}
+
+    public static List<Run> runs(String text) {
+        List<Run> out = new ArrayList<>();
+        String t = text.replace("**", "").replace("%%", "%");
+        boolean red = false;
+        int i = 0;
+        while (true) {
+            int j = t.indexOf("%r", i);
+            String part = j < 0 ? t.substring(i) : t.substring(i, j);
+            if (!part.isEmpty()) out.add(new Run(part, red));
+            if (j < 0) break;
+            red = !red;
+            i = j + 2;
+        }
+        return out;
+    }
+
+    public static int classColor(String key) {
+        return switch (key) {
+            case "safe" -> 0xFF3AA860;
+            case "euclid" -> 0xFFC8A030;
+            case "keter" -> 0xFFC0383F;
+            case "thaumiel" -> 0xFF3FB8FF;
+            case "apollyon", "z_class" -> 0xFF8A1020;
+            default -> 0xFF6F7C88;
+        };
+    }
 }

@@ -7,6 +7,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -21,39 +23,43 @@ public final class UnleashedApi {
     private UnleashedApi() {}
 
     private static final String PKG = "net.rai.scp_unleashed.";
-    private static final Map<String, Object> CACHE = new HashMap<>();
+    private static final Map<String, Object> CACHE = new java.util.concurrent.ConcurrentHashMap<>();
     private static final Object MISSING = new Object();
 
-    private static Class<?> cls(String name) {
-        Object c = CACHE.computeIfAbsent("c:" + name, k -> {
+    public static Class<?> cls(String name) {
+        String key = "c:" + name;
+        Object c = CACHE.get(key);
+        if (c == null) {
             try {
-                return Class.forName(PKG + name);
+                c = Class.forName(PKG + name);
             } catch (Throwable t) {
                 BreachProtocol.LOGGER.warn("SCP Unleashed class {} not found - feature disabled", name);
-                return MISSING;
+                c = MISSING;
             }
-        });
+            CACHE.put(key, c);
+        }
         return c == MISSING ? null : (Class<?>) c;
     }
 
-    private static Method method(String clsName, String name, Class<?>... args) {
-        String key = "m:" + clsName + "#" + name + args.length;
-        Object m = CACHE.computeIfAbsent(key, k -> {
+    public static Method method(String clsName, String name, Class<?>... args) {
+        String key = "m:" + clsName + "#" + name + java.util.Arrays.toString(args);
+        Object m = CACHE.get(key);
+        if (m == null) {
             Class<?> c = cls(clsName);
-            if (c == null) return MISSING;
-            try {
-                Method mm = c.getMethod(name, args);
-                mm.setAccessible(true);
-                return mm;
-            } catch (Throwable t) {
-                BreachProtocol.LOGGER.warn("SCP Unleashed method {}.{} not found - feature disabled", clsName, name);
-                return MISSING;
+            m = MISSING;
+            if (c != null) {
+                try {
+                    m = c.getMethod(name, args);
+                } catch (Throwable t) {
+                    BreachProtocol.LOGGER.warn("SCP Unleashed method {}.{} not found - feature disabled", clsName, name);
+                }
             }
-        });
+            CACHE.put(key, m);
+        }
         return m == MISSING ? null : (Method) m;
     }
 
-    private static Object call(Method m, Object target, Object... args) {
+    public static Object call(Method m, Object target, Object... args) {
         if (m == null) return null;
         try {
             return m.invoke(target, args);
@@ -70,13 +76,44 @@ public final class UnleashedApi {
         return c != null && c.isInstance(e);
     }
 
-    /** Sends SCP-096 into a rage against {@code target}. Returns false if it couldn't. */
-    public static boolean enrage096(Entity shyGuy, LivingEntity target) {
-        if (!isShyGuy(shyGuy) || !(shyGuy.level() instanceof ServerLevel sl)) return false;
-        Method m = method("scp096.Scp096ShyGuy", "forceRage", ServerLevel.class, LivingEntity.class);
+    /** SCP-096's face position and the direction it faces (Scp096Sight), or null. */
+    public static Vec3 faceOf(Entity shyGuy) {
+        return isShyGuy(shyGuy) ? (Vec3) call(method("scp096.Scp096Sight", "faceOf", cls("scp096.Scp096ShyGuy")), null, shyGuy) : null;
+    }
+
+    public static Vec3 facingOf(Entity shyGuy) {
+        return isShyGuy(shyGuy) ? (Vec3) call(method("scp096.Scp096Sight", "facingOf", cls("scp096.Scp096ShyGuy")), null, shyGuy) : null;
+    }
+
+    /** Scp096Sight.clear: nothing blocks the line between two points. */
+    public static boolean clearSight(ServerLevel l, Vec3 a, Vec3 b) {
+        Object r = call(method("scp096.Scp096Sight", "clear", ServerLevel.class, Vec3.class, Vec3.class), null, l, a, b);
+        return r == null ? l.clip(new net.minecraft.world.level.ClipContext(a, b, net.minecraft.world.level.ClipContext.Block.VISUAL, net.minecraft.world.level.ClipContext.Fluid.NONE, net.minecraft.world.phys.shapes.CollisionContext.empty())).getType() == net.minecraft.world.phys.HitResult.Type.MISS : (Boolean) r;
+    }
+
+    /** The player saw 096's face (here: through the phone camera). SCP Unleashed decides what happens. */
+    public static boolean reportSighting(Entity shyGuy, ServerPlayer p) {
+        Object r = call(method("scp096.Scp096ShyGuy", "reportSighting", ServerLevel.class, ServerPlayer.class), shyGuy, p.serverLevel(), p);
+        return r instanceof Boolean b && b;
+    }
+
+    /** SCP Unleashed's own "looked at a photo of 096's face" handling (Scp105Photo096Sight.view). */
+    public static boolean viewFacePhoto(ServerPlayer p) {
+        Method m = method("scp105.photo096.Scp105Photo096Sight", "view", ServerPlayer.class);
         if (m == null) return false;
-        call(m, shyGuy, sl, target);
+        call(m, null, p);
         return true;
+    }
+
+    /** A physical copy: SCP Unleashed's Face-Down Photograph. */
+    public static ItemStack facePhotoItem() {
+        Object r = call(method("scp105.photo096.Scp105Photo096Item", "create"), null);
+        return r instanceof ItemStack s ? s : ItemStack.EMPTY;
+    }
+
+    public static boolean isFacePhoto(ItemStack s) {
+        Object r = call(method("scp105.photo096.Scp105Photo096Item", "is", ItemStack.class), null, s);
+        return r instanceof Boolean b && b;
     }
 
     public static boolean isBagged(Entity shyGuy) {
@@ -86,7 +123,42 @@ public final class UnleashedApi {
 
     // ------------------------------------------------------------------ MTF
 
+    /** MtfTier names in order. Abyssal is the Alpha-1 Detachment. */
     public static final String[] MTF_TIERS = {"Faint", "Wavering", "Volatile", "Severe", "Abyssal"};
+
+    /** Translation key of a tier's squad name, e.g. "mtf.scp_unleashed.tier.fireteam". */
+    public static String tierNameKey(String tierName) {
+        Object t = tier(tierName);
+        Object k = t == null ? null : call(method("mtf.MtfTier", "key"), t);
+        return k == null ? "" : "mtf.scp_unleashed.tier." + k;
+    }
+
+    public static int tierColour(String tierName) {
+        Object t = tier(tierName);
+        Object c = t == null ? null : call(method("mtf.MtfTier", "colour"), t);
+        return c instanceof Integer i ? i : 0xFFFFFF;
+    }
+
+    /** Which tier an unstable fragment calls (MtfTier.fromFragment), or null. */
+    public static String tierOfFragment(ItemStack s) {
+        if (s.isEmpty()) return null;
+        Object t = call(method("mtf.MtfTier", "fromFragment", ItemStack.class), null, s);
+        return t == null ? null : ((Enum<?>) t).name();
+    }
+
+    public static boolean mtfBusy(ServerPlayer p) {
+        Object r = call(method("mtf.MtfMissions", "busy", java.util.UUID.class), null, p.getUUID());
+        return r instanceof Boolean b && b;
+    }
+
+    /** Sends a squad straight away, no fragment (MtfMissions.deployNow). Council privilege. */
+    public static String deployMtfNow(ServerPlayer p, String tierName) {
+        Object tier = tier(tierName);
+        Class<?> tierCls = cls("mtf.MtfTier");
+        if (tier == null || tierCls == null) return null;
+        Object out = call(method("mtf.MtfMissions", "deployNow", ServerPlayer.class, tierCls), null, p, tier);
+        return out == null ? null : out.toString();
+    }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
     private static Object tier(String name) {
@@ -158,6 +230,46 @@ public final class UnleashedApi {
         Object ledger = call(method("nethub.NetHubLedger", "get", MinecraftServer.class), null, server);
         Object size = ledger == null ? null : call(method("nethub.NetHubLedger", "size"), ledger);
         return size instanceof Integer i ? i : -1;
+    }
+
+    // ------------------------------------------------------------------ keycards & dossiers
+
+    /** DossierClearance.clearanceOf: a keycard's level (1-5, Omni = 6), 0 if not a keycard. */
+    public static int clearanceOf(ItemStack s) {
+        if (s.isEmpty()) return 0;
+        Object r = call(method("archive.document.DossierClearance", "clearanceOf", ItemStack.class), null, s);
+        return r instanceof Integer i ? i : 0;
+    }
+
+    /** Server-side document for an entity's anomaly, or null. */
+    public static Object document(net.minecraft.resources.ResourceLocation docId) {
+        return call(method("archive.document.AnomalyDocuments", "lookup", net.minecraft.resources.ResourceLocation.class), null, docId);
+    }
+
+    /** DocumentClass serialized name ("safe", "euclid", "keter", ...) of a document. */
+    public static String documentClass(Object doc) {
+        if (doc == null) return null;
+        Object c = call(method("archive.document.AnomalyDocument", "Classification"), doc);
+        return c instanceof net.minecraft.util.StringRepresentable sr ? sr.getSerializedName() : null;
+    }
+
+    // ------------------------------------------------------------------ SCP-001-1, the Gate Guardian
+
+    public static boolean isGateGuardian(Entity e) {
+        Class<?> c = cls("scp001gate.Scp001GateGuardian");
+        return c != null && c.isInstance(e);
+    }
+
+    /** Scp001GateGuardian.calm(ticks): it holds its blades. */
+    public static void calmGuardian(Entity guardian, int ticks) {
+        if (isGateGuardian(guardian)) call(method("scp001gate.Scp001GateGuardian", "calm", int.class), guardian, ticks);
+    }
+
+    // ------------------------------------------------------------------ forcefields
+
+    public static boolean forcefieldNear(net.minecraft.world.level.Level l, Vec3 pos, double r) {
+        Object o = call(method("forcefield.ForcefieldIndex", "anyNear", net.minecraft.world.level.Level.class, Vec3.class, double.class), null, l, pos, r);
+        return o instanceof Boolean b && b;
     }
 
     // ------------------------------------------------------------------ D-Class

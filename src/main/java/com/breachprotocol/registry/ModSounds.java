@@ -10,11 +10,9 @@ public final class ModSounds {
     public static final DeferredRegister<SoundEvent> SOUNDS = DeferredRegister.create(Registries.SOUND_EVENT, BreachProtocol.MODID);
 
     public static final DeferredHolder<SoundEvent, SoundEvent> BREACH_ALARM = reg("breach.alarm");
-    public static final DeferredHolder<SoundEvent, SoundEvent> FIELD_HUM = reg("field.hum");
     public static final DeferredHolder<SoundEvent, SoundEvent> PHONE_RING = reg("phone.ring");
     public static final DeferredHolder<SoundEvent, SoundEvent> PHONE_MESSAGE = reg("phone.message");
     public static final DeferredHolder<SoundEvent, SoundEvent> ASCENSION = reg("ascension");
-    public static final DeferredHolder<SoundEvent, SoundEvent> GUARDIAN_VOICE = reg("guardian.voice");
 
     private static DeferredHolder<SoundEvent, SoundEvent> reg(String name) {
         return SOUNDS.register(name, () -> SoundEvent.createVariableRangeEvent(BreachProtocol.id(name)));

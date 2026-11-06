@@ -1,7 +1,6 @@
 package com.breachprotocol.career;
 
 import com.breachprotocol.compat.Unleashed;
-import com.breachprotocol.registry.ModEffects;
 import com.breachprotocol.world.Site01;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -13,9 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 
@@ -30,13 +27,13 @@ public final class Directives {
 
     public static final List<Directive> ALL = List.of(
             new Directive("requisition", "Requisition Supplies", "Request a supply crate from the Accountant.", Rank.LEVEL_4, 20 * 60),
-            new Directive("lockdown", "Site Lockdown", "Every anomaly within 64m is held in place for 60 seconds.", Rank.LEVEL_5, 15 * 60),
+            new Directive("lockdown", "Site Lockdown", "Every anomaly within 64m that stasis can hold is pinned in place for 60 seconds.", Rank.LEVEL_5, 15 * 60),
             new Directive("amnestic", "Amnestic Protocol", "Clears harmful effects from all personnel within 32m.", Rank.OVERSEER, 10 * 60),
-            new Directive("mtf", "Deploy MTF Epsilon-11", "Three Nine-Tailed Fox operatives deploy to your position.", Rank.OVERSEER, 20 * 60),
+            new Directive("mtf", "Deploy Nu-7 Strike Team", "The Council sends SCP Unleashed's Nu-7 Strike Team to you at once. No fragment needed.", Rank.OVERSEER, 20 * 60),
             new Directive("convene", "Convene the Council", "Call the O5 Council to you now and decide something.", Rank.ADMINISTRATOR, 5 * 60),
-            new Directive("alpha1", "Mobilise Alpha-1", "The Red Right Hand: two elite guards, loyal only to you.", Rank.ADMINISTRATOR, 15 * 60),
+            new Directive("alpha1", "Mobilise Alpha-1", "SCP Unleashed's Alpha-1 Detachment, the Red Right Hand, answers to you alone.", Rank.ADMINISTRATOR, 15 * 60),
             new Directive("fortify", "Order: Fortify All Sites", "Every site reinforces containment. Stability +8.", Rank.ADMINISTRATOR, 20 * 60),
-            new Directive("global", "Global Recontainment", "Every anomaly within 128m is held for 5 minutes.", Rank.ADMINISTRATOR, 30 * 60),
+            new Directive("global", "Global Recontainment", "Every anomaly within 128m that stasis can hold is pinned for 5 minutes.", Rank.ADMINISTRATOR, 30 * 60),
             new Directive("site01", "Travel to Site-01", "Teleport to your secret sanctum.", Rank.ADMINISTRATOR, 10),
             new Directive("return", "Return from Site-01", "Go back to where you were.", Rank.ADMINISTRATOR, 10));
 
@@ -85,11 +82,7 @@ public final class Directives {
                 Career.message(p, O5.O5_11, "Amnestics administered. Whatever just happened, didn't.");
                 yield true;
             }
-            case "mtf" -> {
-                spawnMtf(p, 3, "MTF Epsilon-11 \"Nine-Tailed Fox\"", false);
-                Career.message(p, O5.O5_8, "Nine-Tailed Fox is on the ground at your position.");
-                yield true;
-            }
+            case "mtf" -> deploy(p, "Severe", O5.O5_8, "Nu-7 is in the air. They'll find you.");
             case "convene" -> {
                 if (d.call != null) {
                     p.displayClientMessage(Component.literal("Answer the current call first.").withStyle(ChatFormatting.RED), true);
@@ -98,11 +91,7 @@ public final class Directives {
                 Calls.startRandom(p);
                 yield true;
             }
-            case "alpha1" -> {
-                spawnMtf(p, 2, "MTF Alpha-1 \"Red Right Hand\"", true);
-                Career.message(p, O5.O5_7, "Alpha-1 answers only to you now. Even we can't recall them.");
-                yield true;
-            }
+            case "alpha1" -> deploy(p, "Abyssal", O5.O5_7, "Alpha-1 answers only to you now. Even we can't recall them.");
             case "fortify" -> {
                 Career.changeStability(p, 8);
                 Career.message(p, O5.O5_6, "Every site is reinforcing. It'll hold.");
@@ -145,32 +134,30 @@ public final class Directives {
         }
     }
 
-    /** Freeze anomalies around the player. Returns how many. */
+    /** Pins anomalies around the player in place (anything SCP Unleashed's stasis can hold). */
     public static int containAround(ServerPlayer p, double radius, int ticks) {
         int n = 0;
         for (Mob m : p.level().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(radius), Unleashed::canBeContained)) {
-            Unleashed.contain(m, ticks);
+            m.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, ticks, 9, false, true));
+            m.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, ticks, 4, false, true));
+            m.setTarget(null);
             n++;
         }
         return n;
     }
 
-    public static void spawnMtf(ServerPlayer p, int count, String name, boolean elite) {
-        ServerLevel level = p.serverLevel();
-        for (int i = 0; i < count; i++) {
-            IronGolem g = EntityType.IRON_GOLEM.create(level);
-            if (g == null) continue;
-            double ang = Math.PI * 2 * i / count;
-            g.moveTo(p.getX() + Math.cos(ang) * 2.5, p.getY(), p.getZ() + Math.sin(ang) * 2.5, p.getYRot(), 0);
-            g.setPlayerCreated(true);
-            g.setCustomName(Component.literal(name).withStyle(elite ? ChatFormatting.DARK_RED : ChatFormatting.BLUE));
-            g.setPersistenceRequired();
-            if (elite) {
-                g.addEffect(new MobEffectInstance(MobEffects.DAMAGE_BOOST, MobEffectInstance.INFINITE_DURATION, 2, false, false));
-                g.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, MobEffectInstance.INFINITE_DURATION, 2, false, false));
-                g.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SPEED, MobEffectInstance.INFINITE_DURATION, 1, false, false));
-            }
-            level.addFreshEntity(g);
+    /** Council privilege: an SCP Unleashed squad deployed immediately (MtfMissions.deployNow). */
+    private static boolean deploy(ServerPlayer p, String tier, O5 from, String ok) {
+        String out = com.breachprotocol.compat.UnleashedApi.deployMtfNow(p, tier);
+        if ("Called".equals(out)) {
+            Career.message(p, from, ok);
+            return true;
         }
+        p.displayClientMessage(net.minecraft.network.chat.Component.translatable("message.scp_unleashed.mtf.deny." + (out == null ? "failed" : switch (out) {
+            case "Busy" -> "busy";
+            case "NoSky" -> "no_sky";
+            default -> "failed";
+        })).withStyle(ChatFormatting.RED), false);
+        return false;
     }
 }

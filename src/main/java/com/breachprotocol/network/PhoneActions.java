@@ -4,16 +4,25 @@ import com.breachprotocol.career.Calls;
 import com.breachprotocol.career.Career;
 import com.breachprotocol.career.CareerData;
 import com.breachprotocol.career.Directives;
-import com.breachprotocol.registry.ModItems;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.ItemStack;
 
 /** Server-side handling of phone buttons. */
 public final class PhoneActions {
     private PhoneActions() {}
 
     public static void handle(ServerPlayer p, String action, int arg) {
-        if (!p.getInventory().contains(new ItemStack(ModItems.PHONE.get()))) return;
+        // (Inventory.contains(ItemStack) compares components, so it missed phones with a fused card.)
+        if (!com.breachprotocol.career.Clearance.hasPhone(p)) return;
+        try {
+            run(p, action, arg);
+        } catch (Throwable t) {
+            com.breachprotocol.BreachProtocol.LOGGER.error("Phone action {} failed", action, t);
+            notify(p, "The phone glitched. (Logged: " + t.getClass().getSimpleName() + ")");
+        }
+        Career.sync(p);
+    }
+
+    private static void run(ServerPlayer p, String action, int arg) {
         CareerData d = Career.data(p);
         switch (action) {
             case "read" -> {
@@ -30,7 +39,7 @@ public final class PhoneActions {
             case "photo_print" -> com.breachprotocol.career.Photos.print(p, arg);
             case "photo_share" -> com.breachprotocol.career.Photos.share(p, arg);
             case "mtf_report" -> com.breachprotocol.compat.UnleashedApi.mtfReport(p);
-            case "mtf_extract" -> notify(p, com.breachprotocol.compat.UnleashedApi.mtfExtract(p) ? "Extraction requested." : "No squad to extract.");
+            case "mtf_extract" -> Command.extract(p);
             case "orbital_strike" -> Command.orbitalStrike(p);
             default -> {
                 if (action.startsWith("dir:")) Directives.run(p, action.substring(4));
@@ -38,7 +47,6 @@ public final class PhoneActions {
                 else if (action.startsWith("dorder:")) Command.orderDClass(p, arg, action.substring(7));
             }
         }
-        Career.sync(p);
     }
 
     static void notify(ServerPlayer p, String msg) {

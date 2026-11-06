@@ -5,12 +5,6 @@
       "breachprotocol:breach/alarm"
     ]
   },
-  "field.hum": {
-    "subtitle": "subtitles.breachprotocol.field.hum",
-    "sounds": [
-      "breachprotocol:field/hum"
-    ]
-  },
   "phone.ring": {
     "subtitle": "subtitles.breachprotocol.phone.ring",
     "sounds": [
@@ -27,12 +21,6 @@
     "subtitle": "subtitles.breachprotocol.ascension",
     "sounds": [
       "breachprotocol:ascension"
-    ]
-  },
-  "guardian.voice": {
-    "subtitle": "subtitles.breachprotocol.guardian.voice",
-    "sounds": [
-      "breachprotocol:guardian/voice"
     ]
   }
 }
