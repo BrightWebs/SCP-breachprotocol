@@ -142,7 +142,7 @@ public class PhoneScreen extends Screen {
     /** Terminal style: square edges (r is ignored except for tiny 1px bevels). */
     private static void rrect(GuiGraphics g, int x, int y, int w, int h, int r, int c) {
         c = col(c);
-        r = Math.min(ROUND || RAW ? r : r > 0 ? 1 : 0, Math.min(w, h) / 2);
+        r = Math.min(r, Math.min(w, h) / 2);
         g.fill(x + r, y, x + w - r, y + h, c);
         for (int i = 0; i < r; i++) {
             int inset = r - (int) Math.round(Math.sqrt(r * r - (r - i - 0.5) * (r - i - 0.5)));
@@ -199,13 +199,15 @@ public class PhoneScreen extends Screen {
     private void pill(GuiGraphics g, int x, int y, int w, int h, String label, int color, int textColor, boolean enabled, Runnable action) {
         boolean hov = enabled && over(x, y, w, h);
         int tone = Terminal.map(color);
-        boolean danger = tone == Terminal.map(RED) || ((tone >> 16) & 255) > ((tone >> 8) & 255) + 40;
-        int ink = !enabled ? Terminal.LINE : danger ? Terminal.RED : Terminal.GREEN;
-        if (hov) g.fill(x, y, x + w, y + h, danger ? 0xFFE04848 : Terminal.SELECT);
-        else g.fill(x, y, x + w, y + h, Terminal.PANEL);
-        Terminal.box(g, x, y, w, h, hov ? (danger ? 0xFFE04848 : Terminal.SELECT) : enabled ? (danger ? 0xFF8A2E2E : Terminal.MID) : Terminal.LINE);
-        String lbl = "[ " + ellipsize(label.toUpperCase(Locale.ROOT), w - 22) + " ]";
-        g.drawString(font, lbl, x + w / 2 - font.width(lbl) / 2, y + (h - 8) / 2, hov ? Terminal.ON_SELECT : ink, false);
+        boolean danger = ((tone >> 16) & 255) > ((tone >> 8) & 255) + 40;
+        int rim = !enabled ? Terminal.LINE : danger ? 0xFFB84848 : hov ? Terminal.BRIGHT : Terminal.MID;
+        int fill = !enabled ? 0xFF07110A : danger ? (hov ? 0xFF5A1818 : 0xFF2E0E0E) : (hov ? 0xFF1E6B3A : 0xFF0E3A1E);
+        RAW = true;
+        rrect(g, x, y, w, h, h / 2, rim);
+        rrect(g, x + 1, y + 1, w - 2, h - 2, h / 2 - 1, fill);
+        RAW = false;
+        String lbl = ellipsize(label, w - 8);
+        g.drawString(font, lbl, x + w / 2 - font.width(lbl) / 2, y + (h - 8) / 2, !enabled ? Terminal.DIM : danger ? 0xFFFFB3B3 : Terminal.BRIGHT, false);
         if (enabled) hit(x, y, w, h, action);
     }
 
@@ -219,8 +221,18 @@ public class PhoneScreen extends Screen {
     }
 
     private void card(GuiGraphics g, int x, int y, int w, int h) {
-        g.fill(x, y, x + w, y + h, Terminal.PANEL);
-        Terminal.box(g, x, y, w, h, Terminal.LINE);
+        RAW = true;
+        rrect(g, x, y, w, h, 8, 0xFF163D24);
+        rrect(g, x + 1, y + 1, w - 2, h - 2, 7, 0xFF08180E);
+        RAW = false;
+    }
+
+    /** Rounded box with a 1px rim, in real (already green) colours. */
+    private void rbox(GuiGraphics g, int x, int y, int w, int h, int r, int fill, int rim) {
+        RAW = true;
+        rrect(g, x, y, w, h, r, rim);
+        rrect(g, x + 1, y + 1, w - 2, h - 2, Math.max(0, r - 1), fill);
+        RAW = false;
     }
 
     /** A titled panel: ┌─ TITLE ───┐ */
@@ -353,13 +365,12 @@ public class PhoneScreen extends Screen {
         drawStatusBar(g);
         drawNavBar(g);
         ROUND = false;
-        if (!phone) Terminal.scanlines(g, SX, SY + STATUS, SW, SH - STATUS - NAV);
+
         g.disableScissor();
 
         if (!hover.isEmpty()) {
             int hh = wrapHeight(hover, SW - 16) + 8;
-            g.fill(SX + 4, SY + SH - NAV - hh - 4, SX + SW - 4, SY + SH - NAV - 4, 0xF0020804);
-            Terminal.box(g, SX + 4, SY + SH - NAV - hh - 4, SW - 8, hh, Terminal.MID);
+            rrect(g, SX + 4, SY + SH - NAV - hh - 4, SW - 8, hh, 6, 0xF010141A);
             wrap(g, hover, SX + 8, SY + SH - NAV - hh, SW - 16, 0xFFCFE6EE);
         }
         g.pose().popPose();
@@ -528,16 +539,15 @@ public class PhoneScreen extends Screen {
         App app = appFor(view);
         int top = SY + STATUS;
         if (!(view == View.CALL && t().contains("callText")) && app != null) {
-            g.fill(SX, top, SX + SW, top + HEADER, Terminal.BG);
-            Terminal.dashes(g, SX + 4, top + HEADER - 2, SW - 8, Terminal.LINE);
+            g.fill(SX, top, SX + SW, top + HEADER, 0xFF0C2C17);
+            g.fill(SX, top + HEADER - 1, SX + SW, top + HEADER, Terminal.MID);
             String title = switch (view) {
                 case THREAD -> nick(thread);
                 case FILE -> fileTitle();
                 case PHOTO -> "Photo";
                 default -> app.label();
             };
-            String crumb = "FDN // " + title.toUpperCase(Locale.ROOT);
-            g.drawString(font, ellipsize(crumb, SW - 16), SX + 8, top + 7, Terminal.GREEN, false);
+            g.drawString(font, ellipsize(title, SW - 24), SX + 10, top + 7, Terminal.BRIGHT, false);
             top += HEADER;
         }
         final int bottom = SY + SH - NAV, vtop = top;
@@ -560,8 +570,7 @@ public class PhoneScreen extends Screen {
         if (contentHeight > viewportHeight) {
             int thumb = Math.max(14, viewportHeight * viewportHeight / contentHeight);
             int pos = (int) ((viewportHeight - thumb) * (scroll / (float) Math.max(1, contentHeight - viewportHeight)));
-            g.fill(SX + SW - 4, top, SX + SW - 3, top + viewportHeight, Terminal.LINE);
-            g.fill(SX + SW - 5, top + pos, SX + SW - 2, top + pos + thumb, Terminal.MID);
+            rrect(g, SX + SW - 4, top + pos, 2, thumb, 1, 0x66FFFFFF);
         }
     }
 
@@ -656,8 +665,7 @@ public class PhoneScreen extends Screen {
             String body = m.getString("b");
             int lines = wrapHeight(body, maxW), bw = Math.min(maxW, font.width(body)) + 10, h = lines + 8;
             int bx = out ? x + w - bw : x;
-            g.fill(bx, y, bx + bw, y + h, out ? 0xFF0B2414 : Terminal.PANEL);
-            Terminal.box(g, bx, y, bw, h, out ? Terminal.MID : Terminal.LINE);
+            rbox(g, bx, y, bw, h, 7, out ? 0xFF0E3A1E : 0xFF08180E, out ? Terminal.MID : 0xFF163D24);
             List<FormattedCharSequence> ls = font.split(Component.literal(body), maxW);
             for (int i = 0; i < ls.size(); i++) g.drawString(font, ls.get(i), bx + 5, y + 4 + i * 10, out ? Terminal.BRIGHT : Terminal.GREEN, false);
             y += h + 1;
@@ -669,8 +677,7 @@ public class PhoneScreen extends Screen {
         if (contactIndex(thread) >= 0) {
             y += 4;
             boolean hov = over(x, y, w - 30, 16);
-            g.fill(x, y, x + w - 30, y + 16, composeFocused ? 0xFF0B2414 : Terminal.PANEL);
-            Terminal.box(g, x, y, w - 30, 16, composeFocused ? Terminal.GREEN : hov ? Terminal.MID : Terminal.LINE);
+            rbox(g, x, y, w - 30, 16, 8, composeFocused ? 0xFF0B2414 : 0xFF08180E, composeFocused ? Terminal.GREEN : hov ? Terminal.MID : 0xFF163D24);
             boolean caret = composeFocused && (System.currentTimeMillis() / 500) % 2 == 0;
             String shown = compose.isEmpty() && !composeFocused ? "TYPE A MESSAGE" : compose;
             while (font.width(shown + "_") > w - 38 && shown.length() > 1) shown = shown.substring(1);
@@ -875,8 +882,7 @@ public class PhoneScreen extends Screen {
         for (int i = 0; i < 3; i++) {
             int bx = x + i * (tw + 2);
             boolean sel = phoneTab == i, hov = over(bx, y, tw, 13);
-            g.fill(bx, y, bx + tw, y + 13, sel ? Terminal.SELECT : Terminal.PANEL);
-            Terminal.box(g, bx, y, tw, 13, sel || hov ? Terminal.SELECT : Terminal.LINE);
+            rbox(g, bx, y, tw, 13, 6, sel ? Terminal.SELECT : 0xFF08180E, sel || hov ? Terminal.SELECT : 0xFF163D24);
             String lb = tabs[i].toUpperCase(Locale.ROOT);
             g.pose().pushPose();
             g.pose().translate(bx + tw / 2F, y + 4, 0);
@@ -892,12 +898,11 @@ public class PhoneScreen extends Screen {
             for (int i = 0; i < contacts.size(); i++) {
                 CompoundTag c = contacts.getCompound(i);
                 boolean hov = over(x, y, w - 16, 22);
-                g.fill(x, y, x + w, y + 22, hov ? Terminal.SELECT : Terminal.PANEL);
-                Terminal.box(g, x, y, w, 22, hov ? Terminal.SELECT : Terminal.LINE);
-                int ink = hov ? Terminal.ON_SELECT : Terminal.GREEN;
-                g.drawString(font, ellipsize(c.getString("n").toUpperCase(Locale.ROOT), w - 50), x + 5, y + 3, ink, false);
+                rbox(g, x, y, w, 22, 8, hov ? 0xFF1E6B3A : 0xFF08180E, hov ? Terminal.BRIGHT : 0xFF163D24);
+                int ink = Terminal.BRIGHT;
+                g.drawString(font, ellipsize(c.getString("n"), w - 50), x + 5, y + 3, ink, false);
                 String st = c.getBoolean("on") ? "ONLINE" : "OFFLINE";
-                small(g, c.getString("num") + "  \u00B7  " + st, x + 5 + (int) (font.width(c.getString("num") + "  \u00B7  " + st) * 0.375F), y + 13, hov ? Terminal.ON_SELECT : c.getBoolean("on") ? Terminal.MID : Terminal.DIM);
+                small(g, c.getString("num") + "  \u00B7  " + st, x + 5 + (int) (font.width(c.getString("num") + "  \u00B7  " + st) * 0.375F), y + 13, c.getBoolean("on") ? Terminal.MID : Terminal.DIM);
                 final String th = "@" + c.getString("n");
                 hit(x, y, w - 16, 22, () -> { thread = th; go(View.THREAD); });
                 final int idx = i;
