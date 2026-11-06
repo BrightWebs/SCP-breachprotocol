@@ -136,6 +136,34 @@ public final class Site01 {
         return block.defaultBlockState();
     }
 
+    /** Furniture and machines: placed like a player places them, so multi-block parts are built. */
+    private static void put(ServerLevel l, BlockPos o, int x, int y, int z, String id, Block fallback) {
+        put(l, o, x, y, z, id, fallback, null);
+    }
+
+    private static void put(ServerLevel l, BlockPos o, int x, int y, int z, String id, Block fallback, Direction facing) {
+        Block blk = Unleashed.block(id, fallback);
+        if (!Placer.place(l, o.offset(x, y, z), blk, facing) && fallback != Blocks.AIR)
+            Placer.place(l, o.offset(x, y, z), fallback, facing); // never leave a half-built block
+    }
+
+    /** A ceiling lamp, hung from the block above. */
+    private static void lamp(ServerLevel l, BlockPos o, int x, int y, int z, String id) {
+        Block blk = Unleashed.block(id, Blocks.SEA_LANTERN);
+        if (!Placer.ceiling(l, o.offset(x, y, z), blk)) l.setBlock(o.offset(x, y, z), Blocks.SEA_LANTERN.defaultBlockState(), Block.UPDATE_CLIENTS);
+    }
+
+    /** A wall-mounted sign or light: mounted on whichever horizontal neighbour is solid. */
+    private static void wallPut(ServerLevel l, BlockPos o, int x, int y, int z, String id) {
+        Block blk = Unleashed.block(id, Blocks.AIR);
+        if (blk == Blocks.AIR) return;
+        BlockPos p = o.offset(x, y, z);
+        for (Direction d : Direction.Plane.HORIZONTAL) {
+            if (l.getBlockState(p.relative(d)).isFaceSturdy(l, p.relative(d), d.getOpposite()) && Placer.wall(l, p, blk, d.getOpposite())) return;
+        }
+        Placer.ceiling(l, p, blk);
+    }
+
     /** An SCP Unleashed block by id (vanilla fallback if it's ever missing). */
     private static BlockState u(String id, Block fallback) {
         return Unleashed.block(id, fallback).defaultBlockState();
@@ -267,6 +295,8 @@ public final class Site01 {
             fill(l, o, cx + 1, 0, 6, cx + 3, 2, 8, air);
             set(l, o, cx + 2, 3, 7, b(Blocks.SEA_LANTERN));
             door(l, o, cx + 2, 0, 9, Direction.SOUTH);
+            // exit from inside the cell
+            set(l, o, cx + 3, 1, 8, Blocks.STONE_BUTTON.defaultBlockState().setValue(ButtonBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(ButtonBlock.FACING, Direction.NORTH));
             set(l, o, cx + 3, 1, 10, Blocks.LEVER.defaultBlockState()
                     .setValue(LeverBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(LeverBlock.FACING, Direction.SOUTH));
         }
@@ -366,40 +396,40 @@ public final class Site01 {
         fill(l, o, 44, -1, 26, 46, -1, 46, u("ez_floor", Blocks.POLISHED_ANDESITE));
         fill(l, o, 4, 0, 46, 62, 4, 48, air);
         fill(l, o, 4, -1, 46, 62, -1, 48, u("ez_floor", Blocks.POLISHED_ANDESITE));
-        for (int x = 6; x <= 60; x += 6) set(l, o, x, 4, 47, u("facility_lamp_white", Blocks.SEA_LANTERN));
-        for (int z = 28; z <= 44; z += 5) set(l, o, 45, 4, z, u("facility_lamp_white", Blocks.SEA_LANTERN));
-        set(l, o, 45, 3, 26, u("facility_sign_entrance_zone_small", Blocks.AIR));
+        for (int x = 6; x <= 60; x += 6) lamp(l, o, x, 4, 47, "facility_lamp_white");
+        for (int z = 28; z <= 44; z += 5) lamp(l, o, 45, 4, z, "facility_lamp_white");
+        wallPut(l, o, 45, 3, 26, "facility_sign_entrance_zone_small");
 
         // --- research lab
         fill(l, o, 4, 0, 50, 20, 4, 69, air);
         fill(l, o, 11, 0, 49, 13, 3, 49, air);
         fill(l, o, 4, -1, 50, 20, -1, 69, u("facility_lab_tile", Blocks.WHITE_CONCRETE));
-        for (int x = 6; x <= 18; x += 4) for (int z = 52; z <= 68; z += 5) set(l, o, x, 4, z, u("facility_lamp_cyan", Blocks.SEA_LANTERN));
-        set(l, o, 5, 0, 52, u("centrifuge", Blocks.CAULDRON));
-        set(l, o, 5, 0, 55, u("advanced_assembler", Blocks.CRAFTING_TABLE));
-        set(l, o, 5, 0, 58, u("advanced_materials_bench", Blocks.SMITHING_TABLE));
-        set(l, o, 5, 0, 62, u("cloning_machine", Blocks.BREWING_STAND));
-        for (int z = 52; z <= 60; z += 4) set(l, o, 19, 0, z, u("containment_room_specimen_tank", Blocks.GLASS));
-        set(l, o, 12, 0, 63, u("examination_table", Blocks.WHITE_BED));
+        for (int x = 6; x <= 18; x += 4) for (int z = 52; z <= 68; z += 5) lamp(l, o, x, 4, z, "facility_lamp_cyan");
+        put(l, o, 5, 0, 52, "centrifuge", Blocks.CAULDRON);
+        put(l, o, 5, 0, 55, "advanced_assembler", Blocks.CRAFTING_TABLE);
+        put(l, o, 5, 0, 58, "advanced_materials_bench", Blocks.SMITHING_TABLE);
+        put(l, o, 5, 0, 62, "cloning_machine", Blocks.BREWING_STAND);
+        for (int z = 52; z <= 60; z += 4) put(l, o, 19, 0, z, "containment_room_specimen_tank", Blocks.GLASS);
+        put(l, o, 12, 0, 63, "examination_table", Blocks.WHITE_BED);
         for (int x = 8; x <= 16; x += 2) set(l, o, x, 0, 68, u("chemical_shelf", Blocks.BOOKSHELF));
-        set(l, o, 19, 0, 64, u("computer_terminal", Blocks.LECTERN));
+        put(l, o, 19, 0, 64, "computer_terminal", Blocks.LECTERN);
         chest(l, o, 19, 0, 67, Direction.WEST,
                 ui("hazmat_hood", Items.LEATHER_HELMET, 2), ui("hazmat_suit", Items.LEATHER_CHESTPLATE, 2), ui("hazmat_trousers", Items.LEATHER_LEGGINGS, 2),
                 ui("hazmat_boots", Items.LEATHER_BOOTS, 2), ui("gas_mask", Items.LEATHER_HELMET, 2), ui("scramble_goggles", Items.CARVED_PUMPKIN, 2),
                 ui("energum_dust", Items.GLOWSTONE_DUST, 32), ui("rift_extractor", Items.SPYGLASS, 1), ui("rift_detector", Items.COMPASS, 1),
                 ui("stasis_pod_faint", Items.GLASS_BOTTLE, 4), ui("stasis_pod_volatile", Items.GLASS_BOTTLE, 2), ui("scp096_bag", Items.LEATHER, 1),
                 ui("amnestic_canister", Items.MILK_BUCKET, 6));
-        set(l, o, 12, 3, 49, u("facility_sign_maintenance_small", Blocks.AIR));
+        wallPut(l, o, 12, 3, 49, "facility_sign_maintenance_small");
 
         // --- server and power room
         fill(l, o, 23, 0, 50, 40, 4, 58, air);
         fill(l, o, 30, 0, 49, 32, 3, 49, air);
         fill(l, o, 23, -1, 50, 40, -1, 58, u("power_floor", Blocks.POLISHED_BLACKSTONE));
-        for (int x = 25; x <= 39; x += 5) set(l, o, x, 4, 54, u("power_lamp", Blocks.SEA_LANTERN));
-        set(l, o, 24, 0, 51, u("network_hub", Blocks.LODESTONE));
-        set(l, o, 26, 0, 51, u("network_router", Blocks.OBSERVER));
-        set(l, o, 28, 0, 51, u("chat_server", Blocks.JUKEBOX));
-        set(l, o, 34, 0, 51, u("power_control_console", Blocks.LECTERN));
+        for (int x = 25; x <= 39; x += 5) lamp(l, o, x, 4, 54, "power_lamp");
+        put(l, o, 24, 0, 51, "network_hub", Blocks.LODESTONE);
+        put(l, o, 26, 0, 51, "network_router", Blocks.OBSERVER);
+        put(l, o, 28, 0, 51, "chat_server", Blocks.JUKEBOX);
+        put(l, o, 34, 0, 51, "power_control_console", Blocks.LECTERN);
         set(l, o, 39, 0, 52, u("power_generator_housing_bottom", Blocks.IRON_BLOCK));
         set(l, o, 39, 1, 52, u("power_generator_housing_middle", Blocks.IRON_BLOCK));
         set(l, o, 39, 2, 52, u("power_generator_housing_top", Blocks.IRON_BLOCK));
@@ -407,7 +437,7 @@ public final class Site01 {
         set(l, o, 39, 1, 56, u("power_breaker_panel_middle", Blocks.IRON_BLOCK));
         set(l, o, 39, 2, 56, u("power_breaker_panel_top", Blocks.IRON_BLOCK));
         for (int x = 24; x <= 38; x++) set(l, o, x, 3, 57, u("cable_tray", Blocks.IRON_BARS));
-        set(l, o, 31, 3, 49, u("facility_sign_server_room_small", Blocks.AIR));
+        wallPut(l, o, 31, 3, 49, "facility_sign_server_room_small");
         chest(l, o, 24, 0, 57, Direction.NORTH,
                 ui("facility_tablet", Items.MAP, 1), ui("camera_tablet", Items.MAP, 1), ui("power_cable_spool", Items.STRING, 8));
 
@@ -415,7 +445,7 @@ public final class Site01 {
         fill(l, o, 23, 0, 61, 40, 4, 69, air);
         fill(l, o, 23, 0, 59, 25, 3, 60, air);
         fill(l, o, 23, -1, 61, 40, -1, 69, u("facility_diamond_plate", Blocks.IRON_BLOCK));
-        for (int x = 25; x <= 39; x += 5) set(l, o, x, 4, 65, u("facility_lamp_white", Blocks.SEA_LANTERN));
+        for (int x = 25; x <= 39; x += 5) lamp(l, o, x, 4, 65, "facility_lamp_white");
         for (int x = 27; x <= 39; x += 4) bed(l, o, x, 0, 67, Blocks.GRAY_BED, Direction.SOUTH);
         chest(l, o, 24, 0, 62, Direction.EAST,
                 ui("assault_rifle", Items.CROSSBOW, 2), ui("combat_shotgun", Items.CROSSBOW, 1), ui("pistol", Items.CROSSBOW, 2), ui("machine_gun", Items.CROSSBOW, 1),
@@ -425,7 +455,7 @@ public final class Site01 {
                 ui("mtf_helmet", Items.IRON_HELMET, 4), ui("mtf_vest", Items.IRON_CHESTPLATE, 4), ui("mtf_signal_radio", Items.COMPASS, 1),
                 ui("unstable_fragment_volatile", Items.AMETHYST_SHARD, 4), ui("unstable_fragment_severe", Items.AMETHYST_SHARD, 2), ui("unstable_fragment_abyssal", Items.AMETHYST_SHARD, 1),
                 ui("scp3008_bandage", Items.PAPER, 16));
-        set(l, o, 24, 3, 60, u("facility_sign_armory_small", Blocks.AIR));
+        wallPut(l, o, 24, 3, 60, "facility_sign_armory_small");
 
         // --- the Administrator's office (Level 5 to enter)
         fill(l, o, 43, 0, 50, 62, 5, 69, air);
@@ -437,24 +467,26 @@ public final class Site01 {
             if (prop.getName().equals("facing") && prop instanceof net.minecraft.world.level.block.state.properties.DirectionProperty dp && dp.getPossibleValues().contains(Direction.NORTH)) scanner = scanner.setValue(dp, Direction.NORTH);
         }
         set(l, o, 53, 1, 48, scanner);
-        set(l, o, 52, 3, 48, u("facility_sign_heavy_containment_small", Blocks.AIR));
-        for (int x = 45; x <= 61; x += 4) for (int z = 52; z <= 68; z += 4) set(l, o, x, 5, z, u("facility_lamp_purple", Blocks.SEA_LANTERN));
+        // the way out: a button inside the office, beside the door
+        set(l, o, 53, 1, 50, Blocks.POLISHED_BLACKSTONE_BUTTON.defaultBlockState().setValue(ButtonBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(ButtonBlock.FACING, Direction.SOUTH));
+        wallPut(l, o, 52, 3, 48, "facility_sign_heavy_containment_small");
+        for (int x = 45; x <= 61; x += 4) for (int z = 52; z <= 68; z += 4) lamp(l, o, x, 5, z, "facility_lamp_purple");
         // the desk, facing the door
-        set(l, o, 51, 0, 64, u("corner_desk", Blocks.DARK_OAK_PLANKS));
-        set(l, o, 52, 0, 64, u("corner_desk", Blocks.DARK_OAK_PLANKS));
-        set(l, o, 53, 0, 64, u("corner_desk", Blocks.DARK_OAK_PLANKS));
-        set(l, o, 51, 1, 64, u("crt_monitor", Blocks.AIR));
-        set(l, o, 52, 1, 64, u("computer", Blocks.AIR));
-        set(l, o, 53, 1, 64, u("desk_lamp", Blocks.AIR));
+        put(l, o, 51, 0, 64, "corner_desk", Blocks.DARK_OAK_PLANKS);
+        put(l, o, 52, 0, 64, "corner_desk", Blocks.DARK_OAK_PLANKS);
+        put(l, o, 53, 0, 64, "corner_desk", Blocks.DARK_OAK_PLANKS);
+        put(l, o, 51, 1, 64, "crt_monitor", Blocks.AIR);
+        put(l, o, 52, 1, 64, "computer", Blocks.AIR);
+        put(l, o, 53, 1, 64, "desk_lamp", Blocks.AIR);
         set(l, o, 52, 0, 65, stair(Blocks.DARK_OAK_STAIRS, Direction.SOUTH));
         // records wall
         for (int x = 44; x <= 61; x++) { set(l, o, x, 0, 69, u("binder_shelf", Blocks.BOOKSHELF)); set(l, o, x, 1, 69, u("binder_shelf", Blocks.BOOKSHELF)); }
-        set(l, o, 44, 0, 60, u("archive", Blocks.LECTERN));
-        set(l, o, 44, 0, 62, u("archive_database_terminal", Blocks.LECTERN));
+        put(l, o, 44, 0, 60, "archive", Blocks.LECTERN);
+        put(l, o, 44, 0, 62, "archive_database_terminal", Blocks.LECTERN);
         // briefing table
-        for (int x = 48; x <= 56; x++) set(l, o, x, 0, 55, u("conference_table", Blocks.DARK_OAK_SLAB));
+        for (int x = 48; x <= 56; x++) put(l, o, x, 0, 55, "conference_table", Blocks.DARK_OAK_SLAB);
         for (int x = 48; x <= 56; x += 2) { set(l, o, x, 0, 54, stair(Blocks.DARK_OAK_STAIRS, Direction.SOUTH)); set(l, o, x, 0, 56, stair(Blocks.DARK_OAK_STAIRS, Direction.NORTH)); }
-        for (int[] c : new int[][]{{44, 51}, {61, 51}, {44, 68}, {61, 68}}) set(l, o, c[0], 0, c[1], u("ez_planter", Blocks.POTTED_FERN));
+        for (int[] c : new int[][]{{44, 51}, {61, 51}, {44, 68}, {61, 68}}) put(l, o, c[0], 0, c[1], "ez_planter", Blocks.POTTED_FERN);
         bed(l, o, 60, 0, 59, Blocks.PURPLE_BED, Direction.SOUTH);
         chest(l, o, 61, 0, 62, Direction.WEST,
                 ui("keycard_omni", Items.PAPER, 1), ui("orbital_designator", Items.SPYGLASS, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2),
