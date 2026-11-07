@@ -350,8 +350,7 @@ public abstract class FacilityBuilder {
     /** A row of desks along x at z (facing = the side the person sits), chairs behind, a monitor on alternate desks. */
     protected void desksX(String desk, int x0, int x1, int z, int Y, Direction facing, String top) {
         for (int x = x0; x <= x1; x++) {
-            boolean left = x > x0, right = x < x1;
-            set(x, Y + 1, z, desk + "[facing=" + f(facing) + ",left=" + left + ",right=" + right + "]");
+            set(x, Y + 1, z, desk + "[facing=" + f(facing) + "," + joins(facing, W, x > x0, x < x1) + "]");
             if (top != null && (x - x0) % 2 == 0) set(x, Y + 2, z, top.replace("$", f(facing)));
             else if ((x - x0) % 4 == 1) set(x, Y + 2, z, "paper_stack[facing=" + f(facing) + ",variant=" + Math.floorMod(x * 7 + z, 6) + "]");
             if ((x - x0) % 2 == 0 || x0 == x1) set(x, Y + 1, z + facing.getStepZ(), "office_chair[facing=" + f(facing.getOpposite()) + "]");
@@ -361,10 +360,55 @@ public abstract class FacilityBuilder {
     /** The same, along z. */
     protected void desksZ(String desk, int x, int z0, int z1, int Y, Direction facing, String top) {
         for (int z = z0; z <= z1; z++) {
-            boolean left = z > z0, right = z < z1;
-            set(x, Y + 1, z, desk + "[facing=" + f(facing) + ",left=" + left + ",right=" + right + "]");
+            set(x, Y + 1, z, desk + "[facing=" + f(facing) + "," + joins(facing, N, z > z0, z < z1) + "]");
             if (top != null && (z - z0) % 2 == 0) set(x, Y + 2, z, top.replace("$", f(facing)));
             if ((z - z0) % 2 == 0 || z0 == z1) set(x + facing.getStepX(), Y + 1, z, "office_chair[facing=" + f(facing.getOpposite()) + "]");
+        }
+    }
+
+    /**
+     * The left / right connection flags of a run of desks, counters or couches: SCP Unleashed's
+     * "left" is the side clockwise of the facing (a north-facing desk's left joins the block to its east).
+     * {@code back} is the run's lower end (west for a run along x, north along z).
+     */
+    protected static String joins(Direction facing, Direction back, boolean hasBack, boolean hasFront) {
+        boolean cwIsBack = facing.getClockWise() == back;
+        return "left=" + (cwIsBack ? hasBack : hasFront) + ",right=" + (cwIsBack ? hasFront : hasBack);
+    }
+
+    /**
+     * A reception counter along x at z. Its tall front panel faces {@code front}, towards the people
+     * coming in; the clerks sit behind it facing them, with their terminals turned towards the clerk.
+     * {@code seats} are the x positions of the clerks.
+     */
+    protected void counterX(int x0, int x1, int z, int Y, Direction front, int screen, int... seats) {
+        for (int x = x0; x <= x1; x++)
+            set(x, Y + 1, z, "reception_desk[facing=" + f(front) + "," + joins(front, W, x > x0, x < x1) + ",shape=straight]");
+        Direction clerk = front.getOpposite();
+        for (int x : seats) {
+            set(x, Y + 2, z, "computer_terminal[facing=" + f(clerk) + ",lit=true,screen=" + screen + "]");
+            set(x, Y + 1, z + clerk.getStepZ(), "office_chair[facing=" + f(front) + "]");
+        }
+    }
+
+    /** The same, along z at x. */
+    protected void counterZ(int x, int z0, int z1, int Y, Direction front, int screen, int... seats) {
+        for (int z = z0; z <= z1; z++)
+            set(x, Y + 1, z, "reception_desk[facing=" + f(front) + "," + joins(front, N, z > z0, z < z1) + ",shape=straight]");
+        Direction clerk = front.getOpposite();
+        for (int z : seats) {
+            set(x, Y + 2, z, "computer_terminal[facing=" + f(clerk) + ",lit=true,screen=" + screen + "]");
+            set(x + clerk.getStepX(), Y + 1, z, "office_chair[facing=" + f(front) + "]");
+        }
+    }
+
+    /** A joined table with chairs only along its two long sides (none at the ends), for narrow rooms. */
+    protected void sideTable(String table, String chair, int x0, int z0, int x1, int z1, int Y, int chairStep) {
+        table(table, null, x0, z0, x1, z1, Y, chairStep);
+        if (x1 - x0 >= z1 - z0) {
+            for (int x = x0; x <= x1; x += chairStep) { set(x, Y + 1, z0 - 1, chair + "[facing=south]"); set(x, Y + 1, z1 + 1, chair + "[facing=north]"); }
+        } else {
+            for (int z = z0; z <= z1; z += chairStep) { set(x0 - 1, Y + 1, z, chair + "[facing=east]"); set(x1 + 1, Y + 1, z, chair + "[facing=west]"); }
         }
     }
 
@@ -388,7 +432,7 @@ public abstract class FacilityBuilder {
     protected void couch(String id, int x, int z, int Y, int n, boolean alongX, Direction facing) {
         for (int i = 0; i < n; i++) {
             int xx = alongX ? x + i : x, zz = alongX ? z : z + i;
-            set(xx, Y + 1, zz, id + "[facing=" + f(facing) + ",left=" + (i > 0) + ",right=" + (i < n - 1) + ",shape=straight]");
+            set(xx, Y + 1, zz, id + "[facing=" + f(facing) + "," + joins(facing, alongX ? W : N, i > 0, i < n - 1) + ",shape=straight]");
         }
     }
 
@@ -425,7 +469,7 @@ public abstract class FacilityBuilder {
         set(cx, Y, (z0 + z1) / 2, "containment_floor_drain");
         set(cx, Y + 4, inZ, "containment_room_sedation_vent[facing=" + f(out) + "]");
         switch (c.extra()) {
-            case "soft" -> { for (int x = x0 + 1; x < x1; x++) stack(x, Y + 1, inZ, "containment_room_padded_panel", out, 4); }
+            case "soft" -> { for (int x = x0 + 1; x < x1; x++) stack(x, Y + 1, inZ, "containment_room_padded_panel", out, 3); }   // below the sedation vent
             case "room" -> {
                 put(x0 + 1, Y + 1, inZ + out.getStepZ() * 2, "lcz_cell_bunk", Blocks.WHITE_BED, E);
                 set(x1 - 1, Y + 1, inZ, "office_desk[facing=" + f(out) + ",left=false,right=false]");

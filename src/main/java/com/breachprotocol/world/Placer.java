@@ -50,8 +50,15 @@ public final class Placer {
             ItemStack stack = new ItemStack(block.asItem());
             BlockPos support = pos.relative(clickedFace.getOpposite());
             BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(support).relative(clickedFace, 0.5), clickedFace, support, false);
-            BlockPlaceContext ctx = new BlockPlaceContext(l, null, InteractionHand.MAIN_HAND, stack, hit);
-            BlockState st = ctx.getClickedPos().equals(pos) ? block.getStateForPlacement(ctx) : null;
+            // No player, so the context is told which way "the player" looks: towards the block's front
+            // first (multi-block furniture checks its footprint from that), then the other three ways.
+            BlockState st = null;
+            for (Direction look : looks(facing)) {
+                BlockPlaceContext ctx = context(l, stack, hit, look);
+                if (!ctx.getClickedPos().equals(pos)) break;
+                st = block.getStateForPlacement(ctx);
+                if (st != null) break;
+            }
             if (st == null) {
                 BreachProtocol.LOGGER.debug("No room to place {} at {}", block, pos);
                 return false;
@@ -64,6 +71,19 @@ public final class Placer {
             BreachProtocol.LOGGER.warn("Could not place {} at {}: {}", block, pos, t.toString());
             return false;
         }
+    }
+
+    private static Direction[] looks(Direction facing) {
+        if (facing == null || !facing.getAxis().isHorizontal()) return new Direction[]{null};
+        return new Direction[]{facing.getOpposite(), facing, facing.getClockWise(), facing.getCounterClockWise()};
+    }
+
+    private static BlockPlaceContext context(ServerLevel l, ItemStack stack, BlockHitResult hit, Direction look) {
+        if (look == null) return new BlockPlaceContext(l, null, InteractionHand.MAIN_HAND, stack, hit);
+        return new BlockPlaceContext(l, null, InteractionHand.MAIN_HAND, stack, hit) {
+            @Override
+            public Direction getHorizontalDirection() { return look; }
+        };
     }
 
     /** Sets the block's horizontal facing, if it has one. */

@@ -484,7 +484,7 @@ public final class Site01 {
             chest(9, Y + 1, 36, W,
                     ui("mtf_helmet", Items.IRON_HELMET, 4), ui("mtf_vest", Items.IRON_CHESTPLATE, 4), ui("mtf_signal_radio", Items.COMPASS, 1),
                     ui("unstable_fragment_volatile", Items.AMETHYST_SHARD, 4), ui("unstable_fragment_severe", Items.AMETHYST_SHARD, 2), ui("unstable_fragment_abyssal", Items.AMETHYST_SHARD, 1));
-            for (int x = 6; x <= 9; x++) set(x, Y + 1, 39, "metal_desk[facing=north,left=" + (x > 6) + ",right=" + (x < 9) + "]");
+            for (int x = 6; x <= 9; x++) set(x, Y + 1, 39, "metal_desk[facing=north," + joins(N, W, x > 6, x < 9) + "]");
             set(3, Y + 1, 39, "minecraft:anvil");
             set(3, Y + 1, 41, "minecraft:smithing_table");
             set(12, Y + 1, 41, "minecraft:grindstone");
@@ -620,7 +620,7 @@ public final class Site01 {
             room(OFFICE.floor("facility_carpet_blue"), 42, 50, SX - 1, SZ - 1, Y, true);
             gate("glass_room_door", 2, 2, 52, 50, Y, N, 5);
             plate(50, Y + 2, 49, N, "THE", "ADMINISTRATOR");
-            for (int x = 49; x <= 57; x++) set(x, Y + 1, 64, "office_desk[facing=south,left=" + (x > 49) + ",right=" + (x < 57) + "]");
+            for (int x = 49; x <= 57; x++) set(x, Y + 1, 64, "office_desk[facing=south," + joins(S, W, x > 49, x < 57) + "]");
             put(53, Y + 2, 64, "computer", Blocks.AIR, S);
             set(51, Y + 2, 64, "crt_monitor[facing=south,lit=true,screen=0]");
             set(55, Y + 2, 64, "paper_stack[facing=south,variant=1]");

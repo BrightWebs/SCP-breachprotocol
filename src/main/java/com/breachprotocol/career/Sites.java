@@ -28,6 +28,8 @@ public final class Sites extends SavedData {
     public static final class Site {
         public String name = "", owner = "", ownerName = "", dim = "minecraft:overworld";
         public int x, y, z, radius = 48;
+        /** Tower layout revision (SiteTower.LAYOUT); older towers are touched up in place. */
+        public int layout;
 
         boolean contains(Level l, BlockPos p) {
             if (!l.dimension().location().toString().equals(dim)) return false;
@@ -45,6 +47,7 @@ public final class Sites extends SavedData {
             t.putInt("y", y);
             t.putInt("z", z);
             t.putInt("r", radius);
+            t.putInt("lay", layout);
             return t;
         }
 
@@ -58,6 +61,7 @@ public final class Sites extends SavedData {
             s.y = t.getInt("y");
             s.z = t.getInt("z");
             s.radius = t.getInt("r");
+            s.layout = t.getInt("lay");
             return s;
         }
     }

@@ -161,8 +161,8 @@ public final class SiteTower extends FacilityBuilder {
         b.administrator();
         for (int s = 0; s <= TOP; s++) b.facade(s);
         b.roof();
+        b.reception();      // before the stairwell, so the stair door's scanner and signs on floor 9 aren't cleared
         b.stairwell();
-        b.reception();
         b.residence();
         b.seal();
         b.staff();
@@ -183,6 +183,7 @@ public final class SiteTower extends FacilityBuilder {
         s.y = o.getY();
         s.z = o.getZ() + T / 2;
         s.radius = 40;
+        s.layout = LAYOUT;
         all.sites.add(s);
         all.setDirty();
         return s.name;
@@ -285,10 +286,10 @@ public final class SiteTower extends FacilityBuilder {
         room(LCZP, BX0, 14, -4, 20, Y, true);
         gate("lcz_room_door", 2, 2, BX0 + 2, 14, Y, N, 2);
         buttoned("lcz_room_door", 2, 2, BX0 + 1, 20, Y, S);
-        plate(BX0 + 3, Y + 2, 13, N, "TO CANTEEN", "AND TESTING");
+        plate(BX0 + 2, Y + 3, 13, N, "TO CANTEEN", "AND TESTING");   // over the door, not on it
         // canteen
         ezDoor(4, 24, Y, N);
-        for (int[] t : new int[][]{{-5, 27}, {0, 27}, {5, 27}, {-5, 30}, {0, 30}, {5, 30}}) table("cafeteria_table", "cafeteria_chair", t[0], t[1], t[0] + 1, t[1], Y, 1);
+        canteen(Y);
         for (int x = 9; x <= 11; x++) set(x, Y + 1, 25, "scp3008_kitchen_base_cabinet[facing=west]");
         plate(2, Y + 2, 23, N, "CANTEEN");
         // showers
@@ -323,8 +324,8 @@ public final class SiteTower extends FacilityBuilder {
         room(LCZP.floor("facility_concrete"), 6, -NZ, 13, 8, Y, false);
         gate("lcz_room_door", 2, 2, 8, 8, Y, S, 3);
         light(9, Y + 4, -1, true);
-        set(9, Y + 1, -1, "metal_desk[facing=north,left=false,right=true]");
-        set(10, Y + 1, -1, "metal_desk[facing=north,left=true,right=false]");
+        set(9, Y + 1, -1, "metal_desk[facing=north," + joins(N, W, false, true) + "]");
+        set(10, Y + 1, -1, "metal_desk[facing=north," + joins(N, W, true, false) + "]");
         set(9, Y + 2, -1, "desk_lamp[facing=north,lit=true]");
         set(9, Y + 1, -2, "office_chair[facing=south]");
         set(10, Y + 1, 0, "cafeteria_chair[facing=north]");
@@ -340,7 +341,7 @@ public final class SiteTower extends FacilityBuilder {
         room(LCZP, 20, -NZ, 26, 8, Y, true);
         gate("lcz_room_door", 2, 2, 22, 8, Y, S, 2);
         for (int z = -9; z <= 6; z++) if (z % 3 != 0) tall(25, Y + 1, z, "locker", W);
-        desksZ("reception_desk", 21, -3, 1, Y, E, "computer_terminal[facing=$,lit=true,screen=3]");
+        intakeDesk(Y);
         plate(21, Y + 2, 9, S, "INTAKE");
         // riot store
         room(HCZP, 32, -NZ, BX1, 8, Y, true);
@@ -444,8 +445,9 @@ public final class SiteTower extends FacilityBuilder {
     private void dclassHolding(int x0, int Y) {
         room(LCZP, x0, 14, BX1, T, Y, true);
         gate("lcz_room_door", 2, 2, x0 + 3, 14, Y, N, 1);
-        for (int z = 17; z <= 29; z += 3) { put(x0 + 1, Y + 1, z, "lcz_cell_bunk", Blocks.ORANGE_BED, E); put(BX1 - 1, Y + 1, z, "lcz_cell_bunk", Blocks.ORANGE_BED, W); }
-        table("cafeteria_table", "cafeteria_chair", x0 + 3, 22, x0 + 4, 24, Y, 2);
+        // bunks down both walls (each reaches one block into the room), a 2-wide aisle between them
+        for (int z = 17; z <= 26; z += 3) { put(x0 + 1, Y + 1, z, "lcz_cell_bunk", Blocks.ORANGE_BED, E); put(BX1 - 1, Y + 1, z, "lcz_cell_bunk", Blocks.ORANGE_BED, W); }
+        holdingTable(x0, Y);
         for (int z = 15; z <= 16; z++) tall(BX1 - 1, Y + 1, z, "locker", W);
         plate(x0 + 5, Y + 2, 13, N, "D-CLASS", "HOLDING");
     }
@@ -469,9 +471,7 @@ public final class SiteTower extends FacilityBuilder {
         windows(EZ, 9, 14, 13, 14, Y);
         sign2("facility_sign_security_checkpoint", 16, Y + 4, 15, S, "none", false);
         set(19, Y + 3, 15, "facility_sign_entrance_zone_small[facing=south]");
-        // reception: a desk facing the door, staff behind
-        desksX("reception_desk", 3, 8, 20, Y, N, "computer_terminal[facing=$,lit=true,screen=2]");
-        for (int x = 3; x <= 8; x++) set(x, Y + 1, 20, "reception_desk[facing=north,left=" + (x > 3) + ",right=" + (x < 8) + ",shape=straight]");
+        lobbyDesk(Y);
         scpSign(6, Y + 3, 15, S);
         set(3, Y + 2, 15, "ez_directory_sign[facing=south]");
         set(9, Y + 1, 15, "filing_cabinet[facing=south,open=false]");
@@ -497,10 +497,7 @@ public final class SiteTower extends FacilityBuilder {
 
         // ---- cafeteria
         ezDoor(18, 8, Y, S);
-        table("cafeteria_table", "cafeteria_chair", 14, 2, 15, 3, Y, 1);
-        table("cafeteria_table", "cafeteria_chair", 22, 2, 23, 3, Y, 1);
-        table("cafeteria_table", "cafeteria_chair", 14, 6, 15, 6, Y, 1);
-        table("cafeteria_table", "cafeteria_chair", 22, 6, 23, 6, Y, 1);
+        cafeteria(Y);
         for (int x = 18; x <= 20; x++) set(x, Y + 1, 1, "scp3008_kitchen_base_cabinet[facing=south]");
         set(17, Y + 1, 1, "potted_plant[facing=south]");
         set(21, Y + 1, 1, "potted_plant[facing=south]");
@@ -624,11 +621,8 @@ public final class SiteTower extends FacilityBuilder {
 
         // ---- Medical reception
         ezDoor(19, 8, Y, S);
-        for (int x = 15; x <= 23; x++) set(x, Y + 1, 3, "reception_desk[facing=north,left=" + (x > 15) + ",right=" + (x < 23) + ",shape=straight]");
-        set(17, Y + 2, 3, "computer_terminal[facing=north,lit=true,screen=8]");
-        set(21, Y + 2, 3, "computer_terminal[facing=north,lit=true,screen=8]");
-        set(17, Y + 1, 2, "office_chair[facing=south]");
-        set(21, Y + 1, 2, "office_chair[facing=south]");
+        // the counter faces the waiting chairs; the nurses sit behind it
+        counterX(15, 23, 3, Y, S, 8, 17, 21);
         for (int x = 14; x <= 17; x++) set(x, Y + 1, 6, "ez_waiting_chairs[facing=north]");
         for (int x = 21; x <= 25; x++) set(x, Y + 1, 6, "ez_waiting_chairs[facing=north]");
         set(25, Y + 1, 1, "potted_plant[facing=south]");
@@ -659,7 +653,7 @@ public final class SiteTower extends FacilityBuilder {
                 ui("mtf_helmet", Items.IRON_HELMET, 8), ui("mtf_vest", Items.IRON_CHESTPLATE, 8), ui("mtf_signal_radio", Items.COMPASS, 2),
                 ui("unstable_fragment_faint", Items.AMETHYST_SHARD, 8), ui("unstable_fragment_wavering", Items.AMETHYST_SHARD, 6), ui("unstable_fragment_volatile", Items.AMETHYST_SHARD, 4),
                 ui("unstable_fragment_severe", Items.AMETHYST_SHARD, 2), ui("unstable_fragment_abyssal", Items.AMETHYST_SHARD, 1));
-        for (int x = 6; x <= 10; x++) set(x, Y + 1, 25, "metal_desk[facing=north,left=" + (x > 6) + ",right=" + (x < 10) + "]");
+        for (int x = 6; x <= 10; x++) set(x, Y + 1, 25, "metal_desk[facing=north," + joins(N, W, x > 6, x < 10) + "]");
         sign2("facility_sign_armory", 8, Y + 4, 13, N, "none", false);
 
         // ---- MTF barracks
@@ -749,19 +743,19 @@ public final class SiteTower extends FacilityBuilder {
 
         // ---- Site Director (Level 4)
         gate("glass_room_door", 2, 2, 4, 8, Y, S, 4);
-        for (int x = 3; x <= 7; x++) set(x, Y + 1, 3, "office_desk[facing=north,left=" + (x > 3) + ",right=" + (x < 7) + "]");
+        for (int x = 3; x <= 7; x++) set(x, Y + 1, 3, "office_desk[facing=north," + joins(N, W, x > 3, x < 7) + "]");
         set(4, Y + 2, 3, "crt_monitor[facing=north,lit=true,screen=1]");
         set(6, Y + 2, 3, "desk_lamp[facing=north,lit=true]");
         set(5, Y + 1, 2, "office_chair[facing=south]");
-        set(4, Y + 1, 5, "office_chair[facing=north]");
-        set(6, Y + 1, 5, "office_chair[facing=north]");
+        set(4, Y + 1, 4, "office_chair[facing=north]");
+        set(6, Y + 1, 4, "office_chair[facing=north]");
         for (int z = 2; z <= 6; z++) set(9, Y + 1, z, "binder_shelf[facing=west]");
         set(1, Y + 1, 6, "potted_plant[facing=east]");
         plate(2, Y + 2, 9, S, "SITE", "DIRECTOR");
 
         // ---- Conference
         ezDoor(13, 8, Y, S);
-        table("conference_table", "office_chair", 12, 3, 16, 4, Y, 2);
+        sideTable("conference_table", "office_chair", 12, 3, 16, 4, Y, 2);   // no end chairs: the room is too narrow to walk round them
         set(11, Y + 2, 3, "wall_monitor[facing=east,hanging=false,lit=true,screen=4]");
         plate(12, Y + 2, 9, S, "CONFERENCE");
 
@@ -805,13 +799,16 @@ public final class SiteTower extends FacilityBuilder {
 
         // ---- communications: the site's network, powered
         buttoned("hcz_room_door", 2, 2, 19, 8, Y, S);
-        put(15, Y + 1, 2, "network_hub", Blocks.LODESTONE, S);
+        put(15, Y + 1, 2, "network_router", Blocks.OBSERVER, S);
         put(18, Y + 1, 2, "network_router", Blocks.OBSERVER, S);
         put(21, Y + 1, 2, "network_router", Blocks.OBSERVER, S);
         put(24, Y + 1, 2, "chat_server", Blocks.JUKEBOX, S);
-        put(15, Y + 1, 6, "computer", Blocks.LECTERN, N);
+        // the terminal stands on a desk, its operator facing it
+        set(15, Y + 1, 6, "metal_desk[facing=north,left=false,right=false]");
+        put(15, Y + 2, 6, "computer", Blocks.LECTERN, N);
+        set(15, Y + 1, 5, "office_chair[facing=south]");
         put(24, Y + 1, 6, "radio_booster_tower", Blocks.LIGHTNING_ROD, N);
-        power(19, Y + 1, 5, new int[]{15, Y + 1, 2}, new int[]{18, Y + 1, 2}, new int[]{21, Y + 1, 2}, new int[]{24, Y + 1, 2}, new int[]{15, Y + 1, 6}, new int[]{24, Y + 1, 6});
+        power(19, Y + 1, 5, new int[]{15, Y + 1, 2}, new int[]{18, Y + 1, 2}, new int[]{21, Y + 1, 2}, new int[]{24, Y + 1, 2}, new int[]{15, Y + 2, 6}, new int[]{24, Y + 1, 6});
         for (int x = 14; x <= 25; x++) set(x, Y + 4, 4, "cable_tray[orientation=down_x]");
         lights(13, 0, 26, 8, Y);
         chest(14, Y + 1, 4, E, ui("camera_tablet", Items.MAP, 2), ui("facility_tablet", Items.MAP, 2), ui("handheld_radio", Items.COMPASS, 4));
@@ -911,7 +908,8 @@ public final class SiteTower extends FacilityBuilder {
         set(x1 + 1, Y + 1, (z0 + z1) / 2, "office_chair[facing=west]");
         scpSign(16, Y + 3, 9, S);
         plate(15, Y + 2, 9, S, "THE O5", "COUNCIL", "Secure. Contain.", "Protect.");
-        for (int[] pp : new int[][]{{1, 9}, {T - 1, 9}, {1, T - 1}, {T - 1, T - 1}}) set(pp[0], Y + 1, pp[1], "ez_planter[facing=south]");
+        // planters clear of the stair and lift doors
+        for (int[] pp : new int[][]{{1, 12}, {T - 1, 12}, {1, T - 1}, {T - 1, T - 1}}) set(pp[0], Y + 1, pp[1], "ez_planter[facing=south]");
         for (int x = 4; x <= 28; x += 8) set(x, Y + 3, T - 1, "wall_clock[facing=north]");
 
         // ---- council archive and lounge
@@ -937,7 +935,7 @@ public final class SiteTower extends FacilityBuilder {
         room(office, 0, 8, T, T, Y, true);
 
         // the desk: the Administrator sits with the city at their back, facing the door
-        for (int x = 13; x <= 19; x++) set(x, Y + 1, 25, "office_desk[facing=south,left=" + (x > 13) + ",right=" + (x < 19) + "]");
+        for (int x = 13; x <= 19; x++) set(x, Y + 1, 25, "office_desk[facing=south," + joins(S, W, x > 13, x < 19) + "]");
         put(15, Y + 2, 25, "computer", Blocks.AIR, S);
         set(14, Y + 2, 25, "crt_monitor[facing=south,lit=true,screen=0]");
         l.setBlock(at(16, Y + 2, 25), com.breachprotocol.registry.ModBlocks.ADMIN_TERMINAL.get().defaultBlockState()
@@ -945,8 +943,8 @@ public final class SiteTower extends FacilityBuilder {
         set(17, Y + 2, 25, "paper_stack[facing=south,variant=2]");
         set(18, Y + 2, 25, "desk_lamp[facing=south,lit=true]");
         set(16, Y + 1, 26, "office_chair[facing=north]");
-        set(15, Y + 1, 23, "office_chair[facing=south]");
-        set(17, Y + 1, 23, "office_chair[facing=south]");
+        set(15, Y + 1, 24, "office_chair[facing=south]");
+        set(17, Y + 1, 24, "office_chair[facing=south]");
         chest(20, Y + 1, 26, W,
                 ui("keycard_omni", Items.PAPER, 2), ui("orbital_designator", Items.SPYGLASS, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 3),
                 ui("mtf_signal_radio", Items.COMPASS, 1), ui("rift_detector", Items.COMPASS, 1), ui("camera_tablet", Items.MAP, 1), ui("facility_tablet", Items.MAP, 1),
@@ -1118,7 +1116,7 @@ public final class SiteTower extends FacilityBuilder {
             // the doors onto the floor: stairs keyed to the floor's clearance, the lift by hand
             int lvl = floorClearance(s);
             if (s == ROOF) door("ez_room_door", 2, 2, 27, 8, Y, S);
-            else if (lvl >= 1) gate(s >= 8 ? "glass_room_door" : "ez_room_door", 2, 2, 27, 8, Y, S, lvl);
+            else if (lvl >= 1) stairGate(s, Y, lvl);
             else ezDoor(27, 8, Y, S);
             ezDoor(30, 8, Y, S);
         }
@@ -1138,18 +1136,11 @@ public final class SiteTower extends FacilityBuilder {
         for (int z = 9; z <= 16; z++) column(office, 21, z, Y, 4);
         for (int x = 21; x <= T - 1; x++) column(office, x, 16, Y, 4);
         fill(22, Y, 9, T - 1, Y, 15, "facility_carpet_blue");
-        // her desk, facing the doors
-        for (int x = 24; x <= 27; x++) set(x, Y + 1, 13, "reception_desk[facing=north,left=" + (x > 24) + ",right=" + (x < 27) + ",shape=straight]");
-        set(25, Y + 2, 13, "computer_terminal[facing=north,lit=true,screen=1]");
-        set(26, Y + 2, 13, "paper_stack[facing=north,variant=1]");
-        set(27, Y + 2, 13, "desk_lamp[facing=north,lit=true]");
-        set(25, Y + 1, 14, "office_chair[facing=north]");
+        secretaryDesk(Y);
         set(T - 1, Y + 1, 15, "filing_cabinet[facing=west,open=false]");
         set(T - 1, Y + 1, 14, "filing_cabinet[facing=west,open=false]");
-        // visitors' bench and a plant
-        for (int z = 10; z <= 12; z++) set(22, Y + 1, z, "ez_waiting_chairs[facing=east]");
         set(22, Y + 1, 15, "ez_planter[facing=east]");
-        set(24, Y + 3, 16, "wall_clock[facing=north]");
+        set(24, Y + 3, 15, "wall_clock[facing=north]");   // on the wall, not in it
         plate(26, Y + 3, 15, N, "EXECUTIVE", "SECRETARY");
         // through to the office: keyed at Level 5
         gate("glass_room_door", 2, 2, 21, 11, Y, E, 5);
@@ -1204,8 +1195,7 @@ public final class SiteTower extends FacilityBuilder {
                 }
                 tall(x0 + 5, Y + 1, b2(i, 0), "locker", W);
                 tall(x0 + 5, Y + 1, b2(i, 1), "locker", W);
-                set(x0 + 3, Y + 1, 6, "desk_lamp[facing=south,lit=true]");
-                set(x0 + 3, Y + 1, T - 6, "desk_lamp[facing=north,lit=true]");
+                roomFurniture(x0, Y);
             }
             // the facade: glass along both long sides
             for (int x = RX0; x <= RX1; x++) for (int yy = Y + 2; yy <= Y + 3; yy++) if ((x - RX0) % 6 != 0) { set(x, yy, 0, "reinforced_glass"); set(x, yy, T, "reinforced_glass"); }
@@ -1214,10 +1204,175 @@ public final class SiteTower extends FacilityBuilder {
         ezDoor(RX0, 15, 0, W);
         plate(RX0 - 1, 3, 17, W, "STAFF", "RESIDENCE");
         air(RX1 - 5, STOREY - 1, 15, RX1 - 1, STOREY, 17);
-        for (int k = 1; k <= 5; k++) set(RX1 - k, k, 16, "facility_concrete_stairs[facing=west,half=bottom,shape=straight]");
+        for (int k = 1; k <= 5; k++) for (int z = 15; z <= 17; z++) set(RX1 - k, k, z, "facility_concrete_stairs[facing=west,half=bottom,shape=straight]");
     }
 
     private static int b2(int i, int side) { return side == 0 ? 7 : T - 7; }
+
+    // ================================================================== furniture (shared by new builds and the touch-up of older towers)
+
+    /** The lobby reception: the counter faces the entrance, three clerks sit behind it. */
+    private void lobbyDesk(int Y) { counterX(3, 8, 20, Y, S, 2, 3, 5, 7); }
+
+    /** The ground-floor cafeteria: two tables either side, the middle and the front kept clear to the kitchen and the door. */
+    private void cafeteria(int Y) {
+        table("cafeteria_table", "cafeteria_chair", 14, 3, 15, 4, Y, 1);
+        table("cafeteria_table", "cafeteria_chair", 22, 3, 23, 4, Y, 1);
+    }
+
+    /** B5 intake: the counter faces the room, the clerks sit against the west wall behind it. */
+    private void intakeDesk(int Y) { counterZ(22, -3, 1, Y, E, 3, -3, -1, 1); }
+
+    /** The B5 canteen: two columns of tables either side of a clear path in from the door. */
+    private void canteen(int Y) {
+        for (int[] t : new int[][]{{-5, 27}, {0, 27}, {6, 27}, {-5, 30}, {0, 30}, {6, 30}})
+            table("cafeteria_table", "cafeteria_chair", t[0], t[1], t[0] + 1, t[1], Y, 1);
+    }
+
+    /** D-Class holding (B1): a table at the far end of the aisle, seats on its two sides. */
+    private void holdingTable(int x0, int Y) {
+        table("cafeteria_table", null, x0 + 3, 29, x0 + 4, 30, Y, 1);
+        for (int z = 29; z <= 30; z++) { set(x0 + 2, Y + 1, z, "cafeteria_chair[facing=east]"); set(x0 + 5, Y + 1, z, "cafeteria_chair[facing=west]"); }
+    }
+
+    /**
+     * The stair door onto a keyed floor: scanner outside on the jamb; inside, the jamb backs onto the
+     * lift shaft, so the exit button sits on the wall above the door.
+     */
+    private void stairGate(int s, int Y, int lvl) {
+        BlockPos jamb = door(s >= 8 ? "glass_room_door" : "ez_room_door", 2, 2, 27, 8, Y, S).above();
+        l.setBlock(jamb.relative(S), st("keycard_scanner[facing=south,level=" + Math.max(1, Math.min(5, lvl)) + ",status=idle]"), FLAGS);
+        set(27, Y + 3, 7, "door_button[facing=north,powered=false]");
+    }
+
+    /** The Executive Secretary's desk: it faces the stair and lift doors, she sits behind it with her screen turned to her. */
+    private void secretaryDesk(int Y) {
+        counterX(24, 27, 13, Y, N, 1, 25);
+        set(26, Y + 2, 13, "paper_stack[facing=south,variant=1]");
+        set(27, Y + 2, 13, "desk_lamp[facing=south,lit=true]");
+        // visitors wait along the east wall, clear of the lift and of the office door
+        for (int z = 11; z <= 13; z++) set(T - 1, Y + 1, z, "ez_waiting_chairs[facing=west]");
+    }
+
+    /** A residence room (x0..x0+6): a bedside table with a lamp between the beds, a writing desk and chair. */
+    private void roomFurniture(int x0, int Y) {
+        for (int side = 0; side < 2; side++) {
+            int bedZ = side == 0 ? 2 : T - 2, deskZ = side == 0 ? 9 : T - 9;
+            set(x0 + 2, Y + 1, bedZ, "scp3008_living_side_table[facing=" + (side == 0 ? "south" : "north") + "]");
+            set(x0 + 2, Y + 2, bedZ, "desk_lamp[facing=" + (side == 0 ? "south" : "north") + ",lit=true]");
+            set(x0 + 1, Y + 1, deskZ, "office_desk[facing=east,left=false,right=false]");
+            set(x0 + 1, Y + 2, deskZ, "paper_stack[facing=east,variant=" + Math.floorMod(x0 + side, 4) + "]");
+            set(x0 + 2, Y + 1, deskZ, "office_chair[facing=west]");
+        }
+    }
+
+    // ================================================================== touching up an existing tower
+
+    /** Layout revision. A tower built (or touched up) at this revision has every furniture fix. */
+    public static final int LAYOUT = 2;
+
+    /**
+     * Brings an existing tower's furnishings up to the current layout, in place: only the pieces that
+     * were in the wrong spot or facing the wrong way are moved. Walls, doors, chests and anything a
+     * player built stay as they are.
+     */
+    public static void touchUp(ServerLevel l, BlockPos origin) {
+        for (int cx = (origin.getX() + BX0 - 2) >> 4; cx <= (origin.getX() + RX1 + 4) >> 4; cx++)
+            for (int cz = (origin.getZ() - NZ - 2) >> 4; cz <= (origin.getZ() + T + 6) >> 4; cz++) l.getChunk(cx, cz);
+        new SiteTower(l, origin).touchUp();
+    }
+
+    private void touchUp() {
+        // G: the lobby counter turned to face the entrance, the cafeteria opened up
+        int Y = y(0);
+        clear(3, 19, 8, 21, Y, "reception_desk", "computer_terminal", "office_chair", "paper_stack");
+        lobbyDesk(Y);
+        clear(13, 1, 25, 7, Y, "cafeteria_table", "cafeteria_chair");
+        cafeteria(Y);
+        // 2: the medical counter faces the waiting chairs
+        Y = y(2);
+        clear(15, 2, 23, 3, Y, "reception_desk", "computer_terminal", "office_chair");
+        counterX(15, 23, 3, Y, S, 8, 17, 21);
+        // 5: no end chairs at the conference table; the Director's visitors pull up to the desk
+        Y = y(5);
+        clear(11, 3, 11, 4, Y, "office_chair");
+        clear(17, 3, 17, 4, Y, "office_chair");
+        if (is(4, Y + 1, 5, "office_chair")) { clear(4, 5, 6, 5, Y, "office_chair"); set(4, Y + 1, 4, "office_chair[facing=north]"); set(6, Y + 1, 4, "office_chair[facing=north]"); }
+        // 6: the comms terminal onto a desk; a router where the hub never fitted
+        Y = y(6);
+        if (is(15, Y + 1, 2, "lodestone")) { l.setBlock(at(15, Y + 1, 2), Blocks.AIR.defaultBlockState(), FLAGS); put(15, Y + 1, 2, "network_router", Blocks.OBSERVER, S); UnleashedApi.wire(l, at(19, Y + 1, 5), at(15, Y + 1, 2)); }
+        if (is(15, Y + 1, 6, "computer") || is(15, Y + 1, 6, "lectern")) {
+            l.setBlock(at(15, Y + 1, 6), Blocks.AIR.defaultBlockState(), FLAGS);
+            set(15, Y + 1, 6, "metal_desk[facing=north,left=false,right=false]");
+            put(15, Y + 2, 6, "computer", Blocks.LECTERN, N);
+            if (l.getBlockState(at(15, Y + 1, 5)).isAir()) set(15, Y + 1, 5, "office_chair[facing=south]");
+            UnleashedApi.wire(l, at(19, Y + 1, 5), at(15, Y + 2, 6));
+        }
+        // 8: the planter in front of the lift moves along the wall
+        Y = y(8);
+        for (int x : new int[]{1, T - 1}) if (is(x, Y + 1, 9, "ez_planter")) { clear(x, 9, x, 9, Y, "ez_planter"); set(x, Y + 1, 12, "ez_planter[facing=south]"); }
+        // 9: visitors' chairs up to the Administrator's desk; the secretary's desk turned to her, the bench off the office door, the clock out of the wall
+        Y = y(9);
+        if (is(15, Y + 1, 23, "office_chair")) { clear(15, 23, 17, 23, Y, "office_chair"); set(15, Y + 1, 24, "office_chair[facing=south]"); set(17, Y + 1, 24, "office_chair[facing=south]"); }
+        if (is(24, Y + 1, 13, "reception_desk")) {
+            clear(22, 9, T - 1, 13, Y, "ez_waiting_chairs", "computer_terminal", "paper_stack", "desk_lamp");
+            secretaryDesk(Y);
+        }
+        if (is(24, Y + 3, 16, "wall_clock")) { set(24, Y + 3, 16, OFFICE.middle()); set(24, Y + 3, 15, "wall_clock[facing=north]"); }
+        // what the reception's build cleared: the stair door's scanner and the two door signs
+        if (l.getBlockState(at(29, Y + 2, 9)).isAir()) l.setBlock(at(29, Y + 2, 9), st("keycard_scanner[facing=south,level=" + floorClearance(9) + ",status=idle]"), FLAGS);
+        if (l.getBlockState(at(27, Y + 3, 9)).isAir()) set(27, Y + 3, 9, "facility_sign_stairs_small[facing=south]");
+        if (l.getBlockState(at(31, Y + 3, 9)).isAir()) set(31, Y + 3, 9, "facility_sign_elevator_small[facing=south]");
+        // the stair doors' exit buttons come out of the lift-shaft wall
+        for (int s = LOWEST; s < ROOF; s++) {
+            int fy = y(s);
+            if (is(29, fy + 2, 7, "door_button")) { set(29, fy + 2, 7, "facility_painted_concrete"); set(27, fy + 3, 7, "door_button[facing=north,powered=false]"); }
+        }
+        // B5: intake counter, the sign off the door, the canteen path, bunks in the cells
+        Y = y(-5);
+        clear(21, -3, 22, 1, Y, "reception_desk", "computer_terminal", "office_chair", "paper_stack");
+        intakeDesk(Y);
+        if (is(BX0 + 3, Y + 2, 13, "wall_sign")) { l.setBlock(at(BX0 + 3, Y + 2, 13), Blocks.AIR.defaultBlockState(), FLAGS); plate(BX0 + 2, Y + 3, 13, N, "TO CANTEEN", "AND TESTING"); }
+        clear(BX0 + 1, 25, 11, T - 1, Y, "cafeteria_table", "cafeteria_chair");
+        canteen(Y);
+        for (int i = 0; i < 11; i++) {
+            int x0 = -4 + i * 4;
+            if (is(x0 + 1, Y + 1, 19, "_bed")) { clear(x0 + 1, 19, x0 + 2, 19, Y, "_bed"); put(x0 + 1, Y + 1, 19, "lcz_cell_bunk", Blocks.ORANGE_BED, E); }
+        }
+        // B1: the holding table moves to the end of the aisle
+        Y = y(-1);
+        int hx = BX0 + 42;
+        if (is(hx + 3, Y + 1, 22, "cafeteria_table")) {
+            clear(hx + 2, 21, hx + 5, 25, Y, "cafeteria_table", "cafeteria_chair");
+            clear(hx + 1, 29, BX1 - 1, 29, Y, "lcz_cell_bunk", "_bed");
+            holdingTable(hx, Y);
+        }
+        // the residence: lamps onto bedside tables, a desk in every room, stairs the corridor's width
+        if (is(RX0, 1, 15, "door")) {
+            for (int f = 0; f < 2; f++) {
+                int fy = f * STOREY;
+                for (int i = 0; i < 4; i++) {
+                    int x0 = RX0 + i * 6;
+                    clear(x0 + 3, 6, x0 + 3, 6, fy, "desk_lamp");
+                    clear(x0 + 3, T - 6, x0 + 3, T - 6, fy, "desk_lamp");
+                    roomFurniture(x0, fy);
+                }
+            }
+            for (int k = 1; k <= 5; k++) for (int z = 15; z <= 17; z += 2) if (l.getBlockState(at(RX1 - k, k, z)).isAir()) set(RX1 - k, k, z, "facility_concrete_stairs[facing=west,half=bottom,shape=straight]");
+        }
+    }
+
+    private boolean is(int x, int y, int z, String id) {
+        return BuiltInRegistries.BLOCK.getKey(l.getBlockState(at(x, y, z)).getBlock()).getPath().contains(id);
+    }
+
+    /** Takes the named furniture (matched by block id) out of a box, floor Y+1 to Y+3. Nothing else is touched. */
+    private void clear(int x0, int z0, int x1, int z1, int Y, String... ids) {
+        for (int x = x0; x <= x1; x++) for (int z = z0; z <= z1; z++) for (int yy = Y + 1; yy <= Y + 3; yy++) {
+            String path = BuiltInRegistries.BLOCK.getKey(l.getBlockState(at(x, yy, z)).getBlock()).getPath();
+            for (String id : ids) if (path.contains(id)) { l.setBlock(at(x, yy, z), Blocks.AIR.defaultBlockState(), FLAGS); break; }
+        }
+    }
 
     // ================================================================== refitting an older tower
 
@@ -1236,9 +1391,9 @@ public final class SiteTower extends FacilityBuilder {
             }
         }
         b.air(27, y(LOWEST) + 1, 1, 31, y(ROOF) + 4, 7);
-        b.stairwell();
         // the office: the couch and meeting table move further in, the reception goes where they stood
         b.reception();
+        b.stairwell();
         int Y = y(9);
         b.couch("couch_leather", T - 1, 19, Y, 5, false, W);
         b.table("conference_table", null, 25, 22, 27, 24, Y, 1);

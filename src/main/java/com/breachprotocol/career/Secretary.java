@@ -177,6 +177,14 @@ public final class Secretary {
                     if (sec != null) sec.hireAs(FoundationStaff.Role.SECRETARY, post(s));
                 }
             }
+            // furniture fixes for towers built before them: once, the first time someone is near
+            if (s.layout < SiteTower.LAYOUT && RECEPTION.contains(s.name) && ow.isLoaded(o.offset(SiteTower.liftPanel(0)))
+                    && ow.getNearestPlayer(o.getX() + 16, o.getY(), o.getZ() + 16, 96, false) != null && isTower(ow, s)) {
+                SiteTower.touchUp(ow, o);
+                s.layout = SiteTower.LAYOUT;
+                Sites.get(srv).setDirty();
+                BreachProtocol.LOGGER.info("Touched up {}: furniture layout revision {}", s.name, SiteTower.LAYOUT);
+            }
             BlockPos at = post(s);
             if (!ow.isLoaded(at) || ow.getNearestPlayer(at.getX(), at.getY(), at.getZ(), 64, false) == null || !isTower(ow, s)) continue;
             if (d.secretaries.containsKey(s.name)) stock(ow, s, d);
