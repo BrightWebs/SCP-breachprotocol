@@ -180,7 +180,7 @@ public final class Secretary {
             // furniture fixes for towers built before them: once, the first time someone is near
             if (s.layout < SiteTower.LAYOUT && RECEPTION.contains(s.name) && ow.isLoaded(o.offset(SiteTower.liftPanel(0)))
                     && ow.getNearestPlayer(o.getX() + 16, o.getY(), o.getZ() + 16, 96, false) != null && isTower(ow, s)) {
-                SiteTower.touchUp(ow, o);
+                SiteTower.touchUp(ow, o, s.layout);
                 s.layout = SiteTower.LAYOUT;
                 Sites.get(srv).setDirty();
                 BreachProtocol.LOGGER.info("Touched up {}: furniture layout revision {}", s.name, SiteTower.LAYOUT);

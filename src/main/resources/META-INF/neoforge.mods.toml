@@ -17,6 +17,10 @@ Original Breach Protocol mechanics:
  - Clearance keycards and programmable keycard readers
  - SCP-096 face trigger, SCP-049's cure, SCP-106's corrosion and ambush'''
 
+# SCP Unleashed's part-height furniture stops hiding the floor under it (no see-through floors)
+[[mixins]]
+config = "breachprotocol.mixins.json"
+
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"

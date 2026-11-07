@@ -957,7 +957,7 @@ public final class SiteTower extends FacilityBuilder {
         for (int z = 11; z <= 30; z++) if (z != 20) { set(1, Y + 1, z, "binder_shelf[facing=east]"); set(1, Y + 2, z, "binder_shelf[facing=east]"); }
         put(3, Y + 1, 20, "archive_database_terminal", Blocks.LECTERN, E);
         couch("couch_leather", T - 1, 19, Y, 5, false, W);
-        couch("couch_leather", 22, 18, Y, 5, true, N);
+        couch("couch_leather", 22, 18, Y, 5, true, S);   // facing the coffee table, its back to the wall
         table("conference_table", null, 25, 22, 27, 24, Y, 1);
         for (int[] pp : new int[][]{{2, 9 + 1}, {T - 1, 30}, {12, 30}, {20, 30}}) set(pp[0], Y + 1, pp[1], "ez_planter[facing=north]");
         for (int x = 6; x <= 26; x += 20) set(x, Y + 3, 9, "wall_clock[facing=south]");
@@ -1269,17 +1269,26 @@ public final class SiteTower extends FacilityBuilder {
     // ================================================================== touching up an existing tower
 
     /** Layout revision. A tower built (or touched up) at this revision has every furniture fix. */
-    public static final int LAYOUT = 2;
+    public static final int LAYOUT = 3;
 
     /**
      * Brings an existing tower's furnishings up to the current layout, in place: only the pieces that
      * were in the wrong spot or facing the wrong way are moved. Walls, doors, chests and anything a
      * player built stay as they are.
      */
-    public static void touchUp(ServerLevel l, BlockPos origin) {
+    public static void touchUp(ServerLevel l, BlockPos origin, int from) {
         for (int cx = (origin.getX() + BX0 - 2) >> 4; cx <= (origin.getX() + RX1 + 4) >> 4; cx++)
             for (int cz = (origin.getZ() - NZ - 2) >> 4; cz <= (origin.getZ() + T + 6) >> 4; cz++) l.getChunk(cx, cz);
-        new SiteTower(l, origin).touchUp();
+        SiteTower b = new SiteTower(l, origin);
+        if (from < 2) b.touchUp();
+        if (from < 3) b.touchUp3();
+    }
+
+    /** Revision 3: the lounge couch in the Administrator's office turns round to face the coffee table. */
+    private void touchUp3() {
+        int Y = y(9);
+        if (is(22, Y + 1, 18, "couch_leather") && BuiltInRegistries.BLOCK.getKey(l.getBlockState(at(26, Y + 1, 18)).getBlock()).getPath().equals("couch_leather"))
+            couch("couch_leather", 22, 18, Y, 5, true, S);
     }
 
     private void touchUp() {
