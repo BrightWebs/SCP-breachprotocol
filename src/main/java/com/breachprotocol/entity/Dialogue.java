@@ -23,6 +23,8 @@ public final class Dialogue {
         final List<CompoundTag> options = new ArrayList<>();
         String input = "";
         boolean hud, ask = true;
+        String mood = "";
+        int moodC;
         long touched;
     }
 
@@ -66,7 +68,12 @@ public final class Dialogue {
         s.input = "";
         s.hud = false;
         s.ask = true;
+        s.mood = "";
+        s.moodC = 0;
     }
+
+    /** How the person you're talking to seems right now (shown under their portrait). */
+    public static void mood(ServerPlayer p, String mood, int colour) { st(p).mood = mood; st(p).moodC = colour; }
 
     /** In an overlay conversation: whether the choices open the window by themselves (else the player presses the answer key). */
     public static void ask(ServerPlayer p, boolean on) { st(p).ask = on; }
@@ -126,6 +133,8 @@ public final class Dialogue {
         t.putBoolean("open", open);
         t.putBoolean("hud", s.hud);
         t.putBoolean("ask", s.ask);
+        t.putString("mood", s.mood);
+        t.putInt("moodC", s.moodC);
         PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
     }
 

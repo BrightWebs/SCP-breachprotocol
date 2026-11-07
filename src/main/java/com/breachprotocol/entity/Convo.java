@@ -48,6 +48,30 @@ final class Convo {
     static void subtitle(ServerPlayer p, FoundationStaff s) {
         int t = trust(s, p);
         Dialogue.subtitle(p, Talk.staffSubtitle(s) + " · " + hearts(t) + " " + bond(t));
+        mood(p, s);
+    }
+
+    /** Their mood, from what's happening around them and their temperament. */
+    static void mood(ServerPlayer p, FoundationStaff s) {
+        Sites.Site x = site(s);
+        Talk.Temper tp = Talk.temper(s);
+        int morale = WorldNews.morale(p.server) + Career.data(p).stability / 20 - 2;
+        WorldNews.Item death = WorldNews.latest(p.server, WorldNews.Kind.DEATH);
+        String m;
+        int c;
+        if (x != null && Defence.alertAt(x.name) != null) { m = "Alarmed"; c = 0xFF6060; }
+        else if (Talk.anomalyNear(s, 20) != null) { m = "Frightened"; c = 0xFF9060; }
+        else if (!s.illness().isEmpty()) { m = "Unwell"; c = 0xB0C890; }
+        else if (death != null && p.server.overworld().getGameTime() - death.time() < 24000) { m = "Grieving"; c = 0x90A8C8; }
+        else if (morale < 0) {
+            m = switch (tp) { case BOLD -> "Steeled"; case CAREFUL -> "Anxious"; case CYNICAL -> "Sour"; case EARNEST -> "Worried"; };
+            c = 0xE0B060;
+        } else {
+            m = switch (tp) { case BOLD -> "Confident"; case CAREFUL -> "Calm"; case CYNICAL -> "Wry"; case EARNEST -> "Hopeful"; };
+            c = 0x80E0A0;
+        }
+        if (trust(s, p) >= 8 && c == 0x80E0A0) m = "Glad to see you";
+        Dialogue.mood(p, m, c);
     }
 
     // ================================================================== context

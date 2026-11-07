@@ -137,6 +137,16 @@ public final class Talk {
                 {"I'm saving up for a little place by the sea. No anomalies. Just water.",
                         "Then again, the sea is where half of them come from.",
                         "Maybe a little place by a lake."}});
+        STORIES.put(FoundationStaff.Role.SECRETARY, new String[][]{
+                {"I was a legal secretary in Geneva. A client of ours had a briefcase nobody was allowed to open. I opened it.",
+                        "It was empty. Two days later, two very polite men offered me a job. I've wondered ever since what I didn't see.",
+                        "Now I keep the Administrator's diary. Some days I'm the only person on Earth who knows where you'll be."},
+                {"I applied for an ordinary office job. The interview was in a room with no doors. I still don't know how I got in.",
+                        "They said I was the first applicant who didn't panic. I said I'd worked in a hospital at night. That was true.",
+                        "I file the Council's correspondence. You learn a great deal about thirteen people from how they sign their letters."},
+                {"My mother was a Foundation translator. She never said so. I found her badge after the funeral.",
+                        "I asked to be posted wherever she was. They gave me her old desk. Her coffee ring is still on it.",
+                        "I don't think she'd approve of everything I see here. I think she'd approve of the people."}});
     }
 
     // ================================================================== reading the moment
@@ -275,7 +285,7 @@ public final class Talk {
     }
 
     public static String story(Entity s, FoundationStaff.Role role, ServerPlayer p) {
-        String[][] pool = STORIES.get(role);
+        String[][] pool = STORIES.getOrDefault(role, STORIES.get(FoundationStaff.Role.CLERK));
         String[] st = pool[storyIndex(s, pool.length)];
         String key = "bp_story_" + p.getUUID();
         int ch = s.getPersistentData().getInt(key);
@@ -357,6 +367,7 @@ public final class Talk {
     public static void openO5(ServerPlayer p, O5MemberEntity m) {
         O5 me = m.getSeat();
         Dialogue.begin(p, sess(m), me.sender(), o5Subtitle(m), m.getId());
+        Dialogue.mood(p, m.isUnseated() ? "Retired" : WorldNews.morale(p.server) < 0 ? "Grave" : "Composed", m.isUnseated() ? 0xB0B8C4 : WorldNews.morale(p.server) < 0 ? 0xE0B060 : 0xE05050);
         say(p, m, Career.rank(p) == Rank.ADMINISTRATOR ? "Administrator." : "Yes?");
         mainMenu(p, m);
         Dialogue.send(p, true);
@@ -585,15 +596,34 @@ public final class Talk {
         } else if (e instanceof O5MemberEntity m && m.getSeat() != null) {
             int seat = m.getSeat().seat;
             switch (what) {
-                case "vote" -> say(p, m, o5Vote(m, p));
+                case "vote" -> { say(p, m, o5Vote(m, p)); o5Page(p, m, new String[][]{{"Why?", "o5_why"}, {"Would you vote the same again?", "o5_again"}}); return; }
                 case "story" -> {
                     String key = "bp_story_" + p.getUUID();
                     int ch = m.getPersistentData().getInt(key);
                     String[] st = O5_STORY[Math.max(1, Math.min(12, seat))];
                     say(p, m, st[ch % st.length]);
                     m.getPersistentData().putInt(key, ch + 1);
+                    o5Page(p, m, new String[][]{{"And the rest of the Council?", "o5_peers"}, {"Do you ever regret it?", "o5_regret"}, {"Tell me more", "story"}});
+                    return;
                 }
-                case "worry" -> say(p, m, o5Worry(p));
+                case "worry" -> { say(p, m, o5Worry(p)); o5Page(p, m, new String[][]{{"What should I do about it?", "o5_advice"}, {"Is the Council divided?", "o5_divided"}}); return; }
+                case "o5_why", "o5_again", "o5_peers", "o5_regret", "o5_advice", "o5_divided" -> {
+                    you(p, switch (what) {
+                        case "o5_why" -> "Why?";
+                        case "o5_again" -> "Would you vote the same again?";
+                        case "o5_peers" -> "And the rest of the Council?";
+                        case "o5_regret" -> "Do you ever regret it?";
+                        case "o5_advice" -> "What should I do about it?";
+                        default -> "Is the Council divided?";
+                    });
+                    say(p, m, o5Deep(p, m, seat, what));
+                    o5Page(p, m, switch (what) {
+                        case "o5_why", "o5_again" -> new String[][]{{"What worries you?", "worry"}, {"Your work on the Council", "story"}};
+                        case "o5_peers", "o5_regret" -> new String[][]{{"How did you vote?", "vote"}, {"What worries you?", "worry"}};
+                        default -> new String[][]{{"How did you vote?", "vote"}, {"Your work on the Council", "story"}};
+                    });
+                    return;
+                }
                 case "orders" -> { you(p, "I have orders for you."); showOrders = orders(p, m); }
                 case "follow" -> { if (mayCommand(p, m)) { m.follow(p); say(p, m, "As you wish."); showOrders = true; } }
                 case "post" -> { if (mayCommand(p, m)) { m.follow(null); say(p, m, "I'll be at the table."); showOrders = true; } }
@@ -603,6 +633,65 @@ public final class Talk {
         if (showOrders) orders(p, e);
         else if (!what.equals("orders") || !mayCommand(p, e)) mainMenu(p, e);
         Dialogue.send(p, true);
+    }
+
+    /** An Overseer's follow-up page, then send. */
+    private static void o5Page(ServerPlayer p, O5MemberEntity m, String[][] opts) {
+        Dialogue.clearOptions(p);
+        for (String[] o : opts) opt(p, m, o[0], o[1], "", 0x9FD8FF);
+        if (mayCommand(p, m)) opt(p, m, "Orders", "orders", "Tell them what to do", ORDER_C);
+        opt(p, m, "◀ Back to topics", "menu", "Other things to talk about", 0xC8D0DA);
+        opt(p, m, "Goodbye", "bye", "End the conversation", 0xC8D0DA);
+        Dialogue.send(p, true);
+    }
+
+    private static final String[] PEER_LINES = {
+            "%s? We have disagreed on almost everything for thirty years. I would trust them with my life.",
+            "%s keeps their own counsel. I've learned to watch their hands, not their mouth.",
+            "%s is the conscience of the table. Somebody has to be.",
+            "%s and I don't speak outside session. It's better that way.",
+            "%s sees further than the rest of us. That's not always a comfort.",
+            "%s would burn the world to save the Foundation. I'd only burn half."};
+
+    /** The deeper answers an Overseer gives, from their seat and the state of things. */
+    private static String o5Deep(ServerPlayer p, O5MemberEntity m, int seat, String what) {
+        Random r = new Random(m.getUUID().getLeastSignificantBits() ^ p.server.overworld().getDayTime() / 24000);
+        WorldNews.Item d = WorldNews.latest(p.server, WorldNews.Kind.DECISION);
+        CareerData cd = Career.data(p);
+        return switch (what) {
+            case "o5_why" -> d == null ? "There was nothing to vote on. Silence is a vote too, of a kind."
+                    : d.supporters().contains(seat) ? new String[]{"", "Because I have seen what happens when we hesitate.", "Because the kind choice and the right one were the same, for once.",
+                    "> BECAUSE THE MODELS SAID SO. AND BECAUSE I AGREED WITH THEM.", "Because our partners would have read anything else as weakness.", "Because someone outside was waiting for us to do the opposite.",
+                    "Because I've buried people who waited.", "Because three moves from now, we need that piece on the board.", "Because my task forces can carry it.",
+                    "Because I saw how the other road ends.", "Because the archive tells me we tried the other way once.", "Because the paperwork for the alternative is a confession.",
+                    "Because it was the cheaper mistake."}[Math.max(1, Math.min(12, seat))]
+                    : "Because I thought it was wrong. I still think so. But the Council decided, and I'll carry it out.";
+            case "o5_again" -> d == null ? "Ask me after the next session." : d.mood() >= 0 ? "Yes. Look at the stability figures. It worked." : "...I don't know. Ask me in a year.";
+            case "o5_peers" -> {
+                int other = 1 + Math.floorMod(seat * 5 + 3, 12);
+                if (other == seat) other = other % 12 + 1;
+                yield String.format(PEER_LINES[Math.floorMod(seat * 7 + other, PEER_LINES.length)], O5.seat(other).sender());
+            }
+            case "o5_regret" -> m.age() > 100 ? "I'm " + m.age() + ". I have outlived every regret I ever had, and found new ones. Yes." : seat == 1 ? "Every day. That's how I know I'm still the right person for this chair."
+                    : r.nextBoolean() ? "Regret is a luxury for people who get to go home." : "Once. I signed something I shouldn't have. I won't tell you what.";
+            case "o5_advice" -> {
+                if (cd.stability < 45) yield "Stability is at " + cd.stability + "%. Bring it to Tuesday's session, or use your terminal. Don't wait for the Council to wait for you.";
+                Defence.Alert al = null;
+                for (Sites.Site s : Sites.get(p.server).sites) if (Defence.alertAt(s.name) != null) al = Defence.alertAt(s.name);
+                if (al != null) yield al.org + " are at " + al.site + ". Your terminal can send Nu-7. I'd send Nu-7.";
+                for (Sites.Site s : Sites.get(p.server).sites) {
+                    Forces.Station st = Forces.data(p.server).station(s.name);
+                    int want = 0;
+                    for (Forces.Unit u : Forces.Unit.values()) want += st.wanted(u);
+                    if (want - st.members.size() >= 3) yield s.name + " is short of guards. Fix it before something finds out.";
+                }
+                yield cd.agenda.size() >= 2 ? "Read the agenda before Tuesday. " + cd.agenda.size() + " of us have put things on it." : "Nothing. That's the hardest advice to take, I know.";
+            }
+            default -> {
+                long split = d == null ? 0 : d.supporters().size();
+                yield d == null ? "Not today." : split <= 4 ? "Yes. The last vote was close, and close votes leave bruises." : "Less than you'd think. We argue in session and close ranks outside it.";
+            }
+        };
     }
 
     // ================================================================== overheard
