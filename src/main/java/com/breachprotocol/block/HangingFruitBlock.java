@@ -60,9 +60,19 @@ public class HangingFruitBlock extends Block {
             ItemStack got = new ItemStack(fruit.get());
             if (!player.getInventory().add(got)) player.drop(got, false);
             level.setBlock(pos, s.setValue(RIPE, false), Block.UPDATE_ALL);
+            // it grows back: about two minutes for ordinary fruit, ten for the two Trees
+            level.scheduleTick(pos, this, regrowChance >= 60 ? 12000 : 1800 + level.random.nextInt(1200));
             level.playSound(null, pos, SoundEvents.SWEET_BERRY_BUSH_PICK_BERRIES, SoundSource.BLOCKS, 0.9F, 1.1F + level.random.nextFloat() * 0.2F);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
+    }
+
+    @Override
+    protected void tick(BlockState s, ServerLevel level, BlockPos pos, RandomSource r) {
+        if (!s.getValue(RIPE)) {
+            level.setBlock(pos, s.setValue(RIPE, true), Block.UPDATE_CLIENTS);
+            level.sendParticles(net.minecraft.core.particles.ParticleTypes.HAPPY_VILLAGER, pos.getX() + 0.5, pos.getY() + 0.4, pos.getZ() + 0.5, 3, 0.2, 0.2, 0.2, 0);
+        }
     }
 
     @Override
@@ -70,7 +80,8 @@ public class HangingFruitBlock extends Block {
 
     @Override
     protected void randomTick(BlockState s, ServerLevel level, BlockPos pos, RandomSource r) {
-        if (!s.getValue(RIPE) && r.nextInt(regrowChance) == 0) level.setBlock(pos, s.setValue(RIPE, true), Block.UPDATE_CLIENTS);
+        // fruit picked before this version (or whose schedule was lost) still comes back
+        if (!s.getValue(RIPE) && r.nextInt(Math.max(1, regrowChance / 4)) == 0) level.setBlock(pos, s.setValue(RIPE, true), Block.UPDATE_CLIENTS);
     }
 
     @Override
