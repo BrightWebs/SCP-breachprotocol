@@ -15,11 +15,13 @@ public final class ModEntities {
     public static final DeferredRegister<EntityType<?>> ENTITIES = DeferredRegister.create(Registries.ENTITY_TYPE, BreachProtocol.MODID);
 
     public static final DeferredHolder<EntityType<?>, EntityType<O5MemberEntity>> O5_MEMBER = ENTITIES.register("o5_member",
-            () -> EntityType.Builder.of(O5MemberEntity::new, MobCategory.MISC).sized(0.6F, 1.8F)
+            () -> EntityType.Builder.of(O5MemberEntity::new, MobCategory.MISC).sized(0.6F, 1.8F).eyeHeight(1.62F)
+                    .vehicleAttachment(net.minecraft.world.entity.player.Player.DEFAULT_VEHICLE_ATTACHMENT)
                     .clientTrackingRange(8).build("o5_member"));
 
     public static final DeferredHolder<EntityType<?>, EntityType<FoundationStaff>> STAFF = ENTITIES.register("foundation_staff",
-            () -> EntityType.Builder.of(FoundationStaff::new, MobCategory.MISC).sized(0.6F, 1.8F)
+            () -> EntityType.Builder.of(FoundationStaff::new, MobCategory.MISC).sized(0.6F, 1.8F).eyeHeight(1.62F)
+                    .vehicleAttachment(net.minecraft.world.entity.player.Player.DEFAULT_VEHICLE_ATTACHMENT)
                     .clientTrackingRange(8).build("foundation_staff"));
 
     public static final DeferredHolder<EntityType<?>, EntityType<NpcSeat>> NPC_SEAT = ENTITIES.register("npc_seat",
