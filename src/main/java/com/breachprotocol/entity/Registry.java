@@ -23,7 +23,7 @@ public final class Registry extends SavedData {
     public static final class Rec {
         public UUID id;
         public String name = "", status = "offsite", job = "", site = "", rel = "single", genome = "", traits = "", note = "", cause = "", notes = "";
-        public boolean female, player;
+        public boolean female, player, mca;
         public long born, died, due, relSince;
         public UUID mother, father, spouse, partner; // partner: dating or engaged, before marriage
 
@@ -40,7 +40,7 @@ public final class Registry extends SavedData {
             t.putUUID("id", id);
             t.putString("name", name); t.putString("status", status); t.putString("job", job); t.putString("site", site); t.putString("rel", rel);
             t.putString("genome", genome); t.putString("traits", traits); t.putString("note", note); t.putString("cause", cause); t.putString("notes", notes);
-            t.putBoolean("female", female); t.putBoolean("player", player);
+            t.putBoolean("female", female); t.putBoolean("player", player); t.putBoolean("mca", mca);
             t.putLong("born", born); t.putLong("died", died); t.putLong("due", due); t.putLong("relSince", relSince);
             if (mother != null) t.putUUID("mother", mother);
             if (father != null) t.putUUID("father", father);
@@ -54,7 +54,7 @@ public final class Registry extends SavedData {
             r.id = t.getUUID("id");
             r.name = t.getString("name"); r.status = t.getString("status"); r.job = t.getString("job"); r.site = t.getString("site"); r.rel = t.getString("rel");
             r.genome = t.getString("genome"); r.traits = t.getString("traits"); r.note = t.getString("note"); r.cause = t.getString("cause"); r.notes = t.getString("notes");
-            r.female = t.getBoolean("female"); r.player = t.getBoolean("player");
+            r.female = t.getBoolean("female"); r.player = t.getBoolean("player"); r.mca = t.getBoolean("mca");
             r.born = t.getLong("born"); r.died = t.getLong("died"); r.due = t.getLong("due"); r.relSince = t.getLong("relSince");
             if (t.hasUUID("mother")) r.mother = t.getUUID("mother");
             if (t.hasUUID("father")) r.father = t.getUUID("father");

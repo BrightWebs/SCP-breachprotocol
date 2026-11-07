@@ -1,0 +1,102 @@
+{
+  "auto": true,
+  "silent": true,
+  "answers": [
+    {
+      "name": "",
+      "results": [
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_applicant_hire"
+            }
+          ],
+          "actions": {
+            "next": "foundation.applicant_hire",
+            "bp": "intro_applicant"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_applicant"
+            }
+          ],
+          "actions": {
+            "next": "foundation.applicant",
+            "bp": "intro_applicant"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_boss"
+            }
+          ],
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "intro_boss"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_colleague"
+            }
+          ],
+          "actions": {
+            "next": "foundation.colleague",
+            "bp": "intro_colleague"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_director"
+            }
+          ],
+          "actions": {
+            "next": "foundation.director",
+            "bp": "intro_director"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_staff"
+            }
+          ],
+          "actions": {
+            "next": "foundation.staff",
+            "bp": "intro_staff"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_civilian"
+            }
+          ],
+          "actions": {
+            "next": "foundation.civilian",
+            "bp": "intro_civilian"
+          }
+        }
+      ]
+    }
+  ]
+}

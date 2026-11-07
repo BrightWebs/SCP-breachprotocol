@@ -1,0 +1,99 @@
+{
+  "answers": [
+    {
+      "name": "report",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "emp_report"
+          }
+        }
+      ]
+    },
+    {
+      "name": "how",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "emp_how"
+          }
+        }
+      ]
+    },
+    {
+      "name": "commend",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "emp_commend"
+          }
+        }
+      ]
+    },
+    {
+      "name": "post",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "emp_post"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dayoff",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "emp_dayoff"
+          }
+        }
+      ]
+    },
+    {
+      "name": "strange",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.boss",
+            "bp": "strange"
+          }
+        }
+      ]
+    },
+    {
+      "name": "dismiss",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "emp_dismiss"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

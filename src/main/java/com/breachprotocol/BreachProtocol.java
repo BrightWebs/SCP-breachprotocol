@@ -28,6 +28,7 @@ public class BreachProtocol {
         modBus.addListener((net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent e) -> e.enqueueWork(() -> {
             boolean ok = com.breachprotocol.compat.UnleashedApi.onStasisCapture(com.breachprotocol.career.Career::onStasis);
             LOGGER.info(ok ? "Hooked into SCP Unleashed stasis pods." : "SCP Unleashed stasis hook not found; pods won't count as containment.");
+            com.breachprotocol.entity.McaFoundation.install(); // with Minecraft Comes Alive: the Foundation in its dialogue
         }));
         LOGGER.info("Breach Protocol (addon for SCP Unleashed) loaded. The Council is in session.");
     }

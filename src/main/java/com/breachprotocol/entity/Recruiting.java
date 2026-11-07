@@ -138,6 +138,15 @@ public final class Recruiting {
                 tellDeciders(s, v.getName().getString() + " has set off from the village for " + site.name + ", looking for work.");
             }
         }
+        // villagers waiting in a lobby go home after a day
+        for (ServerLevel l : s.getAllLevels())
+            for (Entity e : l.getAllEntities())
+                if (e.getPersistentData().contains("bp_walkin") && McaCompat.isVillager(e) && !e.getPersistentData().contains("bp_cand") && now - e.getPersistentData().getLong("bp_walkin_t") > 24000) {
+                    e.getPersistentData().remove("bp_walkin");
+                    e.getPersistentData().remove("bp_wait");
+                    e.getPersistentData().putLong("bp_seek_no", now + 24000L * 3);
+                    tellDeciders(s, e.getName().getString() + " waited a day in the lobby and went home.");
+                }
         // walk-ins nobody saw go home after a day
         for (ServerLevel l : s.getAllLevels())
             for (FoundationStaff f : l.getEntities(ModEntities.STAFF.get(), e -> e.getPersistentData().contains("bp_walkin") && !e.getPersistentData().contains("bp_cand")))
@@ -151,6 +160,30 @@ public final class Recruiting {
     static FoundationStaff arrive(ServerLevel l, Sites.Site site, Villager v) {
         MinecraftServer s = l.getServer();
         v.getPersistentData().remove("bp_seek");
+        // they stay who they are: an MCA villager, waiting in the lobby
+        int n = 0;
+        for (Entity e : l.getAllEntities()) if (site.name.equals(e.getPersistentData().getString("bp_walkin"))) n++;
+        CompoundTag pd = v.getPersistentData();
+        pd.putString("bp_walkin", site.name);
+        pd.putLong("bp_walkin_t", s.overworld().getGameTime());
+        pd.putLong("bp_wait", lobby(l, site, n).asLong());
+        Registry.Rec rec = McaFoundation.record(v);
+        rec.status = "applicant";
+        rec.note = "came from the village";
+        for (Management.Vacancy vac : Management.open(s)) {
+            if (!vac.site.equals(site.name) || vac.kind.equals("head") || vac.state.equals("running")) continue;
+            vac.cands.add(0, Management.candidateFromVillager(s, v, vac.role));
+            Management.data(s).setDirty();
+            break;
+        }
+        WorldNews.record(s, WorldNews.Kind.HIRE, "walkin", v.getName().getString() + " walked in from the village to ask for a job at " + site.name, 1, "");
+        tellDeciders(s, v.getName().getString() + " has arrived at " + site.name + " and is waiting in the lobby. Talk to them (The facility) or hire them from the Staff app.");
+        return null;
+    }
+
+    /** The old way (kept for worlds where walk-ins became our own staff): convert at the door. */
+    static FoundationStaff arriveAsStaff(ServerLevel l, Sites.Site site, Villager v) {
+        MinecraftServer s = l.getServer();
         int waiting = 0;
         for (FoundationStaff f : l.getEntities(ModEntities.STAFF.get(), e -> site.name.equals(e.getPersistentData().getString("bp_walkin")))) waiting++;
         FoundationStaff f = convert(l, v, FoundationStaff.Role.CLERK, lobby(l, site, waiting));
@@ -328,7 +361,7 @@ public final class Recruiting {
 
     // ================================================================== talking to villagers, as the Foundation
 
-    @SubscribeEvent
+    /** (Superseded: villagers now talk about the Foundation inside MCA's own screen, under "The facility".) */
     public static void interact(PlayerInteractEvent.EntityInteract event) {
         if (!event.getEntity().isShiftKeyDown() || !McaCompat.isVillager(event.getTarget())) return;
         event.setCanceled(true);

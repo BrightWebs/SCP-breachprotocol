@@ -1,0 +1,135 @@
+{
+  "answers": [
+    {
+      "name": "about",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.applicant_hire",
+            "bp": "app_about"
+          }
+        }
+      ]
+    },
+    {
+      "name": "why",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.applicant_hire",
+            "bp": "app_why"
+          }
+        }
+      ]
+    },
+    {
+      "name": "breach",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.applicant_hire",
+            "bp": "app_breach"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hire_researcher",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "hire_researcher"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hire_security",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "hire_security"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hire_medical",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "hire_medical"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hire_technician",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "hire_technician"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hire_admin",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "hire_admin"
+          }
+        }
+      ]
+    },
+    {
+      "name": "hire_janitor",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "hire_janitor"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reject",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main",
+            "bp": "reject"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

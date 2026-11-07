@@ -1,0 +1,99 @@
+{
+  "answers": [
+    {
+      "name": "strange",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "strange"
+          }
+        }
+      ]
+    },
+    {
+      "name": "suspicious",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "suspicious"
+          }
+        }
+      ]
+    },
+    {
+      "name": "facility",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "facility"
+          }
+        }
+      ]
+    },
+    {
+      "name": "cover",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "cover"
+          }
+        }
+      ]
+    },
+    {
+      "name": "amnestic",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "amnestic"
+          }
+        }
+      ]
+    },
+    {
+      "name": "informant",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "informant"
+          }
+        }
+      ]
+    },
+    {
+      "name": "job",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.director",
+            "bp": "job"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

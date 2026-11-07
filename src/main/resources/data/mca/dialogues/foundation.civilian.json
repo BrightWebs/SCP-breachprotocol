@@ -1,0 +1,39 @@
+{
+  "answers": [
+    {
+      "name": "strange",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.civilian",
+            "bp": "strange"
+          }
+        }
+      ]
+    },
+    {
+      "name": "facility",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.civilian",
+            "bp": "facility"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

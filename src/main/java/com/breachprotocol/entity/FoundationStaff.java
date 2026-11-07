@@ -690,6 +690,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
                 sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SNEEZE, getX(), getEyeY(), getZ(), 3, 0.1, 0.1, 0.1, 0.02);
         }
         if (!traitsApplied) applyTraits();
+        if (tickCount % 40 == 0 && com.breachprotocol.compat.McaCompat.present() && McaFoundation.toVillager(this)) return; // with MCA, our people are MCA villagers
         if ("stay".equals(mode) && stayAt != null && sitTarget == null && !Seats.seated(this) && tickCount % 40 == 0 && distanceToSqr(stayAt.getX() + 0.5, stayAt.getY(), stayAt.getZ() + 0.5) > 4)
             getNavigation().moveTo(stayAt.getX() + 0.5, stayAt.getY(), stayAt.getZ() + 0.5, 0.9);
         if (sitTarget != null) {

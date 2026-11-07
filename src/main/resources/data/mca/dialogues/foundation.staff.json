@@ -1,0 +1,63 @@
+{
+  "answers": [
+    {
+      "name": "strange",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.staff",
+            "bp": "strange"
+          }
+        }
+      ]
+    },
+    {
+      "name": "suspicious",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.staff",
+            "bp": "suspicious"
+          }
+        }
+      ]
+    },
+    {
+      "name": "facility",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.staff",
+            "bp": "facility"
+          }
+        }
+      ]
+    },
+    {
+      "name": "cover",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.staff",
+            "bp": "cover"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

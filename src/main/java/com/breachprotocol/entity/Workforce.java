@@ -80,6 +80,16 @@ public final class Workforce {
                 t.putInt("dist", (int) Math.sqrt(f.distanceToSqr(p)));
                 if (Social.partner(f, p)) t.putBoolean("partner", true);
                 if (Lifecycle.marriedTo(f, p)) t.putBoolean("spouseOfYou", true);
+            } else if (McaFoundation.villager(s, e.id) instanceof net.minecraft.world.entity.Entity v) {
+                // an MCA villager on the payroll
+                t.putBoolean("here", true);
+                t.putBoolean("villager", true);
+                t.putInt("hearts", Math.max(0, Math.min(10, (com.breachprotocol.compat.McaHooks.hearts(v, p) + 100) / 20)));
+                t.putInt("respect", Math.max(0, Math.min(10, 1 + Scene.tier(p).ordinal() * 2)));
+                t.putString("pers", McaFoundation.personality(v).label);
+                t.putInt("years", (int) Math.max(0, (now - v.getPersistentData().getLong("bp_emp_since")) / Registry.YEAR));
+                t.putString("state", now < v.getPersistentData().getLong("bp_emp_off") ? "Day off" : McaFoundation.condition("saw", v, p) ? "Shaken" : "On duty");
+                t.putInt("dist", (int) Math.sqrt(v.distanceToSqr(p)));
             } else t.putString("state", "Away");
             long day = s.overworld().getDayTime() / 24000;
             t.putBoolean("noted", e.notes.contains(p.getUUID() + "@" + day));
@@ -157,6 +167,20 @@ public final class Workforce {
                 t.putInt("waited", (int) ((now - f.getPersistentData().getLong("bp_walkin_t")) / 1000));
                 walk.add(t);
             }
+        if (com.breachprotocol.compat.McaCompat.present())
+            for (net.minecraft.server.level.ServerLevel l : s.getAllLevels())
+                for (net.minecraft.world.entity.Entity v : l.getAllEntities()) {
+                    if (!v.getPersistentData().contains("bp_walkin") || !com.breachprotocol.compat.McaCompat.isVillager(v) || v.getPersistentData().contains("bp_cand")) continue;
+                    CompoundTag t = new CompoundTag();
+                    t.putString("id", v.getUUID().toString());
+                    t.putString("name", v.getName().getString());
+                    t.putString("site", v.getPersistentData().getString("bp_walkin"));
+                    t.putString("pers", McaFoundation.personality(v).label);
+                    t.putInt("age", McaFoundation.record(v).age(now));
+                    t.putString("traits", String.join(", ", com.breachprotocol.compat.McaCompat.traits(v)).replace('_', ' '));
+                    t.putInt("waited", (int) ((now - v.getPersistentData().getLong("bp_walkin_t")) / 1000));
+                    walk.add(t);
+                }
         ListTag sites = new ListTag();
         for (Sites.Site x : Sites.get(s).sites) sites.add(StringTag.valueOf(x.name));
         ListTag log = new ListTag();
@@ -193,12 +217,21 @@ public final class Workforce {
                 case "refresh" -> {}
                 case "note" -> note(p, uuid(x[1]), x[2]);
                 case "summon" -> {
+                    net.minecraft.world.entity.Entity vil = McaFoundation.villager(s, uuid(x[1]));
+                    if (vil instanceof net.minecraft.world.entity.npc.Villager vv) {
+                        vv.getPersistentData().putLong("bp_emp_off", s.overworld().getGameTime() + 2400);
+                        vv.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.WALK_TARGET, new net.minecraft.world.entity.ai.memory.WalkTarget(p.blockPosition(), 0.7F, 2));
+                        toast(p, vil.getName().getString() + " is coming over.");
+                        break;
+                    }
                     FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
                     if (f == null) toast(p, "They're not on site right now.");
                     else if (f.distanceTo(p) > 160) toast(p, f.getName().getString() + " is too far away to come. (" + (int) f.distanceTo(p) + " m)");
                     else { f.order("follow", p); Memory.put(f, p, "last_order", "follow"); toast(p, f.getName().getString() + " is on the way to you."); }
                 }
                 case "release" -> {
+                    net.minecraft.world.entity.Entity vil = McaFoundation.villager(s, uuid(x[1]));
+                    if (vil != null) { vil.getPersistentData().remove("bp_emp_off"); toast(p, vil.getName().getString() + " is going back to work."); break; }
                     FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
                     if (f != null) { f.order("post", p); Memory.put(f, p, "last_order", "post"); toast(p, f.getName().getString() + " is going back to work."); }
                 }
@@ -214,6 +247,14 @@ public final class Workforce {
                 }
                 case "dismiss" -> {
                     if (!hires(p)) break;
+                    net.minecraft.world.entity.Entity vil = McaFoundation.villager(s, uuid(x[1]));
+                    if (vil != null) {
+                        McaFoundation.dismiss(vil);
+                        vil.getPersistentData().putLong("bp_amn_t", s.overworld().getGameTime());
+                        Registry.log(s, vil.getName().getString() + " was let go and went home to the village.");
+                        toast(p, vil.getName().getString() + " has been let go. They'll go home to the village.");
+                        break;
+                    }
                     FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
                     if (f == null) { toast(p, "They need to be on site."); break; }
                     Registry.Rec e = Registry.of(f);
@@ -244,6 +285,12 @@ public final class Workforce {
                     toast(p, n + (v.kind.equals("head") ? " has been appointed." : " is hired and on the way to their post."));
                 }
                 case "walkhire" -> {
+                    net.minecraft.world.entity.Entity vil = McaFoundation.villager(s, uuid(x[1]));
+                    if (vil != null && hires(p)) {
+                        FoundationStaff.Role role = FoundationStaff.Role.values()[Math.max(0, Math.min(5, Integer.parseInt(x[2])))];
+                        toast(p, McaFoundation.hire(p, vil, role) ? vil.getName().getString() + " is hired as " + role.title + "." : "Personnel couldn't find a desk for them.");
+                        break;
+                    }
                     FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
                     if (f == null || !Recruiting.walkIn(f) || !hires(p)) break;
                     FoundationStaff.Role role = FoundationStaff.Role.values()[Math.max(0, Math.min(5, Integer.parseInt(x[2])))];
@@ -251,6 +298,14 @@ public final class Workforce {
                     toast(p, Recruiting.hireWalkIn(p, f, role) ? n + " is hired as " + role.title + "." : "Personnel couldn't find a desk for them.");
                 }
                 case "walkhome" -> {
+                    net.minecraft.world.entity.Entity vil = McaFoundation.villager(s, uuid(x[1]));
+                    if (vil != null && hires(p)) {
+                        vil.getPersistentData().remove("bp_walkin");
+                        vil.getPersistentData().remove("bp_wait");
+                        vil.getPersistentData().putLong("bp_seek_no", s.overworld().getGameTime() + 24000L * 3);
+                        toast(p, vil.getName().getString() + " is walking back to the village.");
+                        break;
+                    }
                     FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
                     if (f != null && Recruiting.walkIn(f) && hires(p)) { toast(p, f.getName().getString() + " is walking back to the village."); Recruiting.goHome(f); }
                 }

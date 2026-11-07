@@ -1,0 +1,94 @@
+{
+  "auto": true,
+  "answers": [
+    {
+      "name": "",
+      "results": [
+        {
+          "baseChance": 10,
+          "conditions": [
+            {
+              "chance": 5,
+              "hearts_min": 20
+            }
+          ],
+          "actions": {
+            "command": "location"
+          }
+        },
+        {
+          "baseChance": 1,
+          "conditions": [
+            {
+              "chance": 5,
+              "trait": "sirben"
+            }
+          ],
+          "actions": {
+            "next": "rumors.lore"
+          }
+        },
+        {
+          "baseChance": 5,
+          "conditions": [
+            {
+              "chance": 5,
+              "hearts_max": -5
+            }
+          ],
+          "actions": {
+            "next": "rumors.failed"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 12,
+              "bp": "attack"
+            }
+          ],
+          "actions": {
+            "next": "rumors.foundation_attack"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 6,
+              "bp": "near_site"
+            }
+          ],
+          "actions": {
+            "next": "rumors.foundation_site"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 10,
+              "bp": "saw"
+            }
+          ],
+          "actions": {
+            "next": "rumors.foundation_saw"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 8,
+              "bp": "amnestic"
+            }
+          ],
+          "actions": {
+            "next": "rumors.foundation_gap"
+          }
+        }
+      ]
+    }
+  ]
+}

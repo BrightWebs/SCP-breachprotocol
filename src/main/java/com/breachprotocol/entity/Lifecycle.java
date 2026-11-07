@@ -151,7 +151,7 @@ public final class Lifecycle {
             }
         }
         for (Registry.Rec e : new ArrayList<>(reg.people.values())) {
-            if (!e.alive()) continue;
+            if (!e.alive() || e.mca) continue; // MCA lives its villagers' lives itself
             // relationships move on
             if (e.partner != null && !e.player && e.id.compareTo(e.partner) < 0) {
                 Registry.Rec o = Registry.find(srv, e.partner);

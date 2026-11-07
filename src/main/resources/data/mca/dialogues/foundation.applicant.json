@@ -1,0 +1,51 @@
+{
+  "answers": [
+    {
+      "name": "about",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.applicant",
+            "bp": "app_about"
+          }
+        }
+      ]
+    },
+    {
+      "name": "why",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.applicant",
+            "bp": "app_why"
+          }
+        }
+      ]
+    },
+    {
+      "name": "breach",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.applicant",
+            "bp": "app_breach"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

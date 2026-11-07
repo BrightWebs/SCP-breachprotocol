@@ -1,0 +1,51 @@
+{
+  "answers": [
+    {
+      "name": "report",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.colleague",
+            "bp": "emp_report"
+          }
+        }
+      ]
+    },
+    {
+      "name": "how",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.colleague",
+            "bp": "emp_how"
+          }
+        }
+      ]
+    },
+    {
+      "name": "strange",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.colleague",
+            "bp": "strange"
+          }
+        }
+      ]
+    },
+    {
+      "name": "back",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "main"
+          }
+        }
+      ]
+    }
+  ]
+}

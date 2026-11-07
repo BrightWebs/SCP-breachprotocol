@@ -273,6 +273,25 @@ public final class Management {
         return c;
     }
 
+    /** A shortlist entry for an MCA villager waiting in the lobby. */
+    static CompoundTag candidateFromVillager(MinecraftServer s, Entity v, int role) {
+        CompoundTag c = new CompoundTag();
+        Random r = new Random(v.getUUID().getLeastSignificantBits());
+        Registry.Rec e = McaFoundation.record(v);
+        c.putUUID("id", v.getUUID());
+        c.putString("name", v.getName().getString());
+        c.putBoolean("female", e.female);
+        c.putInt("age", e.age(s.overworld().getGameTime()));
+        c.putInt("comp", 2 + r.nextInt(7));
+        c.putString("mole", "");
+        c.putString("bg", "Walked up from the village to ask for work. No Foundation experience; plenty of willingness.");
+        c.putString("genome", e.genome);
+        c.putString("traits", e.traits);
+        c.putBoolean("villager", true);
+        c.putBoolean("mcaVillager", true);
+        return c;
+    }
+
     /** A shortlist entry for someone already standing here (a walk-in from the village). */
     static CompoundTag candidateFrom(MinecraftServer s, FoundationStaff f, int role) {
         CompoundTag c = new CompoundTag();
@@ -328,6 +347,12 @@ public final class Management {
         for (int i = 0; i < 3; i++) v.cands.add(candidate(s, role, r, taken));
         sortBest(v);
         // villagers waiting in the lobby get first look
+        if (com.breachprotocol.compat.McaCompat.present())
+            for (Entity w : l.getAllEntities())
+                if (v.site.equals(w.getPersistentData().getString("bp_walkin")) && com.breachprotocol.compat.McaCompat.isVillager(w) && !w.getPersistentData().contains("bp_cand")) {
+                    v.cands.add(0, candidateFromVillager(s, w, role.ordinal()));
+                    if (v.cands.size() > 4) v.cands.remove(v.cands.size() - 1);
+                }
         for (FoundationStaff w : l.getEntities(ModEntities.STAFF.get(), e -> v.site.equals(e.getPersistentData().getString("bp_walkin")) && !e.getPersistentData().contains("bp_cand")))
             if (role != FoundationStaff.Role.SECRETARY || w.isFemale()) { v.cands.add(0, candidateFrom(s, w, role.ordinal())); if (v.cands.size() > 4) v.cands.remove(v.cands.size() - 1); }
         d.vac.add(v);
@@ -443,6 +468,12 @@ public final class Management {
         int i = 0;
         for (Tag x : v.cands) {
             CompoundTag c = (CompoundTag) x;
+            Entity vil = McaFoundation.villager(s, c.getUUID("id"));
+            if (vil != null) {
+                vil.getPersistentData().putInt("bp_cand", v.id);
+                vil.getPersistentData().putLong("bp_wait", waiting(t, i++).asLong());
+                continue;
+            }
             FoundationStaff f = Lifecycle.entity(s, c.getUUID("id"));
             if (f != null || c.getBoolean("internal") || c.getBoolean("villager")) {
                 if (f == null) continue;
@@ -496,6 +527,14 @@ public final class Management {
             by = v.kind.equals("head") ? "the O5 Council" : v.kind.equals("secretary") ? "the O5 Council" : hn != null ? hn : "Personnel";
         } else by = "the Administrator";
         hire(s, v, chosen, by);
+        for (Tag x : v.cands) {
+            Entity vil = McaFoundation.villager(s, ((CompoundTag) x).getUUID("id"));
+            if (vil == null || vil.getUUID().equals(chosen.getUUID("id"))) continue;
+            vil.getPersistentData().remove("bp_cand");
+            vil.getPersistentData().remove("bp_wait");
+            vil.getPersistentData().remove("bp_walkin");
+            vil.getPersistentData().putLong("bp_seek_no", s.overworld().getGameTime() + 24000L * 3);
+        }
         for (FoundationStaff f : present(s, v)) {
             if (f.getUUID().equals(chosen.getUUID("id"))) continue;
             f.getPersistentData().remove("bp_cand");
@@ -545,6 +584,13 @@ public final class Management {
                 WorldNews.record(s, WorldNews.Kind.HIRE, "secretary", "the Administrator chose " + name + " as their new secretary", 1, "");
             } else if (t != null) fd.secretaryDue.put(t.name, s.overworld().getGameTime()); // the Council's usual appointment
             fd.setDirty();
+            return;
+        }
+        Entity vil = McaFoundation.villager(s, id);
+        if (vil != null) {
+            McaFoundation.employ(vil, v.role(), v.site, post);
+            WorldNews.record(s, WorldNews.Kind.HIRE, "hire", name + " from the village joined " + v.site + " as " + v.what() + (by.equals("Personnel") ? "" : ", chosen by " + by), 1, "");
+            Registry.log(s, name + " was hired from the village as " + v.what() + " at " + v.site + " (chosen by " + by + ").");
             return;
         }
         FoundationStaff f = Lifecycle.entity(s, id);
