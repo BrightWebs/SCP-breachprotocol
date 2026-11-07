@@ -57,6 +57,7 @@ public class DialogueScreen extends Screen {
         Minecraft mc = Minecraft.getInstance();
         if (tag.getBoolean("desktop")) { mc.setScreen(new PhoneScreen(true)); return; }
         if (tag.getBoolean("close")) {
+            if (mc.screen instanceof com.breachprotocol.client.mca.McaInteractScreen m && m.data().getString("session").equals(tag.getString("session"))) m.closeQuietly();
             if (DialogueHud.hud != null && DialogueHud.hud.getString("session").equals(tag.getString("session"))) DialogueHud.hud = null;
             if (mc.screen instanceof DialogueScreen d && d.data.getString("session").equals(tag.getString("session")))
                 d.closeQuietly();
@@ -72,6 +73,13 @@ public class DialogueScreen extends Screen {
             } else if (choice && tag.getBoolean("ask") && mc.screen == null) {
                 mc.setScreen(new DialogueScreen(tag));
             }
+            return;
+        }
+        // talking to someone face to face: the MCA-style interaction screen
+        if (tag.getString("session").startsWith("npc:")) {
+            if (mc.screen instanceof com.breachprotocol.client.mca.McaInteractScreen m) m.update(tag);
+            else if (tag.getBoolean("open") && (mc.screen == null || mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen || mc.screen instanceof DialogueScreen))
+                mc.setScreen(new com.breachprotocol.client.mca.McaInteractScreen(tag));
             return;
         }
         if (mc.screen instanceof DialogueScreen d) {

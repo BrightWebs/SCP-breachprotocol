@@ -465,6 +465,9 @@ public class FoundationStaff extends PathfinderMob implements Person {
     }
 
     /** Someone hands them a remedy. Returns true if the offer was understood. */
+    /** A remedy handed over from the interaction screen. True if it was one (it's then handled). */
+    boolean acceptRemedy(ServerPlayer p, ItemStack held) { return offered(p, held); }
+
     private boolean offered(ServerPlayer p, ItemStack held) {
         String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
         String line;
@@ -588,6 +591,8 @@ public class FoundationStaff extends PathfinderMob implements Person {
     private String pick(String... s) { return s[random.nextInt(s.length)]; }
 
     private void say(ServerPlayer p, String line) {
+        // in the middle of a conversation, it's said there
+        if (Dialogue.active(p, "npc:" + getId())) { Talk.say(p, this, line); return; }
         p.sendSystemMessage(Component.literal(name() + ": ").withStyle(ChatFormatting.AQUA)
                 .append(Component.literal(line).withStyle(ChatFormatting.GRAY)));
     }

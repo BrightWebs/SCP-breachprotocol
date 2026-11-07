@@ -328,6 +328,11 @@ public final class Talk {
         Dialogue.option(p, label, "/talk " + e.getId() + " " + what, hover, c);
     }
 
+    /** A reply to what they just said. */
+    static void ans(ServerPlayer p, Entity e, String label, String what, String hover) {
+        Dialogue.answer(p, label, "/talk " + e.getId() + " " + what, hover);
+    }
+
     static String staffSubtitle(FoundationStaff s) {
         return s.role().title + " · age " + s.age() + " · " + Math.min(years(s), Math.max(1, s.age() - 21)) + " years with the Foundation"
                 + (s.illness().isEmpty() ? "" : " · unwell");
@@ -343,8 +348,28 @@ public final class Talk {
         else if (e instanceof O5MemberEntity m) Dialogue.begin(p, sess(e), m.getSeat() == null ? m.getName().getString() : m.getSeat().sender(), o5Subtitle(m), e.getId());
     }
 
+    /** An Overseer's facts for the left of the screen. */
+    static void o5Info(ServerPlayer p, O5MemberEntity m) {
+        O5 me = m.getSeat();
+        java.util.List<String> info = new java.util.ArrayList<>();
+        info.add((m.isUnseated() ? "Former Overseer" : "Overseer, seat " + me.seat) + " · age " + m.age());
+        info.add("Personality: " + me.role);
+        if (m.age() > 100) info.add("Traits: long-lived (SCP-006)");
+        Dialogue.info(p, info, -1);
+    }
+
+    /** The topic buttons down the right for an Overseer (without clearing the answers). */
+    static void mainMenuButtons(ServerPlayer p, O5MemberEntity e) {
+        opt(p, e, "How did you vote?", "vote", "Their vote on the latest decision", 0);
+        opt(p, e, "Your work", "story", "Their role on the Council", 0);
+        opt(p, e, "What worries you?", "worry", "The Council's concerns", 0);
+        if (mayCommand(p, e)) opt(p, e, "Orders", "orders", "Tell them what to do", ORDER_C);
+        opt(p, e, "Goodbye", "bye", "End the conversation", 0xC8D0DA);
+    }
+
     static void mainMenu(ServerPlayer p, Entity e) {
         if (e instanceof FoundationStaff fs) { Convo.menu(p, fs); return; }
+        if (e instanceof O5MemberEntity m) { Dialogue.clearOptions(p); o5Info(p, m); mainMenuButtons(p, m); return; }
         Dialogue.clearOptions(p);
         if (e instanceof FoundationStaff) {
             opt(p, e, "How are things?", "how", "Ask how they're doing", 0);
@@ -376,11 +401,11 @@ public final class Talk {
         Dialogue.mood(p, m.isUnseated() ? "Retired" : WorldNews.morale(p.server) < 0 ? "Grave" : "Composed", m.isUnseated() ? 0xB0B8C4 : WorldNews.morale(p.server) < 0 ? 0xE0B060 : 0xE05050);
         say(p, m, line);
         Dialogue.clearOptions(p);
-        opt(p, m, topBrass(p) ? "Carry on." : "Of course.", "o5_carry", "", 0xFFFFFF);
-        opt(p, m, "What's on your mind?", "worry", "Their concerns", 0xFFFFFF);
-        if (mayCommand(p, m)) opt(p, m, "Walk with me.", "follow", "They come with you", 0xFFFFFF);
-        opt(p, m, "Something else...", "menu", "Other things to talk about", 0xC8D0DA);
-        opt(p, m, "Goodbye", "bye", "End the conversation", 0xC8D0DA);
+        ans(p, m, topBrass(p) ? "Carry on." : "Of course.", "o5_carry", "");
+        ans(p, m, "What's on your mind?", "worry", "Their concerns");
+        if (mayCommand(p, m)) ans(p, m, "Walk with me.", "follow", "They come with you");
+        o5Info(p, m);
+        mainMenuButtons(p, m);
         Dialogue.send(p, true);
     }
 
@@ -653,10 +678,9 @@ public final class Talk {
     /** An Overseer's follow-up page, then send. */
     private static void o5Page(ServerPlayer p, O5MemberEntity m, String[][] opts) {
         Dialogue.clearOptions(p);
-        for (String[] o : opts) opt(p, m, o[0], o[1], "", 0x9FD8FF);
-        if (mayCommand(p, m)) opt(p, m, "Orders", "orders", "Tell them what to do", ORDER_C);
-        opt(p, m, "◀ Back to topics", "menu", "Other things to talk about", 0xC8D0DA);
-        opt(p, m, "Goodbye", "bye", "End the conversation", 0xC8D0DA);
+        for (String[] o : opts) ans(p, m, o[0], o[1], "");
+        o5Info(p, m);
+        mainMenuButtons(p, m);
         Dialogue.send(p, true);
     }
 

@@ -50,6 +50,18 @@ final class Convo {
         int t = trust(s, p);
         Dialogue.subtitle(p, Talk.staffSubtitle(s) + " · " + hearts(t) + " " + bond(t));
         mood(p, s);
+        List<String> info = new ArrayList<>();
+        info.add((s.unit() != null ? s.unit().title : s.role().title) + " · age " + s.age());
+        info.add("Personality: " + Scene.cap(Talk.temper(s).name().toLowerCase(Locale.ROOT)));
+        List<String> traits = new ArrayList<>();
+        int yrs = Math.min(Talk.years(s), Math.max(1, s.age() - 21));
+        if (yrs >= 15) traits.add("veteran (" + yrs + " years)");
+        if (s.elder()) traits.add("elderly");
+        if (!s.illness().isEmpty()) traits.add("ill with " + s.illness());
+        if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) traits.add("remembers you");
+        if (!traits.isEmpty()) info.add("Traits: " + String.join(", ", traits));
+        info.add(Scene.cap(bond(t)) + " · " + Scene.of(p, s).place.name());
+        Dialogue.info(p, info, t);
     }
 
     /** Their mood, from what's happening around them and their temperament. */
@@ -135,15 +147,19 @@ final class Convo {
         OPENING.put(p.getUUID(), op.replies());
         Dialogue.clearOptions(p);
         subtitle(p, s);
-        for (int i = 0; i < op.replies().size(); i++) Talk.opt(p, s, op.replies().get(i).label(), "op_" + i, "", 0xFFFFFF);
-        Talk.opt(p, s, "Something else...", "menu", "Other things to talk about", BACK);
-        Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+        for (int i = 0; i < op.replies().size(); i++) Talk.ans(p, s, op.replies().get(i).label(), "op_" + i, "");
+        topics(p, s);
     }
 
     // ================================================================== the pages
 
     static void menu(ServerPlayer p, FoundationStaff s) {
         Dialogue.clearOptions(p);
+        topics(p, s);
+    }
+
+    /** The topic buttons down the right of the screen (and the facts down the left). */
+    static void topics(ServerPlayer p, FoundationStaff s) {
         subtitle(p, s);
         Scene.Tier tier = Scene.tier(p);
         if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) Talk.opt(p, s, "You wanted to tell me something?", "recall", "They remember your last conversation", SECRET);
@@ -152,6 +168,7 @@ final class Convo {
             Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
             Talk.opt(p, s, "What happens to me next?", "dtest", "Your next test, if there is one", TOPIC);
             Talk.opt(p, s, "Can I get something to eat?", "dfood", "Some staff will slip you food", TOPIC);
+            Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
             Talk.opt(p, s, "Tell me about yourself", "story", "Not everyone will tell a D-Class", TOPIC);
             if (trust(s, p) >= 6) Talk.opt(p, s, "Off the record...", "secret", "They trust you, D-Class or not", SECRET);
             Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
@@ -167,6 +184,7 @@ final class Convo {
         Talk.opt(p, s, "Site security", "safe", "Guards, attacks and threats at " + siteName(s), TOPIC);
         if (trust(s, p) >= (tier.ordinal() >= Scene.Tier.COUNCIL.ordinal() ? 7 : 6)) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
         Talk.opt(p, s, "Orders", "orders", "Tell them what to do", Talk.ORDER_C);
+        Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
         Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
     }
 
@@ -196,9 +214,8 @@ final class Convo {
         private static void page(ServerPlayer p, FoundationStaff s, String[][] opts) {
         Dialogue.clearOptions(p);
         subtitle(p, s);
-        for (String[] o : opts) Talk.opt(p, s, o[0], o[1], o.length > 2 ? o[2] : "", DEEP);
-        Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
-        Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+        for (String[] o : opts) Talk.ans(p, s, o[0], o[1], o.length > 2 ? o[2] : "");
+        topics(p, s);
     }
 
     /** Handles a choice. Returns false if it isn't one of the conversation pages. */
@@ -209,6 +226,15 @@ final class Convo {
         int trust = trust(s, p);
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
+            case "gift" -> {
+                ItemStack held = p.getMainHandItem();
+                if (held.isEmpty()) { Talk.say(p, s, "...Your hands are empty."); menu(p, s); return true; }
+                Talk.you(p, "Here. This is for you. (" + held.getHoverName().getString() + ")");
+                if (s.acceptRemedy(p, held)) { menu(p, s); return true; }
+                gift(p, s, held, r);
+                menu(p, s);
+                return true;
+            }
             case "report" -> {
                 Scene sc = Scene.of(p, s);
                 Talk.you(p, sc.high() ? "Report." : "Status?");
@@ -313,9 +339,9 @@ final class Convo {
                 bump(s, p, "how_need");
                 Dialogue.clearOptions(p);
                 subtitle(p, s);
-                Talk.opt(p, s, "I'll see to it.", "promise", "Promise to help (they'll remember)", DEEP);
-                Talk.opt(p, s, "That's not my problem.", "dismiss", "Brush it off", 0xFF9A9A);
-                Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
+                Talk.ans(p, s, "I'll see to it.", "promise", "Promise to help (they'll remember)");
+                Talk.ans(p, s, "That's not my problem.", "dismiss", "Brush it off");
+                topics(p, s);
                 return true;
             }
             case "promise" -> {
@@ -589,8 +615,8 @@ final class Convo {
                 bump(s, p, "secret");
                 Dialogue.clearOptions(p);
                 subtitle(p, s);
-                for (int i = 0; i < sec.replies().size(); i++) Talk.opt(p, s, sec.replies().get(i).label(), "sr_" + sec.id() + "_" + i, "They'll remember what you said", SECRET);
-                Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
+                for (int i = 0; i < sec.replies().size(); i++) Talk.ans(p, s, sec.replies().get(i).label(), "sr_" + sec.id() + "_" + i, "They'll remember what you said");
+                topics(p, s);
                 return true;
             }
             case "listen_hard", "listen_thanks", "listen_job" -> {
@@ -659,14 +685,40 @@ final class Convo {
                     s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, trust + rp.trust())));
                     Dialogue.clearOptions(p);
                     subtitle(p, s);
-                    Talk.opt(p, s, "Anything else off the record?", "secret", "Another secret", SECRET);
-                    Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
-                    Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+                    Talk.ans(p, s, "Anything else off the record?", "secret", "Another secret");
+                    topics(p, s);
                     return true;
                 }
                 return false;
             }
         }
+    }
+
+    /** A gift: what it means depends on what it is, who they are, and how often you've done it today. */
+    private static void gift(ServerPlayer p, FoundationStaff s, ItemStack held, Random r) {
+        String id = BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        String path = id.substring(id.indexOf(':') + 1);
+        long day = s.level().getDayTime() / 24000;
+        String k = "bp_gift_" + p.getUUID() + "_" + path;
+        boolean again = s.getPersistentData().getLong(k) == day + 1;
+        int delta;
+        String line;
+        boolean food = held.has(net.minecraft.core.component.DataComponents.FOOD);
+        boolean flower = held.is(net.minecraft.tags.ItemTags.FLOWERS);
+        boolean precious = path.contains("diamond") || path.contains("emerald") || path.contains("gold_ingot") || path.contains("amethyst");
+        boolean gun = id.startsWith("scp_unleashed:") && (path.contains("pistol") || path.contains("rifle") || path.contains("shotgun") || path.contains("revolver"));
+        if (again) { delta = 0; line = "Another one? You don't have to keep giving me things, you know."; }
+        else if (flower) { delta = 2; line = s.isFemale() ? "Flowers? In this place? ...Thank you. I'll put them on my desk." : "Flowers. Nobody's ever given me flowers. I don't know what to say."; }
+        else if (food) { delta = 1; line = Scene.tier(p) == Scene.Tier.DCLASS ? "You're giving ME food? You need it more than I do. ...Thank you." : Talk.pick(r, "Real food. Not the canteen stuff. Thank you.", "I skipped lunch. You're a lifesaver."); }
+        else if (precious) { delta = 2; line = "This is... far too much. I'll keep it somewhere safe."; }
+        else if (gun && s.role() == FoundationStaff.Role.GUARD) { delta = 2; line = "Now that's a gift I'll use. Thank you."; s.setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, held.copyWithCount(1)); }
+        else if (path.contains("dirt") || path.contains("rotten") || path.contains("poisonous") || path.contains("spider_eye")) { delta = -2; line = "...Is this a joke? It's not funny."; }
+        else { delta = 0; line = Talk.pick(r, "Oh. Thank you. I'm not sure what I'll do with it.", "That's... thoughtful. I think."); }
+        held.shrink(1);
+        s.getPersistentData().putLong(k, day + 1);
+        s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, trust(s, p) + delta)));
+        Memory.count(s, p, "gifts");
+        Talk.say(p, s, line);
     }
 
     private static int sickNear(FoundationStaff s) {

@@ -25,6 +25,8 @@ public final class Dialogue {
         boolean hud, ask = true;
         String mood = "";
         int moodC;
+        java.util.List<String> info = new java.util.ArrayList<>();
+        int hearts = -1;
         long touched;
     }
 
@@ -70,6 +72,8 @@ public final class Dialogue {
         s.ask = true;
         s.mood = "";
         s.moodC = 0;
+        s.info = new java.util.ArrayList<>();
+        s.hearts = -1;
     }
 
     /** How the person you're talking to seems right now (shown under their portrait). */
@@ -101,6 +105,18 @@ public final class Dialogue {
     }
 
     public static void clearOptions(ServerPlayer p) { st(p).options.clear(); st(p).input = ""; }
+
+    /** An answer to what they just said (shown under their words, MCA-style), rather than a topic button. */
+    public static void answer(ServerPlayer p, String label, String action, String hover) {
+        option(p, label, action, hover, 0xFFFFFF);
+        st(p).options.get(st(p).options.size() - 1).putBoolean("answer", true);
+    }
+
+    /** The facts shown down the left of the interaction screen (role, personality, traits), and trust in hearts. */
+    public static void info(ServerPlayer p, java.util.List<String> lines, int hearts) {
+        st(p).info = new java.util.ArrayList<>(lines);
+        st(p).hearts = hearts;
+    }
 
     public static void option(ServerPlayer p, String label, String action, String hover, int colour) {
         CompoundTag t = new CompoundTag();
@@ -134,6 +150,10 @@ public final class Dialogue {
         t.putBoolean("hud", s.hud);
         t.putBoolean("ask", s.ask);
         t.putString("mood", s.mood);
+        ListTag inf = new ListTag();
+        for (String i : s.info) inf.add(net.minecraft.nbt.StringTag.valueOf(i));
+        t.put("info", inf);
+        t.putInt("hearts", s.hearts);
         t.putInt("moodC", s.moodC);
         PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
     }
