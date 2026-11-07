@@ -970,6 +970,8 @@ public class FoundationStaff extends PathfinderMob implements Person {
         unit = com.breachprotocol.career.Forces.Unit.of(tag.getString("Unit"));
         var spd = getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
         if (spd != null && spd.getBaseValue() < 0.28) spd.setBaseValue(0.28);
+        var fr = getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE);
+        if (fr != null && fr.getBaseValue() < 64) fr.setBaseValue(64);
         if (tag.hasUUID("Leader")) leader = tag.getUUID("Leader");
         if (tag.contains("StayX")) { stayAt = new BlockPos(tag.getInt("StayX"), tag.getInt("StayY"), tag.getInt("StayZ")); if ("stay".equals(mode)) restrictTo(stayAt, 1); }
         if ("follow".equals(mode)) clearRestriction();
