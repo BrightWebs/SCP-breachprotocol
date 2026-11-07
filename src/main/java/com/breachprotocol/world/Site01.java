@@ -31,25 +31,35 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.phys.AABB;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
 
 /**
  * Site-01: the Administrator's sanctum. One per world, carved deep under the overworld at a
  * seed-derived spot 1.4-2km from spawn the first time someone becomes The Administrator.
- * Council chamber with the twelve Overseers, armory, medical bay, archive, quarters,
- * a two-cell containment wing - and at the far end, the Gate and the Altar.
+ * Built from SCP Unleashed's facility blocks, laid out around one grand hall:
+ *
+ * <pre>
+ *   z 0-18   containment wing (two cells) | O5 Council chamber | archive
+ *   z 18-26  the Grand Hall  -------------------------------->  Gate Hall (tall) | blast gate | Ascension chamber
+ *   z 26-44  armory | medical bay | quarters | link corridor | command centre
+ *   z 44-50  south wing hall
+ *   z 50-71  research lab | server room | MTF barracks | the Administrator's office
+ * </pre>
  */
 public final class Site01 {
     private Site01() {}
 
     public static final int SX = 66, SY = 10, SZ = 72;
-    private static final int FLAGS = Block.UPDATE_CLIENTS;
+    /** 3 = rebuilt from SCP Unleashed's facility blocks. Older sites are rebuilt on the next visit. */
+    private static final int VERSION = 3;
 
     // ------------------------------------------------------------------ saved state
 
     public static class Data extends SavedData {
         public boolean built;
-        /** 2 = has the south wing (Administrator's office, lab, server room, barracks). */
+        /** Layout version (see VERSION). */
         public int version;
 
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
@@ -89,14 +99,11 @@ public final class Site01 {
     public static BlockPos ensureBuilt(ServerLevel overworld) {
         BlockPos o = location(overworld);
         Data data = overworld.getDataStorage().computeIfAbsent(Data.FACTORY, "breachprotocol_site01");
-        if (!data.built) {
-            build(overworld, o);
+        if (!data.built || data.version < VERSION) {
+            // first visit, or an older layout: (re)build the whole site
+            new Builder(overworld, o).build();
             data.built = true;
-            data.version = 2;
-            data.setDirty();
-        } else if (data.version < 2) {
-            buildSouthWing(overworld, o);
-            data.version = 2;
+            data.version = VERSION;
             data.setDirty();
         }
         registerSite(overworld, o);
@@ -119,379 +126,368 @@ public final class Site01 {
         sites.setDirty();
     }
 
-    // ------------------------------------------------------------------ helpers
+    // ================================================================== the build
 
-    private static void fill(ServerLevel l, BlockPos o, int x1, int y1, int z1, int x2, int y2, int z2, BlockState s) {
-        for (int x = Math.min(x1, x2); x <= Math.max(x1, x2); x++)
-            for (int y = Math.min(y1, y2); y <= Math.max(y1, y2); y++)
-                for (int z = Math.min(z1, z2); z <= Math.max(z1, z2); z++)
-                    l.setBlock(o.offset(x, y, z), s, FLAGS);
-    }
+    private static final class Builder extends FacilityBuilder {
+        private static final int Y = -1;   // floor blocks at y=-1, you stand at y=0
 
-    private static void set(ServerLevel l, BlockPos o, int x, int y, int z, BlockState s) {
-        l.setBlock(o.offset(x, y, z), s, FLAGS);
-    }
+        Builder(ServerLevel l, BlockPos o) { super(l, o); }
 
-    private static BlockState b(Block block) {
-        return block.defaultBlockState();
-    }
+        void build() {
+            for (int cx = (o.getX() - 2) >> 4; cx <= (o.getX() + SX + 2) >> 4; cx++)
+                for (int cz = (o.getZ() - 2) >> 4; cz <= (o.getZ() + SZ + 2) >> 4; cz++)
+                    l.getChunk(cx, cz);
+            // the old Overseers, if this is a rebuild
+            for (O5MemberEntity m : l.getEntitiesOfClass(O5MemberEntity.class, new AABB(o.getX() - 2, o.getY() - 4, o.getZ() - 2, o.getX() + SX + 2, o.getY() + SY + 4, o.getZ() + SZ + 2)))
+                m.discard();
+            fill(-1, -2, -1, SX, SY, SZ, "reinforced_containment_wall");
 
-    /** Furniture and machines: placed like a player places them, so multi-block parts are built. */
-    private static void put(ServerLevel l, BlockPos o, int x, int y, int z, String id, Block fallback) {
-        put(l, o, x, y, z, id, fallback, null);
-    }
-
-    private static void put(ServerLevel l, BlockPos o, int x, int y, int z, String id, Block fallback, Direction facing) {
-        Block blk = Unleashed.block(id, fallback);
-        if (!Placer.place(l, o.offset(x, y, z), blk, facing) && fallback != Blocks.AIR)
-            Placer.place(l, o.offset(x, y, z), fallback, facing); // never leave a half-built block
-    }
-
-    /** A ceiling lamp, hung from the block above. */
-    private static void lamp(ServerLevel l, BlockPos o, int x, int y, int z, String id) {
-        Block blk = Unleashed.block(id, Blocks.SEA_LANTERN);
-        if (!Placer.ceiling(l, o.offset(x, y, z), blk)) l.setBlock(o.offset(x, y, z), Blocks.SEA_LANTERN.defaultBlockState(), Block.UPDATE_CLIENTS);
-    }
-
-    /** A wall-mounted sign or light: mounted on whichever horizontal neighbour is solid. */
-    private static void wallPut(ServerLevel l, BlockPos o, int x, int y, int z, String id) {
-        Block blk = Unleashed.block(id, Blocks.AIR);
-        if (blk == Blocks.AIR) return;
-        BlockPos p = o.offset(x, y, z);
-        for (Direction d : Direction.Plane.HORIZONTAL) {
-            if (l.getBlockState(p.relative(d)).isFaceSturdy(l, p.relative(d), d.getOpposite()) && Placer.wall(l, p, blk, d.getOpposite())) return;
+            hall();
+            southHall();
+            gateAndAltar();
+            containment();
+            council();
+            archive();
+            armory();
+            medical();
+            quarters();
+            link();
+            command();
+            lab();
+            servers();
+            barracks();
+            office();
         }
-        Placer.ceiling(l, p, blk);
-    }
 
-    /** An SCP Unleashed block by id (vanilla fallback if it's ever missing). */
-    private static BlockState u(String id, Block fallback) {
-        return Unleashed.block(id, fallback).defaultBlockState();
-    }
+        // ---------------------------------------------------------------- the Grand Hall
 
-    private static ItemStack ui(String id, net.minecraft.world.level.ItemLike fallback, int n) {
-        return new ItemStack(Unleashed.item(id, fallback.asItem()), n);
-    }
-
-    private static void chest(ServerLevel l, BlockPos o, int x, int y, int z, Direction facing, ItemStack... items) {
-        BlockPos p = o.offset(x, y, z);
-        l.setBlock(p, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, facing), FLAGS);
-        BlockEntity be = l.getBlockEntity(p);
-        if (be instanceof ChestBlockEntity c) {
-            for (int i = 0; i < items.length && i < 27; i++) c.setItem(i, items[i]);
-        }
-    }
-
-    private static void bed(ServerLevel l, BlockPos o, int x, int y, int z, Block bed, Direction facing) {
-        BlockPos foot = o.offset(x, y, z);
-        l.setBlock(foot, bed.defaultBlockState().setValue(BedBlock.FACING, facing).setValue(BedBlock.PART, BedPart.FOOT), FLAGS);
-        l.setBlock(foot.relative(facing), bed.defaultBlockState().setValue(BedBlock.FACING, facing).setValue(BedBlock.PART, BedPart.HEAD), FLAGS);
-    }
-
-    private static void door(ServerLevel l, BlockPos o, int x, int y, int z, Direction facing) {
-        BlockState d = Blocks.IRON_DOOR.defaultBlockState().setValue(DoorBlock.FACING, facing);
-        l.setBlock(o.offset(x, y, z), d.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), FLAGS);
-        l.setBlock(o.offset(x, y + 1, z), d.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), FLAGS);
-    }
-
-    private static BlockState stair(Block s, Direction facing) {
-        return s.defaultBlockState().setValue(StairBlock.FACING, facing);
-    }
-
-    private static ItemStack st(net.minecraft.world.level.ItemLike item, int n) {
-        return new ItemStack(item, n);
-    }
-
-    private static ItemStack ench(ServerLevel l, net.minecraft.world.level.ItemLike item, Object... pairs) {
-        ItemStack s = new ItemStack(item);
-        Registry<Enchantment> reg = l.registryAccess().registryOrThrow(Registries.ENCHANTMENT);
-        for (int i = 0; i + 1 < pairs.length; i += 2) {
-            @SuppressWarnings("unchecked") ResourceKey<Enchantment> key = (ResourceKey<Enchantment>) pairs[i];
-            Holder<Enchantment> h = reg.getHolderOrThrow(key);
-            s.enchant(h, (Integer) pairs[i + 1]);
-        }
-        return s;
-    }
-
-    private static void lights(ServerLevel l, BlockPos o, int x1, int x2, int z1, int z2, int y, int step) {
-        for (int x = x1; x <= x2; x += step)
-            for (int z = z1; z <= z2; z += step)
-                set(l, o, x, y, z, b(Blocks.SEA_LANTERN));
-    }
-
-    // ------------------------------------------------------------------ the build
-
-    private static void build(ServerLevel l, BlockPos o) {
-        // make sure every chunk exists before we carve it
-        for (int cx = (o.getX() - 2) >> 4; cx <= (o.getX() + SX + 2) >> 4; cx++)
-            for (int cz = (o.getZ() - 2) >> 4; cz <= (o.getZ() + SZ + 2) >> 4; cz++)
-                l.getChunk(cx, cz);
-
-        BlockState wall = b(Unleashed.cellWall());
-        BlockState air = b(Blocks.AIR);
-        fill(l, o, 0, -1, 0, SX, SY - 1, SZ, wall);
-
-        // --- main hall
-        fill(l, o, 2, 0, 19, 52, 5, 25, air);
-        fill(l, o, 2, -1, 19, 52, -1, 25, b(Blocks.POLISHED_DEEPSLATE));
-        fill(l, o, 3, 0, 22, 47, 0, 22, b(Blocks.RED_CARPET));
-        lights(l, o, 4, 52, 20, 24, 6, 4);
-        fill(l, o, 4, -1, 21, 6, -1, 23, b(Blocks.CHISELED_QUARTZ_BLOCK));
-
-        // --- the gate approach (tall) and the Gate itself
-        fill(l, o, 40, 0, 18, 52, 8, 26, air);
-        fill(l, o, 40, -1, 18, 52, -1, 26, b(Blocks.POLISHED_BLACKSTONE));
-        lights(l, o, 42, 50, 19, 25, 9, 4);
-        fill(l, o, 53, 0, 19, 54, 7, 25, b(Blocks.GILDED_BLACKSTONE));
-        fill(l, o, 53, 0, 20, 54, 6, 24, air);
-        fill(l, o, 53, -1, 20, 54, -1, 24, b(Blocks.GOLD_BLOCK));
-
-        // --- ascension chamber
-        fill(l, o, 55, 0, 14, 64, 8, 30, air);
-        fill(l, o, 55, -1, 14, 64, -1, 30, b(Blocks.QUARTZ_BLOCK));
-        for (int[] c : new int[][]{{56, 15}, {63, 15}, {56, 29}, {63, 29}, {56, 22}, {63, 22}}) {
-            fill(l, o, c[0], 0, c[1], c[0], 8, c[1], b(Blocks.CRYING_OBSIDIAN));
-        }
-        fill(l, o, 58, 0, 20, 62, 0, 24, b(Blocks.QUARTZ_BRICKS));
-        fill(l, o, 59, 0, 21, 61, 0, 23, b(Blocks.GOLD_BLOCK));
-        set(l, o, 60, 1, 22, b(ModBlocks.ASCENSION_ALTAR.get()));
-        for (int[] c : new int[][]{{59, 21}, {61, 21}, {59, 23}, {61, 23}}) set(l, o, c[0], 1, c[1], b(Blocks.END_ROD));
-        lights(l, o, 57, 63, 16, 28, 9, 3);
-
-        // --- council chamber
-        fill(l, o, 18, 0, 4, 36, 6, 17, air);
-        fill(l, o, 18, -1, 4, 36, -1, 17, b(Blocks.POLISHED_BLACKSTONE_BRICKS));
-        fill(l, o, 26, 0, 18, 28, 3, 18, air);
-        fill(l, o, 23, 0, 8, 31, 0, 13, b(Blocks.POLISHED_BLACKSTONE));
-        fill(l, o, 24, 0, 9, 30, 0, 12, b(Blocks.CRIMSON_PLANKS));
-        lights(l, o, 20, 34, 6, 16, 7, 4);
-        set(l, o, 27, 0, 5, stair(Blocks.QUARTZ_STAIRS, Direction.NORTH));
-        set(l, o, 27, 0, 4, b(Blocks.GOLD_BLOCK));
-        set(l, o, 27, 1, 4, b(Blocks.GOLD_BLOCK));
-        int[][] seats = {{24, 7}, {26, 7}, {28, 7}, {30, 7}, {24, 14}, {26, 14}, {28, 14}, {30, 14}, {22, 9}, {22, 12}, {32, 9}, {32, 12}};
-        for (int i = 0; i < seats.length; i++) {
-            int[] s = seats[i];
-            Direction f = s[1] == 7 ? Direction.NORTH : s[1] == 14 ? Direction.SOUTH : s[0] == 22 ? Direction.WEST : Direction.EAST;
-            set(l, o, s[0], 0, s[1], stair(Blocks.POLISHED_BLACKSTONE_STAIRS, f));
-            O5MemberEntity m = ModEntities.O5_MEMBER.get().create(l);
-            if (m != null) {
-                m.setSeat(O5.seat(i + 1));
-                double ex = o.getX() + s[0] + 0.5, ez = o.getZ() + s[1] + 0.5;
-                float yaw = (float) (Mth.atan2((o.getZ() + 10.5) - ez, (o.getX() + 27.5) - ex) * Mth.RAD_TO_DEG) - 90F;
-                m.moveTo(ex, o.getY() + 0.5, ez, yaw, 0);
-                m.setYHeadRot(yaw);
-                m.setYBodyRot(yaw);
-                l.addFreshEntity(m);
+        private void hall() {
+            room(EZ, 0, 18, 40, 26, Y, true);
+            for (int x = 1; x < 40; x++) {
+                set(x, Y, 22, "facility_carpet_blue");
+                set(x, Y, 21, EZ.marked() + "[facing=north]");
+                set(x, Y, 23, EZ.marked() + "[facing=south]");
             }
+            // the Foundation emblem at the west end, planters and benches down the sides
+            scpSign(1, Y + 3, 23, E);
+            plate(1, Y + 2, 21, E, "SITE-01", "Office of the", "Administrator");
+            for (int x : new int[]{4, 16, 24, 37}) {
+                set(x, Y + 1, 19, "ez_planter[facing=south]");
+                set(x, Y + 1, 25, "ez_planter[facing=north]");
+            }
+            for (int i = 0; i < 3; i++) {
+                set(12 + i, Y + 1, 19, "ez_waiting_chairs[facing=south]");
+                set(30 + i, Y + 1, 19, "ez_waiting_chairs[facing=south]");
+                set(12 + i, Y + 1, 25, "ez_waiting_chairs[facing=north]");
+                set(28 + i, Y + 1, 25, "ez_waiting_chairs[facing=north]");
+            }
+            set(1, Y + 1, 19, "potted_plant[facing=east]");
+            set(1, Y + 1, 25, "potted_plant[facing=east]");
+            set(20, Y + 3, 19, "wall_clock[facing=south]");
+            set(38, Y + 3, 19, "ez_directory_sign[facing=south]");
         }
 
-        // --- containment wing: two cells walled in SCP Unleashed reinforced containment wall
-        fill(l, o, 4, 0, 4, 16, 5, 17, air);
-        fill(l, o, 9, 0, 18, 11, 3, 18, air);
-        fill(l, o, 4, -1, 4, 16, -1, 17, b(Blocks.SMOOTH_STONE));
-        lights(l, o, 6, 14, 12, 16, 6, 4);
-        for (int cx : new int[]{5, 11}) {
-            fill(l, o, cx, 0, 5, cx + 4, 3, 9, wall);
-            fill(l, o, cx + 1, 0, 6, cx + 3, 2, 8, air);
-            set(l, o, cx + 2, 3, 7, b(Blocks.SEA_LANTERN));
-            door(l, o, cx + 2, 0, 9, Direction.SOUTH);
-            // exit from inside the cell
-            set(l, o, cx + 3, 1, 8, Blocks.STONE_BUTTON.defaultBlockState().setValue(ButtonBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(ButtonBlock.FACING, Direction.NORTH));
-            set(l, o, cx + 3, 1, 10, Blocks.LEVER.defaultBlockState()
-                    .setValue(LeverBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(LeverBlock.FACING, Direction.SOUTH));
+        // ---------------------------------------------------------------- the Gate and the Altar
+
+        private void gateAndAltar() {
+            Pal arch = new Pal("scp5001_arch_floor", "scp5001_arch_floor_seam", "scp5001_arch_graphite_panel", "scp5001_arch_panel",
+                    "scp5001_arch_panel_seam", "scp5001_arch_ceiling", "scp5001_arch_glass");
+            // Gate Hall: tall, dark steel, the hall opens into it
+            room(HCZP, 40, 16, 54, 28, Y, 8, false);
+            for (int z = 19; z <= 25; z++) for (int yy = Y + 1; yy <= Y + 4; yy++) set(40, yy, z, "minecraft:air");
+            for (int x = 41; x < 54; x++) set(x, Y, 22, "hcz_floor_arrow[facing=east]");
+            for (int x = 42; x <= 52; x += 5) for (int z = 18; z <= 26; z += 4) light(x, Y + 8, z, false);
+            for (int x = 42; x <= 52; x += 5) { stack(x, Y + 1, 17, "hcz_pipe_manifold", S, 6); stack(x, Y + 1, 27, "hcz_pipe_manifold", N, 6); }
+            sign2("facility_sign_heavy_containment", 41, Y + 6, 17, S, "none", false);
+            // Ascension chamber
+            room(arch, 54, 12, SX - 1, 32, Y, 8, false);
+            for (int x = 56; x < SX - 2; x += 3) for (int z = 14; z <= 30; z += 4) set(x, Y + 9, z, "scp5001_arch_ceiling_light");
+            // pillars down both sides
+            for (int z = 14; z <= 30; z += 4) for (int yy = Y + 1; yy <= Y + 8; yy++) { set(56, yy, z, "scp5001_arch_graphite_panel"); set(SX - 3, yy, z, "scp5001_arch_graphite_panel"); }
+            // the dais: two steps up to the Altar
+            fill(57, Y + 1, 18, 63, Y + 1, 26, "scp5001_arch_floor_hex");
+            for (int z = 18; z <= 26; z++) set(57, Y + 1, z, "scp5001_arch_stairs[facing=east,half=bottom,shape=straight]");
+            fill(58, Y + 2, 20, 62, Y + 2, 24, "scp5001_arch_floor_glyph");
+            for (int z = 20; z <= 24; z++) set(58, Y + 2, z, "scp5001_arch_stairs[facing=east,half=bottom,shape=straight]");
+            set(60, Y + 3, 22, ModBlocks.ASCENSION_ALTAR.get().defaultBlockState());
+            for (int[] c : new int[][]{{59, 21}, {61, 21}, {59, 23}, {61, 23}}) set(c[0], Y + 3, c[1], Blocks.END_ROD.defaultBlockState());
+            for (int x = 55; x < SX - 1; x++) { set(x, Y, 22, "scp5001_arch_floor_glyph"); }
+            for (int z = 14; z <= 30; z += 8) set(SX - 2, Y + 4, z, "scp5001_arch_panel_glyph[glyph=" + (z % 3) + "]");
+            // the Gate: a blast gate, Level 5
+            gate("blast_gate", 4, 4, 54, 20, Y, W, 5);
+            plate(53, Y + 2, 25, W, "THE GATE", "Level 5", "Administrator", "only");
+
         }
 
-        // --- archive
-        fill(l, o, 38, 0, 4, 52, 5, 15, air);
-        fill(l, o, 44, 0, 16, 46, 3, 17, air);
-        fill(l, o, 38, -1, 4, 52, -1, 15, b(Blocks.DARK_OAK_PLANKS));
-        fill(l, o, 38, 0, 4, 38, 3, 15, b(Blocks.BOOKSHELF));
-        fill(l, o, 52, 0, 4, 52, 3, 15, b(Blocks.BOOKSHELF));
-        fill(l, o, 39, 0, 4, 51, 3, 4, b(Blocks.BOOKSHELF));
-        for (int x = 41; x <= 49; x += 4) set(l, o, x, 0, 9, b(Blocks.LECTERN));
-        set(l, o, 45, 0, 12, b(Unleashed.block("archive", Blocks.LECTERN))); // SCP Unleashed's Archive Terminal
-        lights(l, o, 40, 50, 6, 14, 6, 4);
-        chest(l, o, 45, 0, 5, Direction.SOUTH,
-                st(Unleashed.item("facility_tablet", Items.MAP), 1), st(ModItems.PHONE.get(), 1), st(Unleashed.keycard(1), 1), st(Unleashed.keycard(2), 1),
-                st(Unleashed.keycard(3), 1), st(Unleashed.keycard(4), 1), st(Unleashed.keycard(5), 2), st(Unleashed.keycard(6), 1),
-                st(Items.BOOK, 32), st(Items.PAPER, 64));
+        // ---------------------------------------------------------------- north side
 
-        // --- armory
-        fill(l, o, 4, 0, 27, 14, 4, 40, air);
-        fill(l, o, 8, 0, 26, 10, 3, 26, air);
-        fill(l, o, 4, -1, 27, 14, -1, 40, b(Blocks.IRON_BLOCK));
-        lights(l, o, 6, 12, 29, 39, 5, 4);
-        chest(l, o, 5, 0, 30, Direction.EAST,
-                ench(l, Items.NETHERITE_SWORD, Enchantments.SHARPNESS, 5, Enchantments.LOOTING, 3, Enchantments.UNBREAKING, 3),
-                ench(l, Items.BOW, Enchantments.POWER, 5, Enchantments.INFINITY, 1, Enchantments.FLAME, 1),
-                st(Items.ARROW, 64), st(Items.SHIELD, 1), ench(l, Items.CROSSBOW, Enchantments.QUICK_CHARGE, 3, Enchantments.MULTISHOT, 1),
-                st(Items.TOTEM_OF_UNDYING, 2), st(Items.ENDER_PEARL, 16), st(Items.GOLDEN_CARROT, 32), st(Items.CARVED_PUMPKIN, 2));
-        chest(l, o, 5, 0, 33, Direction.EAST,
-                ench(l, Items.NETHERITE_HELMET, Enchantments.PROTECTION, 4, Enchantments.UNBREAKING, 3),
-                ench(l, Items.NETHERITE_CHESTPLATE, Enchantments.PROTECTION, 4, Enchantments.UNBREAKING, 3),
-                ench(l, Items.NETHERITE_LEGGINGS, Enchantments.PROTECTION, 4, Enchantments.UNBREAKING, 3),
-                ench(l, Items.NETHERITE_BOOTS, Enchantments.PROTECTION, 4, Enchantments.FEATHER_FALLING, 4));
-        set(l, o, 13, 0, 30, b(Blocks.ANVIL));
-        set(l, o, 13, 0, 33, b(Blocks.SMITHING_TABLE));
-        set(l, o, 13, 0, 36, b(Blocks.GRINDSTONE));
-
-        // --- medical bay
-        fill(l, o, 17, 0, 27, 27, 4, 40, air);
-        fill(l, o, 21, 0, 26, 23, 3, 26, air);
-        fill(l, o, 17, -1, 27, 27, -1, 40, b(Blocks.WHITE_CONCRETE));
-        lights(l, o, 19, 25, 29, 39, 5, 3);
-        for (int x = 18; x <= 24; x += 3) bed(l, o, x, 0, 38, Blocks.WHITE_BED, Direction.SOUTH);
-        chest(l, o, 26, 0, 30, Direction.WEST,
-                st(Unleashed.scp500(), 6), st(Items.GOLDEN_APPLE, 16), st(Items.ENCHANTED_GOLDEN_APPLE, 2),
-                st(Unleashed.item("amnestic_canister", Items.MILK_BUCKET), 8), st(Unleashed.item("scp207_bottle", Items.HONEY_BOTTLE), 2), st(Items.MILK_BUCKET, 1));
-        set(l, o, 26, 0, 33, b(Blocks.BREWING_STAND));
-
-        // --- quarters
-        fill(l, o, 30, 0, 27, 40, 4, 40, air);
-        fill(l, o, 34, 0, 26, 36, 3, 26, air);
-        fill(l, o, 30, -1, 27, 40, -1, 40, b(Blocks.SPRUCE_PLANKS));
-        lights(l, o, 32, 38, 28, 39, 5, 3);
-        bed(l, o, 38, 0, 38, Blocks.PURPLE_BED, Direction.SOUTH);
-        set(l, o, 31, 0, 28, b(Blocks.CRAFTING_TABLE));
-        set(l, o, 32, 0, 28, b(Blocks.FURNACE));
-        set(l, o, 33, 0, 28, b(Blocks.BLAST_FURNACE));
-        set(l, o, 34, 0, 28, b(Blocks.SMOKER));
-        set(l, o, 39, 0, 28, b(Blocks.ENDER_CHEST));
-        set(l, o, 35, 0, 34, b(Blocks.ENCHANTING_TABLE));
-        for (int x = 33; x <= 37; x++) for (int z = 32; z <= 36; z++) {
-            boolean edge = x == 33 || x == 37 || z == 32 || z == 36;
-            boolean gap = (x == 35 && z == 32);
-            if (edge && !gap) { set(l, o, x, 0, z, b(Blocks.BOOKSHELF)); set(l, o, x, 1, z, b(Blocks.BOOKSHELF)); }
+        private void containment() {
+            room(CELL, 0, 10, 16, 18, Y, true);
+            CellSpec a = new CellSpec("", "CELL 01-A", "Unassigned", "Reserved for", "the Administrator", 5, "");
+            CellSpec b = new CellSpec("", "CELL 01-B", "Unassigned", "Reserved for", "the Administrator", 5, "");
+            cell(a, 0, 0, 8, 10, Y, S);
+            cell(b, 8, 0, 16, 10, Y, S);
+            gate("containment_room_door", 2, 2, 7, 18, Y, S, 4);
+            plate(5, Y + 2, 19, S, "CONTAINMENT", "Level 4");
+            set(1, Y + 2, 13, "containment_room_status_panel[facing=east,powered=true]");
+            set(15, Y + 2, 13, "fire_extinguisher[facing=west,wall=true]");
+            chest(15, Y + 1, 16, W,
+                    ui("reinforced_containment_wall", Items.POLISHED_DEEPSLATE, 64), ui("reinforced_containment_wall", Items.POLISHED_DEEPSLATE, 64),
+                    ui("forcefield_emitter", Items.BEACON, 4), ui("keycard_scanner", Items.STONE_BUTTON, 4), ui("containment_door", Items.IRON_DOOR, 4),
+                    ui("rift_extractor", Items.SPYGLASS, 1), ui("mtf_signal_radio", Items.COMPASS, 1), ui("scramble_goggles", Items.CARVED_PUMPKIN, 1),
+                    ui("scp096_bag", Items.LEATHER, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2));
         }
-        chest(l, o, 31, 0, 39, Direction.NORTH,
-                st(Items.COOKED_BEEF, 64), st(Items.BREAD, 32), st(Items.TORCH, 64), st(Items.FIREWORK_ROCKET, 64), st(Items.ELYTRA, 1),
-                ench(l, Items.NETHERITE_PICKAXE, Enchantments.EFFICIENCY, 5, Enchantments.FORTUNE, 3, Enchantments.UNBREAKING, 3),
-                ench(l, Items.NETHERITE_AXE, Enchantments.EFFICIENCY, 5, Enchantments.UNBREAKING, 3),
-                ench(l, Items.NETHERITE_SHOVEL, Enchantments.EFFICIENCY, 5, Enchantments.SILK_TOUCH, 1), st(Items.LAPIS_LAZULI, 64), st(Items.EXPERIENCE_BOTTLE, 64));
-        chest(l, o, 33, 0, 39, Direction.NORTH,
-                st(Unleashed.item("reinforced_containment_wall", Items.POLISHED_DEEPSLATE), 64), st(Unleashed.item("reinforced_containment_wall", Items.POLISHED_DEEPSLATE), 64),
-                st(Unleashed.item("forcefield_emitter", Items.BEACON), 4), st(Unleashed.item("keycard_scanner", Items.STONE_BUTTON), 4),
-                st(Unleashed.item("containment_door", Items.IRON_DOOR), 4), st(Unleashed.item("rift_extractor", Items.SPYGLASS), 1),
-                st(Unleashed.item("mtf_signal_radio", Items.COMPASS), 1), st(Unleashed.item("scramble_goggles", Items.CARVED_PUMPKIN), 1),
-                st(Unleashed.item("scp096_bag", Items.LEATHER), 1), st(Items.REDSTONE_BLOCK, 8),
-                st(Items.BEACON, 1), st(Items.DIAMOND_BLOCK, 4), st(Items.IRON_BLOCK, 16), st(Items.OBSIDIAN, 32));
-        buildSouthWing(l, o);
-    }
 
-    // ------------------------------------------------------------------ south wing
-
-    /**
-     * The Administrator's own wing: a private office behind a Level 5 scanner, a research lab, the
-     * server and power room, and MTF barracks - furnished with SCP Unleashed's own blocks and gear.
-     */
-    private static void buildSouthWing(ServerLevel l, BlockPos o) {
-        for (int cx = (o.getX() - 2) >> 4; cx <= (o.getX() + SX + 2) >> 4; cx++)
-            for (int cz = (o.getZ() + 40) >> 4; cz <= (o.getZ() + SZ + 2) >> 4; cz++)
-                l.getChunk(cx, cz);
-        BlockState wall = b(Unleashed.cellWall()), air = b(Blocks.AIR);
-        fill(l, o, 0, -1, 45, SX, SY - 1, SZ, wall);
-
-        // corridor from the main hall, and the wing hall
-        fill(l, o, 44, 0, 26, 46, 4, 46, air);
-        fill(l, o, 44, -1, 26, 46, -1, 46, u("ez_floor", Blocks.POLISHED_ANDESITE));
-        fill(l, o, 4, 0, 46, 62, 4, 48, air);
-        fill(l, o, 4, -1, 46, 62, -1, 48, u("ez_floor", Blocks.POLISHED_ANDESITE));
-        for (int x = 6; x <= 60; x += 6) lamp(l, o, x, 4, 47, "facility_lamp_white");
-        for (int z = 28; z <= 44; z += 5) lamp(l, o, 45, 4, z, "facility_lamp_white");
-        wallPut(l, o, 45, 3, 26, "facility_sign_entrance_zone_small");
-
-        // --- research lab
-        fill(l, o, 4, 0, 50, 20, 4, 69, air);
-        fill(l, o, 11, 0, 49, 13, 3, 49, air);
-        fill(l, o, 4, -1, 50, 20, -1, 69, u("facility_lab_tile", Blocks.WHITE_CONCRETE));
-        for (int x = 6; x <= 18; x += 4) for (int z = 52; z <= 68; z += 5) lamp(l, o, x, 4, z, "facility_lamp_cyan");
-        put(l, o, 5, 0, 52, "centrifuge", Blocks.CAULDRON);
-        put(l, o, 5, 0, 55, "advanced_assembler", Blocks.CRAFTING_TABLE);
-        put(l, o, 5, 0, 58, "advanced_materials_bench", Blocks.SMITHING_TABLE);
-        put(l, o, 5, 0, 62, "cloning_machine", Blocks.BREWING_STAND);
-        for (int z = 52; z <= 60; z += 4) put(l, o, 19, 0, z, "containment_room_specimen_tank", Blocks.GLASS);
-        put(l, o, 12, 0, 63, "examination_table", Blocks.WHITE_BED);
-        for (int x = 8; x <= 16; x += 2) set(l, o, x, 0, 68, u("chemical_shelf", Blocks.BOOKSHELF));
-        put(l, o, 19, 0, 64, "computer_terminal", Blocks.LECTERN);
-        chest(l, o, 19, 0, 67, Direction.WEST,
-                ui("hazmat_hood", Items.LEATHER_HELMET, 2), ui("hazmat_suit", Items.LEATHER_CHESTPLATE, 2), ui("hazmat_trousers", Items.LEATHER_LEGGINGS, 2),
-                ui("hazmat_boots", Items.LEATHER_BOOTS, 2), ui("gas_mask", Items.LEATHER_HELMET, 2), ui("scramble_goggles", Items.CARVED_PUMPKIN, 2),
-                ui("energum_dust", Items.GLOWSTONE_DUST, 32), ui("rift_extractor", Items.SPYGLASS, 1), ui("rift_detector", Items.COMPASS, 1),
-                ui("stasis_pod_faint", Items.GLASS_BOTTLE, 4), ui("stasis_pod_volatile", Items.GLASS_BOTTLE, 2), ui("scp096_bag", Items.LEATHER, 1),
-                ui("amnestic_canister", Items.MILK_BUCKET, 6));
-        wallPut(l, o, 12, 3, 49, "facility_sign_maintenance_small");
-
-        // --- server and power room
-        fill(l, o, 23, 0, 50, 40, 4, 58, air);
-        fill(l, o, 30, 0, 49, 32, 3, 49, air);
-        fill(l, o, 23, -1, 50, 40, -1, 58, u("power_floor", Blocks.POLISHED_BLACKSTONE));
-        for (int x = 25; x <= 39; x += 5) lamp(l, o, x, 4, 54, "power_lamp");
-        put(l, o, 24, 0, 51, "network_hub", Blocks.LODESTONE);
-        put(l, o, 26, 0, 51, "network_router", Blocks.OBSERVER);
-        put(l, o, 28, 0, 51, "chat_server", Blocks.JUKEBOX);
-        put(l, o, 34, 0, 51, "power_control_console", Blocks.LECTERN);
-        set(l, o, 39, 0, 52, u("power_generator_housing_bottom", Blocks.IRON_BLOCK));
-        set(l, o, 39, 1, 52, u("power_generator_housing_middle", Blocks.IRON_BLOCK));
-        set(l, o, 39, 2, 52, u("power_generator_housing_top", Blocks.IRON_BLOCK));
-        set(l, o, 39, 0, 56, u("power_breaker_panel_bottom", Blocks.IRON_BLOCK));
-        set(l, o, 39, 1, 56, u("power_breaker_panel_middle", Blocks.IRON_BLOCK));
-        set(l, o, 39, 2, 56, u("power_breaker_panel_top", Blocks.IRON_BLOCK));
-        for (int x = 24; x <= 38; x++) set(l, o, x, 3, 57, u("cable_tray", Blocks.IRON_BARS));
-        wallPut(l, o, 31, 3, 49, "facility_sign_server_room_small");
-        chest(l, o, 24, 0, 57, Direction.NORTH,
-                ui("facility_tablet", Items.MAP, 1), ui("camera_tablet", Items.MAP, 1), ui("power_cable_spool", Items.STRING, 8));
-
-        // --- MTF barracks
-        fill(l, o, 23, 0, 61, 40, 4, 69, air);
-        fill(l, o, 23, 0, 59, 25, 3, 60, air);
-        fill(l, o, 23, -1, 61, 40, -1, 69, u("facility_diamond_plate", Blocks.IRON_BLOCK));
-        for (int x = 25; x <= 39; x += 5) lamp(l, o, x, 4, 65, "facility_lamp_white");
-        for (int x = 27; x <= 39; x += 4) bed(l, o, x, 0, 67, Blocks.GRAY_BED, Direction.SOUTH);
-        chest(l, o, 24, 0, 62, Direction.EAST,
-                ui("assault_rifle", Items.CROSSBOW, 2), ui("combat_shotgun", Items.CROSSBOW, 1), ui("pistol", Items.CROSSBOW, 2), ui("machine_gun", Items.CROSSBOW, 1),
-                ui("rifle_rounds", Items.ARROW, 64), ui("rifle_rounds", Items.ARROW, 64), ui("handgun_rounds", Items.ARROW, 64), ui("shotgun_shells", Items.ARROW, 32),
-                ui("frag_grenade", Items.TNT, 8), ui("flash_grenade", Items.SNOWBALL, 8), ui("gas_grenade", Items.SPLASH_POTION, 4));
-        chest(l, o, 24, 0, 65, Direction.EAST,
-                ui("mtf_helmet", Items.IRON_HELMET, 4), ui("mtf_vest", Items.IRON_CHESTPLATE, 4), ui("mtf_signal_radio", Items.COMPASS, 1),
-                ui("unstable_fragment_volatile", Items.AMETHYST_SHARD, 4), ui("unstable_fragment_severe", Items.AMETHYST_SHARD, 2), ui("unstable_fragment_abyssal", Items.AMETHYST_SHARD, 1),
-                ui("scp3008_bandage", Items.PAPER, 16));
-        wallPut(l, o, 24, 3, 60, "facility_sign_armory_small");
-
-        // --- the Administrator's office (Level 5 to enter)
-        fill(l, o, 43, 0, 50, 62, 5, 69, air);
-        fill(l, o, 43, -1, 50, 62, -1, 69, u("facility_carpet_maroon", Blocks.RED_CARPET));
-        door(l, o, 52, 0, 49, Direction.SOUTH);
-        BlockState scanner = u("keycard_scanner", Blocks.STONE_BUTTON);
-        for (net.minecraft.world.level.block.state.properties.Property<?> prop : scanner.getProperties()) {
-            if (prop.getName().equals("level") && prop instanceof net.minecraft.world.level.block.state.properties.IntegerProperty ip && ip.getPossibleValues().contains(5)) scanner = scanner.setValue(ip, 5);
-            if (prop.getName().equals("facing") && prop instanceof net.minecraft.world.level.block.state.properties.DirectionProperty dp && dp.getPossibleValues().contains(Direction.NORTH)) scanner = scanner.setValue(dp, Direction.NORTH);
+        /** The twelve Overseers around a ring table; the Administrator's seat at its head. */
+        private void council() {
+            room(OFFICE.floor("facility_carpet_blue"), 16, 0, 38, 18, Y, true);
+            ezDoor(26, 18, Y, S);
+            plate(29, Y + 2, 19, S, "O5 COUNCIL");
+            int x0 = 21, x1 = 33, z0 = 6, z1 = 12;
+            for (int x = x0; x <= x1; x++) for (int z = z0; z <= z1; z++) {
+                if (!(x == x0 || x == x1 || z == z0 || z == z1)) continue;
+                boolean side = x == x0 || x == x1, end = z == z0 || z == z1;
+                set(x, Y + 1, z, "conference_table[north=" + (side && z > z0) + ",south=" + (side && z < z1) + ",west=" + (end && x > x0) + ",east=" + (end && x < x1) + "]");
+            }
+            List<int[]> seats = new ArrayList<>();
+            for (int x = x0 + 1; x <= x1 - 1; x += 2) { seats.add(new int[]{x, z0 - 1}); seats.add(new int[]{x, z1 + 1}); }
+            double cx = o.getX() + (x0 + x1) / 2.0 + 0.5, cz = o.getZ() + (z0 + z1) / 2.0 + 0.5;
+            for (int i = 0; i < seats.size() && i < 12; i++) {
+                int[] s = seats.get(i);
+                boolean north = s[1] < z0;
+                set(s[0], Y + 1, s[1], "office_chair[facing=" + (north ? "south" : "north") + "]");
+                set(s[0], Y + 2, north ? z0 : z1, "crt_monitor[facing=" + (north ? "north" : "south") + ",lit=true,screen=" + (i % 10) + "]");
+                O5MemberEntity m = ModEntities.O5_MEMBER.get().create(l);
+                if (m != null) {
+                    m.setSeat(O5.seat(i + 1));
+                    double ex = o.getX() + s[0] + 0.5, ez = o.getZ() + s[1] + 0.5;
+                    float yaw = (float) (Mth.atan2(cz - ez, cx - ex) * Mth.RAD_TO_DEG) - 90F;
+                    m.moveTo(ex, o.getY() + 0.5, ez, yaw, 0);
+                    m.setYHeadRot(yaw);
+                    m.setYBodyRot(yaw);
+                    m.setPersistenceRequired();
+                    l.addFreshEntity(m);
+                }
+            }
+            // the Administrator's seat at the head of the table, under the emblem
+            set(x0 - 1, Y + 1, (z0 + z1) / 2, "office_chair[facing=east]");
+            scpSign(17, Y + 3, 10, E);
+            for (int[] p : new int[][]{{17, 1}, {37, 1}, {17, 17}, {37, 17}}) set(p[0], Y + 1, p[1], "ez_planter[facing=south]");
+            for (int z = 3; z <= 15; z += 6) set(37, Y + 2, z, "wall_monitor[facing=west,hanging=false,lit=true,screen=" + z % 10 + "]");
         }
-        set(l, o, 53, 1, 48, scanner);
-        // the way out: a button inside the office, beside the door
-        set(l, o, 53, 1, 50, Blocks.POLISHED_BLACKSTONE_BUTTON.defaultBlockState().setValue(ButtonBlock.FACE, net.minecraft.world.level.block.state.properties.AttachFace.WALL).setValue(ButtonBlock.FACING, Direction.SOUTH));
-        wallPut(l, o, 52, 3, 48, "facility_sign_heavy_containment_small");
-        for (int x = 45; x <= 61; x += 4) for (int z = 52; z <= 68; z += 4) lamp(l, o, x, 5, z, "facility_lamp_purple");
-        // the desk, facing the door
-        put(l, o, 51, 0, 64, "corner_desk", Blocks.DARK_OAK_PLANKS);
-        put(l, o, 52, 0, 64, "corner_desk", Blocks.DARK_OAK_PLANKS);
-        put(l, o, 53, 0, 64, "corner_desk", Blocks.DARK_OAK_PLANKS);
-        put(l, o, 51, 1, 64, "crt_monitor", Blocks.AIR);
-        put(l, o, 52, 1, 64, "computer", Blocks.AIR);
-        put(l, o, 53, 1, 64, "desk_lamp", Blocks.AIR);
-        set(l, o, 52, 0, 65, stair(Blocks.DARK_OAK_STAIRS, Direction.SOUTH));
-        // records wall
-        for (int x = 44; x <= 61; x++) { set(l, o, x, 0, 69, u("binder_shelf", Blocks.BOOKSHELF)); set(l, o, x, 1, 69, u("binder_shelf", Blocks.BOOKSHELF)); }
-        put(l, o, 44, 0, 60, "archive", Blocks.LECTERN);
-        put(l, o, 44, 0, 62, "archive_database_terminal", Blocks.LECTERN);
-        // briefing table
-        for (int x = 48; x <= 56; x++) put(l, o, x, 0, 55, "conference_table", Blocks.DARK_OAK_SLAB);
-        for (int x = 48; x <= 56; x += 2) { set(l, o, x, 0, 54, stair(Blocks.DARK_OAK_STAIRS, Direction.SOUTH)); set(l, o, x, 0, 56, stair(Blocks.DARK_OAK_STAIRS, Direction.NORTH)); }
-        for (int[] c : new int[][]{{44, 51}, {61, 51}, {44, 68}, {61, 68}}) put(l, o, c[0], 0, c[1], "ez_planter", Blocks.POTTED_FERN);
-        bed(l, o, 60, 0, 59, Blocks.PURPLE_BED, Direction.SOUTH);
-        chest(l, o, 61, 0, 62, Direction.WEST,
-                ui("keycard_omni", Items.PAPER, 1), ui("orbital_designator", Items.SPYGLASS, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2),
-                ui("mtf_signal_radio", Items.COMPASS, 1), ui("rift_detector", Items.COMPASS, 1), ui("camera_tablet", Items.MAP, 1), ui("facility_tablet", Items.MAP, 1),
-                new ItemStack(Unleashed.scp500(), 4), ui("scp207_bottle", Items.HONEY_BOTTLE, 2), ui("amnestic_canister", Items.MILK_BUCKET, 4),
-                st(com.breachprotocol.registry.ModItems.PHONE.get(), 1));
+
+        private void archive() {
+            room(OFFICE.floor("facility_carpet_blue"), 38, 0, 54, 16, Y, true);
+            ezDoor(44, 16, Y, S);
+            plate(43, Y + 2, 17, S, "ARCHIVE");
+            for (int z : new int[]{3, 4, 8, 9}) {
+                Direction f = z == 3 || z == 8 ? N : S;
+                for (int x = 40; x <= 52; x++) if (x != 46) stackBlocks(x, Y + 1, z, "office_records_cabinet", f, 3);
+            }
+            for (int z = 1; z <= 15; z++) if (z < 3 || z > 9) set(39, Y + 1, z, "binder_shelf[facing=east]");
+            desksX("office_desk", 40, 43, 13, Y, N, "desk_lamp[facing=$,lit=true]");
+            put(49, Y + 1, 13, "archive", Blocks.LECTERN, N);
+            put(51, Y + 1, 13, "archive_database_terminal", Blocks.LECTERN, N);
+            chest(53, Y + 1, 15, W,
+                    ui("facility_tablet", Items.MAP, 1), new ItemStack(ModItems.PHONE.get(), 1), new ItemStack(Unleashed.keycard(1)), new ItemStack(Unleashed.keycard(2)),
+                    new ItemStack(Unleashed.keycard(3)), new ItemStack(Unleashed.keycard(4)), new ItemStack(Unleashed.keycard(5), 2), new ItemStack(Unleashed.keycard(6)),
+                    new ItemStack(Items.BOOK, 32), new ItemStack(Items.PAPER, 64));
+        }
+
+        // ---------------------------------------------------------------- south side
+
+        private void armory() {
+            room(HCZP, 0, 26, 15, 44, Y, true);
+            gate("hcz_room_door", 2, 2, 7, 26, Y, N, 4);
+            sign2("facility_sign_armory", 8, Y + 4, 25, N, "none", false);
+            for (int z = 28; z <= 42; z++) if (z % 4 != 3) tall(1, Y + 1, z, "locker", E);
+            for (int z = 29; z <= 41; z += 3) set(14, Y + 1, z, "steel_shelf[facing=west]");
+            for (int x = 3; x <= 12; x += 3) stack(x, Y + 1, 43, "hcz_hazard_crate", N, 2);
+            chest(6, Y + 1, 34, E,
+                    ench(Items.NETHERITE_SWORD, Enchantments.SHARPNESS, 5, Enchantments.LOOTING, 3, Enchantments.UNBREAKING, 3),
+                    ench(Items.BOW, Enchantments.POWER, 5, Enchantments.INFINITY, 1, Enchantments.FLAME, 1),
+                    new ItemStack(Items.ARROW, 64), new ItemStack(Items.SHIELD), ench(Items.CROSSBOW, Enchantments.QUICK_CHARGE, 3, Enchantments.MULTISHOT, 1),
+                    new ItemStack(Items.TOTEM_OF_UNDYING, 2), new ItemStack(Items.ENDER_PEARL, 16), new ItemStack(Items.GOLDEN_CARROT, 32));
+            chest(6, Y + 1, 36, E,
+                    ench(Items.NETHERITE_HELMET, Enchantments.PROTECTION, 4, Enchantments.UNBREAKING, 3),
+                    ench(Items.NETHERITE_CHESTPLATE, Enchantments.PROTECTION, 4, Enchantments.UNBREAKING, 3),
+                    ench(Items.NETHERITE_LEGGINGS, Enchantments.PROTECTION, 4, Enchantments.UNBREAKING, 3),
+                    ench(Items.NETHERITE_BOOTS, Enchantments.PROTECTION, 4, Enchantments.FEATHER_FALLING, 4));
+            chest(9, Y + 1, 34, W,
+                    ui("assault_rifle", Items.CROSSBOW, 2), ui("combat_shotgun", Items.CROSSBOW, 1), ui("pistol", Items.CROSSBOW, 2), ui("machine_gun", Items.CROSSBOW, 1),
+                    ui("rifle_rounds", Items.ARROW, 64), ui("rifle_rounds", Items.ARROW, 64), ui("handgun_rounds", Items.ARROW, 64), ui("shotgun_shells", Items.ARROW, 32),
+                    ui("frag_grenade", Items.TNT, 8), ui("flash_grenade", Items.SNOWBALL, 8), ui("gas_grenade", Items.SPLASH_POTION, 4));
+            chest(9, Y + 1, 36, W,
+                    ui("mtf_helmet", Items.IRON_HELMET, 4), ui("mtf_vest", Items.IRON_CHESTPLATE, 4), ui("mtf_signal_radio", Items.COMPASS, 1),
+                    ui("unstable_fragment_volatile", Items.AMETHYST_SHARD, 4), ui("unstable_fragment_severe", Items.AMETHYST_SHARD, 2), ui("unstable_fragment_abyssal", Items.AMETHYST_SHARD, 1));
+            for (int x = 6; x <= 9; x++) set(x, Y + 1, 39, "metal_desk[facing=north,left=" + (x > 6) + ",right=" + (x < 9) + "]");
+            set(3, Y + 1, 39, "minecraft:anvil");
+            set(3, Y + 1, 41, "minecraft:smithing_table");
+            set(12, Y + 1, 41, "minecraft:grindstone");
+        }
+
+        private void medical() {
+            room(MEDICAL, 15, 26, 28, 44, Y, true);
+            ezDoor(21, 26, Y, N);
+            set(22, Y + 3, 25, "facility_sign_medical_small[facing=north]");
+            for (int x = 17; x <= 25; x += 4) {
+                stackBlocks(x, Y + 1, 43, "medical_headwall", N, 3);
+                put(x, Y + 1, 41, "examination_table", Blocks.WHITE_BED, S);
+                set(x + 1, Y + 1, 43, "vitals_monitor[facing=north,lit=true]");
+            }
+            for (int x = 19; x <= 23; x += 4) tall(x, Y + 1, 41, "privacy_screen", N);
+            for (int z = 28; z <= 36; z += 2) set(27, Y + 1, z, "medical_supply_shelf[facing=west]");
+            set(16, Y + 2, 30, "medical_defib_cabinet[facing=east]");
+            set(16, Y + 2, 33, "medical_lightbox[facing=east,lit=true]");
+            set(16, Y + 1, 36, "biohazard_bin[facing=east]");
+            set(20, Y + 1, 33, "wheelchair[facing=east]");
+            chest(16, Y + 1, 28, E, new ItemStack(Unleashed.scp500(), 6), new ItemStack(Items.GOLDEN_APPLE, 16), new ItemStack(Items.ENCHANTED_GOLDEN_APPLE, 2),
+                    ui("amnestic_canister", Items.MILK_BUCKET, 8), ui("scp207_bottle", Items.HONEY_BOTTLE, 2), ui("scp3008_bandage", Items.PAPER, 16));
+        }
+
+        private void quarters() {
+            room(OFFICE.floor("facility_carpet_blue"), 28, 26, 40, 44, Y, true);
+            ezDoor(34, 26, Y, N);
+            plate(33, Y + 2, 25, N, "QUARTERS");
+            Placer.place(l, at(37, Y + 1, 40), Blocks.WHITE_BED, S);
+            set(39, Y + 1, 43, "potted_plant[facing=west]");
+            tall(35, Y + 1, 43, "coat_rack", N);
+            couch("couch_leather", 29, 31, Y, 5, false, E);
+            table("conference_table", null, 31, 32, 31, 34, Y, 1);
+            for (int x = 29; x <= 33; x++) { set(x, Y + 1, 43, "binder_shelf[facing=north]"); set(x, Y + 2, 43, "binder_shelf[facing=north]"); }
+            set(39, Y + 1, 28, "minecraft:crafting_table");
+            set(39, Y + 1, 29, "minecraft:furnace[facing=west]");
+            set(39, Y + 1, 30, "minecraft:blast_furnace[facing=west]");
+            set(39, Y + 1, 31, "minecraft:smoker[facing=west]");
+            set(39, Y + 1, 33, "minecraft:ender_chest[facing=west]");
+            set(35, Y + 1, 35, "minecraft:enchanting_table");
+            for (int x = 33; x <= 37; x++) for (int z = 33; z <= 37; z++) {
+                boolean edge = x == 33 || x == 37 || z == 33 || z == 37;
+                if (edge && !(x == 35 && z == 33)) { set(x, Y + 1, z, "minecraft:bookshelf"); set(x, Y + 2, z, "minecraft:bookshelf"); }
+            }
+            chest(29, Y + 1, 28, E,
+                    new ItemStack(Items.COOKED_BEEF, 64), new ItemStack(Items.BREAD, 32), new ItemStack(Items.TORCH, 64), new ItemStack(Items.FIREWORK_ROCKET, 64), new ItemStack(Items.ELYTRA),
+                    ench(Items.NETHERITE_PICKAXE, Enchantments.EFFICIENCY, 5, Enchantments.FORTUNE, 3, Enchantments.UNBREAKING, 3),
+                    ench(Items.NETHERITE_AXE, Enchantments.EFFICIENCY, 5, Enchantments.UNBREAKING, 3),
+                    ench(Items.NETHERITE_SHOVEL, Enchantments.EFFICIENCY, 5, Enchantments.SILK_TOUCH, 1), new ItemStack(Items.LAPIS_LAZULI, 64), new ItemStack(Items.EXPERIENCE_BOTTLE, 64));
+        }
+
+        /** From the Gate Hall down to the south wing. */
+        private void link() {
+            room(EZ, 42, 28, 48, 44, Y, true);
+            ezDoor(44, 28, Y, N);
+            ezDoor(44, 44, Y, S);
+            for (int z = 29; z < 44; z++) set(45, Y, z, "ez_floor_arrow[facing=south]");
+            set(43, Y + 3, 29, "facility_sign_entrance_zone_small[facing=south]");
+        }
+
+        /** Command centre: the site's eyes and the orbital uplink. */
+        private void command() {
+            room(RESEARCH, 48, 33, SX - 1, 44, Y, true);
+            ezDoor(48, 37, Y, W);
+            plate(47, Y + 2, 36, W, "COMMAND", "CENTRE");
+            desksX("metal_desk", 51, 61, 35, Y, S, "security_monitor[facing=$,lit=true,screen=$]".replace(",screen=$", ",screen=6"));
+            for (int x = 50; x <= 62; x += 2) set(x, Y + 2, 34, "wall_monitor[facing=south,hanging=false,lit=true,screen=" + x % 10 + "]");
+            put(56, Y + 1, 40, "satellite_terminal", Blocks.LECTERN, N);
+            power(58, Y + 1, 42, new int[]{56, Y + 1, 40});
+            set(56, Y + 1, 39, "office_chair[facing=south]");
+            put(52, Y + 1, 41, "scp5001_ctrl_holo_table", Blocks.AIR, N);
+            chest(63, Y + 1, 42, W, ui("orbital_designator", Items.SPYGLASS, 1), ui("camera_tablet", Items.MAP, 1), ui("facility_tablet", Items.MAP, 1));
+        }
+
+        // ---------------------------------------------------------------- south wing
+
+        private void southHall() {
+            room(EZ, 0, 44, SX - 1, 50, Y, false);
+            for (int x = 1; x < SX - 1; x++) { set(x, Y, 45, EZ.marked() + "[facing=north]"); set(x, Y, 49, EZ.marked() + "[facing=south]"); }
+            for (int x = 3; x < SX - 2; x += 5) light(x, Y + 4, 47, true);
+        }
+
+        private void lab() {
+            room(RESEARCH, 0, 50, 21, SZ - 1, Y, true);
+            gate("glass_room_door", 2, 2, 10, 50, Y, N, 3);
+            plate(13, Y + 2, 49, N, "RESEARCH", "LABORATORY");
+            desksX("lab_bench_desk", 5, 15, 58, Y, N, null);
+            desksX("lab_bench_desk", 5, 15, 59, Y, S, null);
+            for (int x = 5; x <= 15; x += 5) set(x, Y + 2, 58, "crt_monitor[facing=north,lit=true,screen=4]");
+            put(2, Y + 1, 53, "centrifuge", Blocks.CAULDRON, E);
+            put(2, Y + 1, 57, "advanced_assembler", Blocks.CRAFTING_TABLE, E);
+            put(2, Y + 1, 61, "advanced_materials_bench", Blocks.SMITHING_TABLE, E);
+            put(2, Y + 1, 65, "cloning_machine", Blocks.BREWING_STAND, E);
+            power(4, Y + 1, 68, new int[]{2, Y + 1, 53}, new int[]{2, Y + 1, 57}, new int[]{2, Y + 1, 61}, new int[]{2, Y + 1, 65});
+            for (int z = 53; z <= 63; z += 2) stack(20, Y + 1, z, "containment_room_specimen_tank", W, 3);
+            put(12, Y + 1, 65, "examination_table", Blocks.WHITE_BED, E);
+            for (int x = 7; x <= 17; x += 2) set(x, Y + 1, SZ - 2, "chemical_shelf[facing=north]");
+            chest(19, Y + 1, SZ - 2, W,
+                    ui("hazmat_hood", Items.LEATHER_HELMET, 2), ui("hazmat_suit", Items.LEATHER_CHESTPLATE, 2), ui("hazmat_trousers", Items.LEATHER_LEGGINGS, 2),
+                    ui("hazmat_boots", Items.LEATHER_BOOTS, 2), ui("gas_mask", Items.LEATHER_HELMET, 2), ui("scramble_goggles", Items.CARVED_PUMPKIN, 2),
+                    ui("energum_dust", Items.GLOWSTONE_DUST, 32), ui("rift_extractor", Items.SPYGLASS, 1), ui("rift_detector", Items.COMPASS, 1),
+                    ui("stasis_pod_faint", Items.GLASS_BOTTLE, 4), ui("stasis_pod_volatile", Items.GLASS_BOTTLE, 2), ui("scp096_bag", Items.LEATHER, 1));
+        }
+
+        private void servers() {
+            room(POWER.floor("facility_metal_mesh"), 21, 50, 31, SZ - 1, Y, false);
+            gate("hcz_room_door", 2, 2, 25, 50, Y, N, 3);
+            set(27, Y + 3, 49, "facility_sign_server_room_small[facing=north]");
+            for (int z : new int[]{53, 55, 56, 58, 59, 61, 62, 64, 65, 67}) {
+                Direction f = (z == 53 || z == 56 || z == 59 || z == 62 || z == 65) ? S : N;
+                for (int x = 23; x <= 29; x++) { tall(x, Y + 1, z, "server_rack", f); set(x, Y + 4, z, "cable_tray[orientation=down_x]"); }
+            }
+            for (int z : new int[]{54, 57, 60, 63, 66, 69}) for (int x = 23; x <= 29; x += 3) light(x, Y + 4, z, true);
+            put(23, Y + 1, 69, "network_hub", Blocks.LODESTONE, N);
+            put(25, Y + 1, 69, "network_router", Blocks.OBSERVER, N);
+            put(27, Y + 1, 69, "chat_server", Blocks.JUKEBOX, N);
+            put(29, Y + 1, 69, "power_control_console", Blocks.LECTERN, N);
+            power(26, Y + 1, 70, new int[]{23, Y + 1, 69}, new int[]{25, Y + 1, 69}, new int[]{27, Y + 1, 69});
+        }
+
+        private void barracks() {
+            room(LCZP, 31, 50, 42, SZ - 1, Y, true);
+            ezDoorBtn(36, 50);
+            plate(39, Y + 2, 49, N, "MTF", "BARRACKS");
+            for (int z = 53; z <= 68; z += 3) { put(32, Y + 1, z, "lcz_cell_bunk", Blocks.GRAY_BED, E); tall(41, Y + 1, z, "locker", W); }
+            table("cafeteria_table", "cafeteria_chair", 36, 58, 37, 62, Y, 2);
+        }
+
+        private void ezDoorBtn(int x, int z) { buttoned("lcz_room_door", 2, 2, x, z, Y, N); }
+
+        /** The Administrator's office: Level 5, the desk facing the door, records and quarters behind. */
+        private void office() {
+            room(OFFICE.floor("facility_carpet_blue"), 42, 50, SX - 1, SZ - 1, Y, true);
+            gate("glass_room_door", 2, 2, 52, 50, Y, N, 5);
+            plate(50, Y + 2, 49, N, "THE", "ADMINISTRATOR");
+            for (int x = 49; x <= 57; x++) set(x, Y + 1, 64, "office_desk[facing=south,left=" + (x > 49) + ",right=" + (x < 57) + "]");
+            put(53, Y + 2, 64, "computer", Blocks.AIR, S);
+            set(51, Y + 2, 64, "crt_monitor[facing=south,lit=true,screen=0]");
+            set(55, Y + 2, 64, "paper_stack[facing=south,variant=1]");
+            set(56, Y + 2, 64, "desk_lamp[facing=south,lit=true]");
+            set(53, Y + 1, 65, "office_chair[facing=north]");
+            set(51, Y + 1, 63, "office_chair[facing=south]");
+            set(55, Y + 1, 63, "office_chair[facing=south]");
+            scpSign(53, Y + 3, SZ - 2, N);
+            for (int x = 43; x <= SX - 2; x++) if (x < 52 || x > 54) { set(x, Y + 1, SZ - 2, "binder_shelf[facing=north]"); set(x, Y + 2, SZ - 2, "binder_shelf[facing=north]"); }
+            put(43, Y + 1, 60, "archive", Blocks.LECTERN, E);
+            put(43, Y + 1, 62, "archive_database_terminal", Blocks.LECTERN, E);
+            table("conference_table", "office_chair", 49, 55, 57, 56, Y, 2);
+            couch("couch_leather", SX - 2, 58, Y, 5, false, W);
+            for (int[] c : new int[][]{{43, 51}, {SX - 2, 51}, {43, SZ - 3}, {SX - 2, SZ - 3}}) set(c[0], Y + 1, c[1], "ez_planter[facing=south]");
+            Placer.place(l, at(SX - 3, Y + 1, 66), Blocks.WHITE_BED, S);
+            chest(SX - 2, Y + 1, 64, W,
+                    ui("keycard_omni", Items.PAPER, 1), ui("orbital_designator", Items.SPYGLASS, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2),
+                    ui("mtf_signal_radio", Items.COMPASS, 1), ui("rift_detector", Items.COMPASS, 1), ui("camera_tablet", Items.MAP, 1), ui("facility_tablet", Items.MAP, 1),
+                    new ItemStack(Unleashed.scp500(), 4), ui("scp207_bottle", Items.HONEY_BOTTLE, 2), ui("amnestic_canister", Items.MILK_BUCKET, 4),
+                    new ItemStack(ModItems.PHONE.get(), 1));
+        }
+
+        private ItemStack ench(net.minecraft.world.level.ItemLike item, Object... pairs) {
+            ItemStack s = new ItemStack(item);
+            Registry<Enchantment> reg = l.registryAccess().registryOrThrow(Registries.ENCHANTMENT);
+            for (int i = 0; i + 1 < pairs.length; i += 2) {
+                @SuppressWarnings("unchecked") ResourceKey<Enchantment> key = (ResourceKey<Enchantment>) pairs[i];
+                Holder<Enchantment> h = reg.getHolderOrThrow(key);
+                s.enchant(h, (Integer) pairs[i + 1]);
+            }
+            return s;
+        }
     }
 }

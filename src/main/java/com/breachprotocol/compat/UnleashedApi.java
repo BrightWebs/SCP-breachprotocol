@@ -369,6 +369,15 @@ public final class UnleashedApi {
                     ((net.minecraft.world.level.block.entity.BlockEntity) be).setChanged();
                 }
             }
+            // charge its battery full (LaunchPlatformBlockEntity.setStored), so it launches without waiting on the wire
+            if (be != null) {
+                try {
+                    be.getClass().getMethod("setStored", int.class).invoke(be, Integer.MAX_VALUE);
+                    ((net.minecraft.world.level.block.entity.BlockEntity) be).setChanged();
+                } catch (Throwable t) {
+                    BreachProtocol.LOGGER.debug("Could not charge {}: {}", id, t.toString());
+                }
+            }
             return true;
         } catch (Throwable t) {
             BreachProtocol.LOGGER.warn("Could not place launch platform {}: {}", id, t.toString());
