@@ -114,7 +114,7 @@ public class PhoneScreen extends Screen {
     private static int rank() { return t().getInt("rank"); }
 
     private static boolean allowed(App a) {
-        if (a == SITE) return rank() >= 7;
+        if (a == SITE) return rank() >= 6 || t().getBoolean("ascended"); // the Council and the Administrator
         if (a == FORCES || a == SECURITY) return false; // checked per screen in allowedHere
         if (a == CALENDAR) return rank() >= 6 || t().getBoolean("ascended");
         return a.allowed().test(clr());

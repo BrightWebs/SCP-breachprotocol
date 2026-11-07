@@ -922,7 +922,7 @@ public final class Career {
             dirs.add(dt);
         }
         t.put("directives", dirs);
-        if (r == Rank.ADMINISTRATOR) {
+        if (r.atLeast(Rank.OVERSEER) || d.ascended) {
             BlockPos s = Site01.location(p.server.overworld());
             t.putString("site", s.getX() + ", " + s.getY() + ", " + s.getZ());
             t.putBoolean("inSite", Site01.isInside(p));
