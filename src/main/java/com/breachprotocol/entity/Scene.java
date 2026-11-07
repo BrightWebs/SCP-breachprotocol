@@ -131,7 +131,7 @@ final class Scene {
     /** What they'd have heard (staff of different rank hear different things). */
     List<WorldNews.Item> news() {
         List<WorldNews.Item> out = new ArrayList<>();
-        for (WorldNews.Item i : WorldNews.recent(p.server, 10)) if (!Talk.mine(i, p)) out.add(i);
+        for (WorldNews.Item i : WorldNews.recent(p.server, 10)) if (!Talk.mine(i, p) && Clearance.knows(tier, i)) out.add(i);
         return out;
     }
 

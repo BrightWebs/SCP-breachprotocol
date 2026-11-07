@@ -76,6 +76,33 @@ public class FoundationStaff extends PathfinderMob {
     /** Her build: 0, 1 or 2. */
     public int bust() { return (int) Math.floorMod(getUUID().getMostSignificantBits() >>> 11, 3L); }
 
+    // ================================================================== looks (from who they are; the same on every client)
+
+    private long look(int shift, long mod) { return Math.floorMod(getUUID().getLeastSignificantBits() >>> shift ^ getUUID().getMostSignificantBits() >>> (shift + 7), mod); }
+
+    /** Her figure, 0 (slight) to 1 (full). */
+    public float bustSize() { return look(3, 1000) / 1000F; }
+
+    private static final String[] MEN = {"short", "short", "buzz", "sidepart", "sidepart", "curly", "bun"};
+    private static final String[] WOMEN = {"long", "long", "bob", "ponytail", "bun", "curly", "bob"};
+
+    public String hairStyle() { return isFemale() ? WOMEN[(int) look(9, WOMEN.length)] : MEN[(int) look(9, MEN.length)]; }
+
+    private static final int[] HAIR = {0x1A1612, 0x2C1E16, 0x3B2A20, 0x5A3A24, 0x6B4A2E, 0x8C4A2A, 0xB5652E, 0xA88A55, 0xD2B67F, 0xE3D6B8};
+
+    public int hairColour() { return elder() ? 0xC8C8CC : age() >= 52 && look(14, 3) == 0 ? 0x8E8C8A : HAIR[(int) look(17, HAIR.length)]; }
+
+    /** "" or beard_full / beard_stubble / moustache. */
+    public String facialHair() {
+        if (isFemale()) return "";
+        return switch ((int) look(21, 10)) { case 0, 1 -> "beard_stubble"; case 2 -> "beard_full"; case 3 -> "moustache"; default -> ""; };
+    }
+
+    public boolean glasses() { return role() != Role.RESEARCHER && look(25, 6) == 0; }
+
+    /** A little taller or shorter than average. */
+    public float heightScale() { return (isFemale() ? 0.94F : 0.97F) + look(29, 100) / 100F * 0.09F; }
+
     public boolean isTalking() { return entityData.get(TALKING); }
 
     public boolean isWaving() { return entityData.get(WAVE) > 0; }

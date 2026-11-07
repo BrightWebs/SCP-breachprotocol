@@ -313,6 +313,9 @@ public final class Talk {
     private static String sess(Entity e) { return "npc:" + e.getId(); }
 
     static void say(ServerPlayer p, Entity who, String line) {
+        // staff only say what your clearance allows (the Overseers themselves speak freely to those they meet)
+        if (who instanceof FoundationStaff) line = Clearance.filter(p, line);
+        else if (line.startsWith(Clearance.RAW)) line = line.substring(1);
         Dialogue.line(p, who.getName().getString(), line, who instanceof O5MemberEntity ? O5_C : STAFF_C);
         if (who instanceof Mob m) m.getLookControl().setLookAt(p, 30, 30);
     }
@@ -748,8 +751,8 @@ public final class Talk {
         a.getLookControl().setLookAt(b, 30, 30);
         b.getLookControl().setLookAt(a, 30, 30);
         for (ServerPlayer q : ears) {
-            q.sendSystemMessage(Component.literal(a.getName().getString() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(l1).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC)));
-            q.sendSystemMessage(Component.literal(b.getName().getString() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(l2).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC)));
+            q.sendSystemMessage(Component.literal(a.getName().getString() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(Clearance.filter(q, l1)).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC)));
+            q.sendSystemMessage(Component.literal(b.getName().getString() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(Clearance.filter(q, l2)).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC)));
         }
     }
 }

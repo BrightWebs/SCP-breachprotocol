@@ -17,6 +17,8 @@ import net.minecraft.util.Mth;
  */
 public class StaffModel extends HumanoidModel<FoundationStaff> {
     public static final ModelLayerLocation LAYER = new ModelLayerLocation(BreachProtocol.id("staff"), "main");
+    /** A slightly larger copy for hair, beards and glasses drawn over the head. */
+    public static final ModelLayerLocation OUTER = new ModelLayerLocation(BreachProtocol.id("staff"), "outer");
 
     private final ModelPart lids;
     private final ModelPart[] bust;
@@ -27,8 +29,12 @@ public class StaffModel extends HumanoidModel<FoundationStaff> {
         bust = new ModelPart[]{body.getChild("bust_s"), body.getChild("bust_m"), body.getChild("bust_l")};
     }
 
-    public static LayerDefinition createLayer() {
-        MeshDefinition mesh = HumanoidModel.createMesh(CubeDeformation.NONE, 0.0F);
+    public static LayerDefinition createLayer() { return create(CubeDeformation.NONE); }
+
+    public static LayerDefinition createOuter() { return create(new CubeDeformation(0.3F)); }
+
+    private static LayerDefinition create(CubeDeformation deform) {
+        MeshDefinition mesh = HumanoidModel.createMesh(deform, 0.0F);
         PartDefinition root = mesh.getRoot();
         PartDefinition body = root.getChild("body");
         PartDefinition head = root.getChild("head");
@@ -95,8 +101,16 @@ public class StaffModel extends HumanoidModel<FoundationStaff> {
         }
         // blinking
         lids.visible = ((age + id) % 90F) < 3.5F;
-        // her build
-        int b = e.isFemale() ? e.bust() : -1;
-        for (int i = 0; i < 3; i++) bust[i].visible = b == i;
+        // her figure: one shape, sized to her
+        bust[0].visible = false;
+        bust[2].visible = false;
+        bust[1].visible = e.isFemale();
+        if (e.isFemale()) {
+            float f = e.bustSize();
+            bust[1].xScale = 0.95F + f * 0.15F;
+            bust[1].yScale = 0.9F + f * 0.35F;
+            bust[1].zScale = 0.7F + f * 1.3F;
+            bust[1].xRot = -0.12F - f * 0.16F;
+        }
     }
 }

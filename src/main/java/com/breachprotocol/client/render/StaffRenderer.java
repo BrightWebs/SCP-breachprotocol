@@ -29,6 +29,13 @@ public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, Humanoid
 
     public StaffRenderer(EntityRendererProvider.Context ctx) {
         super(ctx, new StaffModel(ctx.bakeLayer(StaffModel.LAYER)), 0.4F);
+        addLayer(new StaffLooksLayer(this, new StaffModel(ctx.bakeLayer(StaffModel.OUTER))));
+    }
+
+    @Override
+    protected void scale(FoundationStaff e, com.mojang.blaze3d.vertex.PoseStack pose, float partial) {
+        float k = e.heightScale();
+        pose.scale(k, k, k);
     }
 
     @Override

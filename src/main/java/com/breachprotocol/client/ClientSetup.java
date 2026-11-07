@@ -16,6 +16,7 @@ public final class ClientSetup {
         @SubscribeEvent
         public static void layers(EntityRenderersEvent.RegisterLayerDefinitions event) {
             event.registerLayerDefinition(com.breachprotocol.client.render.StaffModel.LAYER, com.breachprotocol.client.render.StaffModel::createLayer);
+            event.registerLayerDefinition(com.breachprotocol.client.render.StaffModel.OUTER, com.breachprotocol.client.render.StaffModel::createOuter);
         }
 
         @SubscribeEvent

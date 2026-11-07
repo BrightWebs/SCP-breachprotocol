@@ -113,7 +113,8 @@ final class Convo {
 
     private static List<WorldNews.Item> news(ServerPlayer p) {
         List<WorldNews.Item> out = new ArrayList<>();
-        for (WorldNews.Item i : WorldNews.recent(p.server, 8)) if (!Talk.mine(i, p)) out.add(i);
+        Scene.Tier tier = Scene.tier(p);
+        for (WorldNews.Item i : WorldNews.recent(p.server, 8)) if (!Talk.mine(i, p) && Clearance.knows(tier, i)) out.add(i);
         return out;
     }
 
@@ -467,11 +468,39 @@ final class Convo {
             // ------------------------------------------------------------ the Council
             case "council" -> {
                 Talk.you(p, "What do you make of the Council?");
-                if (Scene.tier(p) == Scene.Tier.DCLASS) { Talk.say(p, s, "The Council? You'll never see them. Pray they never see you."); menu(p, s); return true; }
+                Scene.Tier ct = Scene.tier(p);
+                if (ct == Scene.Tier.DCLASS) { Talk.say(p, s, Clearance.RAW + "The Council? Some of the old-timers in the block talk about thirteen people who decide who lives. I think it's a story to keep you quiet."); menu(p, s); return true; }
+                if (ct == Scene.Tier.JUNIOR) {
+                    Talk.say(p, s, Clearance.RAW + switch (t) {
+                        case CYNICAL -> "The O5? Thirteen faceless people who run everything. It's what they tell new hires so we behave. Nobody I know has ever met one.";
+                        case CAREFUL -> "I've heard the name. O5. I don't say it out loud, and I'd suggest you don't either.";
+                        case EARNEST -> "People say there's a council of thirteen at the very top. I like to think someone up there is looking out for us.";
+                        case BOLD -> "A council of thirteen? Maybe. If they're real, they're welcome to come down and work a night shift.";
+                    });
+                    page(p, s, new String[][]{{"Do you believe it?", "myth_believe", "Real, or a story?"}, {"Who told you about it?", "myth_who", "Where the rumour comes from"}});
+                    return true;
+                }
+                if (ct == Scene.Tier.STAFF) {
+                    Talk.say(p, s, Clearance.RAW + "The Council is real. Orders come down signed 'O5' and nothing else. Who they are, I couldn't tell you, and I'm fairly sure I shouldn't try.");
+                    page(p, s, new String[][]{{"Do you agree with their orders?", "council_agree", "Their honest view"}, {"Do you trust them?", "council_trust", "Faith in the Council"}});
+                    return true;
+                }
                 Talk.say(p, s, Talk.councilView(s, p));
                 bump(s, p, "council");
                 page(p, s, new String[][]{{"Do you agree with them?", "council_agree", "Their honest view"}, {"What would you have done?", "council_instead", "The road not taken"},
                         {"Do you trust the O5?", "council_trust", "Faith in the Council"}, {"And the Administrator?", "council_admin", "What they think of the Administrator"}});
+                return true;
+            }
+            case "myth_believe" -> {
+                Talk.you(p, "Do you believe it?");
+                Talk.say(p, s, Clearance.RAW + (trust >= 5 ? "...Between us? Yes. A memo once came back with a signature I'd never seen, and my supervisor went white. That was enough." : "Believe it? I believe in my pay cheque and the blast doors. The rest is canteen talk."));
+                menu(p, s);
+                return true;
+            }
+            case "myth_who" -> {
+                Talk.you(p, "Who told you about it?");
+                Talk.say(p, s, Clearance.RAW + "Everyone and no one. It's the first thing you hear at orientation, from the person sitting next to you, never from the people running it.");
+                menu(p, s);
                 return true;
             }
             case "council_agree" -> {
@@ -659,7 +688,7 @@ final class Convo {
 
     private static String detail(ServerPlayer p, WorldNews.Item it, Random r) {
         String who = it.who().isEmpty() ? "" : " It came from " + it.who() + ".";
-        String sup = it.supporters().isEmpty() ? "" : " The ones who backed it: " + it.supporters().stream().map(x -> "O5-" + x).reduce((a, b) -> a + ", " + b).orElse("") + ".";
+        String sup = it.supporters().isEmpty() || Scene.tier(p).ordinal() < Scene.Tier.DIRECTOR.ordinal() ? "" : " The ones who backed it: " + it.supporters().stream().map(x -> "O5-" + x).reduce((a, b) -> a + ", " + b).orElse("") + ".";
         return "It was " + WorldNews.ago(p.server, it) + ". " + (it.mood() > 2 ? "It's done a lot of good." : it.mood() < -2 ? "It cost us." : "Hard to say yet if it mattered.") + who + sup;
     }
 

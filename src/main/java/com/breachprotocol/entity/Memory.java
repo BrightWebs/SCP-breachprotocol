@@ -48,7 +48,8 @@ final class Memory {
                 new Reply("Their files are sealed for a reason.", "Then I'll stop asking. For now.", "sealed", 0),
                 new Reply("Find out who recruited them.", "I'll ask around. Quietly.", "recruiter", 1),
                 new Reply("That's horrifying.", "It is. Thank you for saying so. Nobody here does.", "horrified", 2))));
-        out.add(new Secret("fountain", "I've seen O5 members walk past and not age a day in ten years. They say it's the Fountain. SCP-006. I believe it.", List.of(
+        Scene.Tier tier = Scene.tier(p);
+        if (tier.ordinal() >= Scene.Tier.STAFF.ordinal()) out.add(new Secret("fountain", "I've seen O5 members walk past and not age a day in ten years. They say it's the Fountain. SCP-006. I believe it.", List.of(
                 new Reply("It's true.", "...I knew it. I won't tell anyone. Who'd believe me?", "true", 2),
                 new Reply("That's nonsense.", "If you say so. They still look younger than me.", "denied", -1),
                 new Reply("Keep that to yourself.", "Of course. Consider it forgotten.", "quiet", 1))));
@@ -56,7 +57,7 @@ final class Memory {
                 new Reply("It looks at everyone.", "That's not as comforting as you think it is.", "everyone", 0),
                 new Reply("Tell them to stay away from the Gate.", "I will. They already do. They don't sleep much.", "warned", 1),
                 new Reply("Bring them to me.", "They'll be terrified. But I'll bring them.", "summoned", 1))));
-        if (d != null && !d.supporters().isEmpty())
+        if (d != null && !d.supporters().isEmpty() && tier.ordinal() >= Scene.Tier.DIRECTOR.ordinal())
             out.add(new Secret("vote", "The vote on whether " + d.headline() + "? It wasn't close. O5-" + d.supporters().iterator().next() + " argued for it like their life depended on it. Maybe it did.", List.of(
                     new Reply("That stays between us.", "Obviously. I like my memories un-amnesticised.", "between", 1),
                     new Reply("I'll remember that.", "I thought you might.", "noted", 0))));

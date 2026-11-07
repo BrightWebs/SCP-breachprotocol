@@ -166,7 +166,7 @@ public final class Forces {
             secretaryNames.forEach(sn::putString);
             t.put("secretaryNames", sn);
             ListTag dl = new ListTag();
-            for (net.minecraft.world.item.ItemStack st : deliveries) if (!st.isEmpty()) dl.add(st.save(p));
+            for (net.minecraft.world.item.ItemStack ds : deliveries) if (!ds.isEmpty()) dl.add(ds.save(p));
             t.put("deliveries", dl);
             return t;
         }

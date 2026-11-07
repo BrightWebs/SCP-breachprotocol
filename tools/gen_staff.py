@@ -76,19 +76,18 @@ def feminine(img, skin, hair, rnd, cap=None):
 def make(name, top, under, legs, rnd, v, badge=None, vest=None, glasses=False, cap=None, stripe=None, cross=None, old=False, female=False):
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     skin = SKIN[v]
-    hair = (200, 200, 204, 255) if old else (FHAIR_ALL[(v + 1) % 3] if female else HAIR[(v + 1) % 3])
+    hair = shade(SKIN[v], 0.93)  # no painted hair: hairstyles are separate layers, tinted per person
     face(img, skin, hair, rnd, glasses, cap)
     if female:
-        feminine(img, skin, hair, rnd, cap)
+        for ex in (9, 13): rect(img, ex, 11, 2, 1, (30, 24, 22, 255))
+        rect(img, 11, 15, 2, 1, (176, 84, 92, 255))
         if glasses:
             for x in (9, 13):
                 rect(img, x, 11, 2, 1, (30, 30, 30, 255)); rect(img, x, 13, 2, 1, (30, 30, 30, 255))
     if old:
         for (x, y) in [(9, 11), (14, 11), (10, 14), (13, 14)]: img.putpixel((x, y), shade(skin, 0.82))
     box(img, 16, 16, 8, 12, 4, top, rnd)            # body
-    if female:
-        if cap: rect(img, 32, 20, 4, 3, hair)
-        else: rect(img, 32, 20, 8, 5, hair)          # her hair down her back
+
     box(img, 40, 16, 4, 12, 4, top, rnd)            # arm
     box(img, 0, 16, 4, 12, 4, legs, rnd)            # leg
     rect(img, 44, 30, 4, 2, skin); rect(img, 40, 30, 4, 2, skin)      # hands
@@ -123,7 +122,7 @@ def secretary(v, old):
     rnd = random.Random(300 + v)
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
     skin = SKIN[v]
-    hair = (196, 196, 202, 255) if old else FHAIR[v]
+    hair = shade(skin, 0.93)
     box(img, 0, 0, 8, 8, 8, skin, rnd, 3)
     # long hair: crown, a side-swept fringe, full sides and back
     rect(img, 8, 0, 8, 8, hair)
@@ -147,7 +146,7 @@ def secretary(v, old):
     rect(img, 22, 20, 4, 5, (238, 238, 242, 255)); rect(img, 23, 25, 2, 1, (238, 238, 242, 255))
     img.putpixel((21, 22), (200, 170, 80, 255))
     rect(img, 20, 27, 8, 1, shade(suit, 0.75))          # belt line
-    rect(img, 32, 20, 8, 5, hair)                       # hair down her back
+
     rect(img, 44, 30, 4, 2, skin); rect(img, 40, 30, 4, 2, skin)
     # pencil skirt, stockings, low heels
     box(img, 0, 16, 4, 12, 4, shade(suit, 0.85), rnd, 4)
