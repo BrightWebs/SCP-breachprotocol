@@ -36,5 +36,6 @@
   "block.breachprotocol.fruit_life": "Fruit of Life",
   "block.breachprotocol.fruit_knowledge": "Fruit of Knowledge",
   "key.breachprotocol.answer": "Answer the Council",
-  "key.categories.breachprotocol": "Breach Protocol"
+  "key.categories.breachprotocol": "Breach Protocol",
+  "block.breachprotocol.admin_terminal": "Administrator's Terminal"
 }

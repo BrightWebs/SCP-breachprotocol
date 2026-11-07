@@ -1,0 +1,8 @@
+{
+  "variants": {
+    "facing=north": {"model": "breachprotocol:block/admin_terminal"},
+    "facing=east": {"model": "breachprotocol:block/admin_terminal", "y": 90},
+    "facing=south": {"model": "breachprotocol:block/admin_terminal", "y": 180},
+    "facing=west": {"model": "breachprotocol:block/admin_terminal", "y": 270}
+  }
+}

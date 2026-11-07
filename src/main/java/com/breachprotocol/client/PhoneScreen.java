@@ -41,7 +41,7 @@ public class PhoneScreen extends Screen {
     private static final ResourceLocation WALLPAPER = tex("wallpaper");
     private static ResourceLocation tex(String n) { return BreachProtocol.id("textures/gui/phone/" + n + ".png"); }
 
-    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE, FORCES, SECURITY }
+    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE, FORCES, SECURITY, CALENDAR }
 
     private record App(String icon, String label, View view, int accent, IntPredicate allowed) {}
 
@@ -58,9 +58,10 @@ public class PhoneScreen extends Screen {
     private static final App SITE = new App("app_site01", "Site-01", View.SITE, 0xFF7A35C4, c -> false);
     private static final App SETTINGS = new App("app_settings", "Settings", View.SETTINGS, 0xFF4A525E, c -> true);
     private static final App MAP = new App("app_map", "Map", View.MAP, 0xFF2E8F4A, c -> true);
+    private static final App CALENDAR = new App("app_calendar", "Calendar", View.CALENDAR, 0xFFC0383F, c -> false);
     private static final App FORCES = new App("app_forces", "Recruitment", View.FORCES, 0xFF2E8F4A, c -> false);
     private static final App SECURITY = new App("app_security", "Site Security", View.SECURITY, 0xFFA8323A, c -> false);
-    private static final List<App> GRID = List.of(FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
+    private static final List<App> GRID = List.of(CALENDAR, FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
     private static final List<App> DOCK = List.of(PHONE, MESSAGES, MISSIONS, CAMERA);
 
     private static final Deque<App> RECENT = new ArrayDeque<>();
@@ -97,12 +98,13 @@ public class PhoneScreen extends Screen {
     }
 
     private int refreshIn;
+    private String seenCall = "";
 
     @Override
     public void tick() {
         super.tick();
         // the command apps show live numbers
-        if ((view == View.FORCES || view == View.SECURITY) && --refreshIn <= 0) { refreshIn = 40; send("refresh", 0); }
+        if ((view == View.FORCES || view == View.SECURITY || view == View.CALENDAR || view == View.CALL && t().getBoolean("callOutgoing")) && --refreshIn <= 0) { refreshIn = 20; send("refresh", 0); }
     }
 
     private static CompoundTag t() { return ClientCareerState.tag; }
@@ -112,6 +114,7 @@ public class PhoneScreen extends Screen {
     private static boolean allowed(App a) {
         if (a == SITE) return rank() >= 7;
         if (a == FORCES || a == SECURITY) return false; // checked per screen in allowedHere
+        if (a == CALENDAR) return rank() >= 6 || t().getBoolean("ascended");
         return a.allowed().test(clr());
     }
 
@@ -347,6 +350,7 @@ public class PhoneScreen extends Screen {
         if (a == MESSAGES) return unread();
         if (a == MISSIONS) return t().getList("missions", Tag.TAG_COMPOUND).size();
         if (a == PHONE) return t().contains("callText") ? 1 : 0;
+        if (a == CALENDAR) { int n = 0; for (Tag e : t().getList("appts", Tag.TAG_COMPOUND)) if (!((CompoundTag) e).getBoolean("ok")) n++; return n; }
         int n = 0;
         if (a == GALLERY) for (Tag e : t().getList("photos", Tag.TAG_COMPOUND)) if (((CompoundTag) e).getBoolean("hazard")) n++;
         return n;
@@ -369,6 +373,7 @@ public class PhoneScreen extends Screen {
             case MAP -> MAP;
             case FORCES -> FORCES;
             case SECURITY -> SECURITY;
+            case CALENDAR -> CALENDAR;
             default -> null;
         };
     }
@@ -390,6 +395,11 @@ public class PhoneScreen extends Screen {
         mouseLY = (int) ((mouseY - oy) / scale);
         hits.clear();
         hover = "";
+        String ck = t().contains("callText") ? t().getString("callFrom") + "|" + t().getString("callText") : "";
+        if (!ck.equals(seenCall)) {
+            seenCall = ck;
+            if (!ck.isEmpty() && view != View.CALL) { go(View.CALL); scroll = 0; }
+        }
         // apps you lose clearance for close themselves
         App cur = appFor(view);
         if (cur != null && !allowedHere(cur)) goHome();
@@ -460,7 +470,32 @@ public class PhoneScreen extends Screen {
     }
 
     /** The three hardware buttons: Back, Home, Recents. */
+    /** The terminal's taskbar: Start, a button per recent app, and the clock. */
+    private void drawTaskbar(GuiGraphics g) {
+        int y = SY + SH - NAV;
+        rect(g, SX, y, SW, NAV, 0xFF06120A);
+        rect(g, SX, y, SW, 1, Terminal.MID);
+        boolean hs = over(SX + 2, y + 3, 62, NAV - 6);
+        rbox(g, SX + 2, y + 3, 62, NAV - 6, 3, hs ? 0xFF1E6B3A : 0xFF0E3A1E, hs ? Terminal.BRIGHT : Terminal.MID);
+        g.drawString(font, "■ START", SX + 8, y + 7, Terminal.BRIGHT, false);
+        hit(SX + 2, y + 3, 62, NAV - 6, this::goHome);
+        int x = SX + 70;
+        App cur = appFor(view);
+        for (App a : RECENT) {
+            if (!allowedHere(a) || x > SX + SW - 140) continue;
+            int w = Math.min(90, font.width(a.label()) + 16);
+            boolean on = a == cur, hov = over(x, y + 3, w, NAV - 6);
+            rbox(g, x, y + 3, w, NAV - 6, 3, on ? 0xFF1E6B3A : hov ? 0xFF0E3A1E : 0xFF07110A, on ? Terminal.BRIGHT : Terminal.LINE);
+            g.drawString(font, ellipsize(a.label(), w - 8), x + 4, y + 7, on ? Terminal.BRIGHT : Terminal.GREEN, false);
+            hit(x, y + 3, w, NAV - 6, () -> openApp(a));
+            x += w + 4;
+        }
+        String c = clock() + "  ·  DAY " + (t().getLong("now") / 24000 + 1);
+        g.drawString(font, c, SX + SW - 8 - font.width(c), y + 7, Terminal.GREEN, false);
+    }
+
     private void drawNavBar(GuiGraphics g) {
+        if (desktop) { drawTaskbar(g); return; }
         int y = SY + SH - NAV;
         rect(g, SX, y, SW, NAV, 0xFF06090D);
         rect(g, SX, y, SW, 1, 0xFF141B24);
@@ -489,6 +524,7 @@ public class PhoneScreen extends Screen {
     // ---------------------------------------------------------------- home
 
     private void drawHome(GuiGraphics g) {
+        if (desktop) { drawDesktopHome(g); return; }
         g.blit(WALLPAPER, SX, SY, SW, SH, 0, 0, 156, 300, 156, 300);
         big(g, clock(), SX + SW / 2, SY + 24, 3.2F, 0xFFFFFFFF);
         long day = t().getLong("now") / 24000 + 1;
@@ -539,6 +575,43 @@ public class PhoneScreen extends Screen {
             rect(g, hx + 13, by + 14, 2, 1, 0xF0F2F5F8);
             text(g, n, bx + 5, by + 3, 0xFF10161D);
         }
+    }
+
+    /** The terminal's desktop: a header, every app as a large icon, and the live board. */
+    private void drawDesktopHome(GuiGraphics g) {
+        rect(g, SX, SY, SW, SH, Terminal.BG);
+        for (int yy = SY; yy < SY + SH; yy += 3) rect(g, SX, yy, SW, 1, 0x22000000);
+        int y = SY + STATUS + 6;
+        g.drawString(font, "FOUNDATION SECURE TERMINAL", SX + 10, y, Terminal.BRIGHT, false);
+        String who = t().getBoolean("ascended") ? "THE ASCENDANT" : "THE ADMINISTRATOR";
+        g.drawString(font, "LOGGED IN: " + who, SX + SW - 10 - font.width("LOGGED IN: " + who), y, Terminal.MID, false);
+        Terminal.dashes(g, SX + 10, y + 12, SW - 20, Terminal.LINE);
+        y += 20;
+        List<App> apps = new ArrayList<>();
+        for (App a : GRID) if (allowedHere(a)) apps.add(a);
+        for (App a : DOCK) if (allowedHere(a) && !apps.contains(a)) apps.add(a);
+        int cols = 8, cell = (SW - 20) / cols;
+        App hovered = null;
+        for (int i = 0; i < apps.size(); i++) {
+            int x = SX + 10 + (i % cols) * cell + (cell - 28) / 2, iy = y + (i / cols) * 46;
+            if (drawIcon(g, apps.get(i), x, iy, cell)) hovered = apps.get(i);
+        }
+        y += ((apps.size() + cols - 1) / cols) * 46 + 4;
+        // the live board: alerts, open calls, unread messages
+        int x = SX + 10, w = SW - 20;
+        panel(g, "Status", x, y, w, SY + SH - NAV - y - 6);
+        int ly = y + 14;
+        ListTag alerts = t().getList("alerts", Tag.TAG_COMPOUND);
+        for (int i = 0; i < alerts.size() && ly < SY + SH - NAV - 16; i++) {
+            CompoundTag a = alerts.getCompound(i);
+            g.drawString(font, "⚠ " + a.getString("site") + ": " + a.getString("who") + " on the grounds (" + a.getInt("n") + ")", x + 8, ly, Terminal.RED, false);
+            ly += 11;
+        }
+        if (alerts.isEmpty()) { g.drawString(font, "All sites secure.", x + 8, ly, Terminal.GREEN, false); ly += 11; }
+        if (t().contains("callText")) { g.drawString(font, "☎ " + t().getString("callFrom") + " is on the line.", x + 8, ly, Terminal.AMBER, false); ly += 11; }
+        int un = unread();
+        if (un > 0) g.drawString(font, un + " unread message" + (un == 1 ? "" : "s") + ".", x + 8, ly, Terminal.MID, false);
+        if (hovered != null) hover = hovered.label();
     }
 
     /** Camera isn't a screen: it puts the phone down and gives you the viewfinder. */
@@ -615,6 +688,16 @@ public class PhoneScreen extends Screen {
                 default -> app.label();
             };
             g.drawString(font, ellipsize(title, SW - 24), SX + 10, top + 7, Terminal.BRIGHT, false);
+            if (desktop) {
+                // window buttons: back and close
+                boolean hx = over(SX + SW - 20, top + 3, 16, 15), hb = over(SX + SW - 40, top + 3, 16, 15);
+                rbox(g, SX + SW - 20, top + 3, 16, 15, 2, hx ? 0xFF5A1818 : 0xFF2E0E0E, 0xFFB84848);
+                g.drawString(font, "x", SX + SW - 15, top + 6, 0xFFFFB3B3, false);
+                hit(SX + SW - 20, top + 3, 16, 15, this::goHome);
+                rbox(g, SX + SW - 40, top + 3, 16, 15, 2, hb ? 0xFF1E6B3A : 0xFF0E3A1E, Terminal.MID);
+                g.drawString(font, "<", SX + SW - 35, top + 6, Terminal.BRIGHT, false);
+                hit(SX + SW - 40, top + 3, 16, 15, this::goBack);
+            }
             top += HEADER;
         }
         final int bottom = SY + SH - NAV, vtop = top;
@@ -659,6 +742,7 @@ public class PhoneScreen extends Screen {
             case NETWORK -> drawNetwork(g, y0);
             case MAP -> drawMap(g, y0);
             case FORCES -> drawForces(g, y0);
+            case CALENDAR -> drawCalendar(g, y0);
             case SECURITY -> drawSecurity(g, y0);
             default -> drawSite(g, y0);
         };
@@ -730,6 +814,15 @@ public class PhoneScreen extends Screen {
         int x = SX + 6, w = SW - 12, maxW = w - 22;
         small(g, ("SECURE CHANNEL // " + thread).toUpperCase(Locale.ROOT), SX + SW / 2, y, Terminal.DIM);
         y += 12;
+        if (thread.startsWith("O5-") && (rank() >= 6 || t().getBoolean("ascended"))) {
+            int seat = 0;
+            try { seat = Integer.parseInt(seatOf(thread).substring(3)); } catch (Exception ignored) {}
+            if (seat >= 1 && seat <= 12) {
+                final int st = seat;
+                pill(g, x + w / 2 - 50, y, 100, 14, "\u260E Call " + seatOf(thread), 0xFF2EA65A, !t().contains("callText"), () -> { send("dial", st); go(View.CALL); });
+                y += 18;
+            }
+        }
         for (CompoundTag m : mine) {
             boolean out = m.getBoolean("o");
             String body = m.getString("b");
@@ -1007,24 +1100,38 @@ public class PhoneScreen extends Screen {
         String num = t.getString("myNumber");
         g.drawString(font, num, x + w - font.width(num), y, Terminal.BRIGHT, false);
         y += 13;
+        if (!t.getString("lastCallText").isEmpty() && t.getLong("now") - t.getLong("lastCallAt") < 6000) {
+            String body = t.getString("lastCallText");
+            int bh = wrapHeight(body, w - 12) + 18;
+            card(g, x, y, w, bh);
+            small(g, ("LAST CALL · " + seatOf(t.getString("lastCallFrom"))).toUpperCase(Locale.ROOT), x + w / 2, y + 4, Terminal.DIM);
+            wrap(g, body, x + 6, y + 13, w - 12, 0xFFE8F2EC);
+            y += bh + 6;
+        }
         ListTag contacts = t.getList("contactList", Tag.TAG_COMPOUND), reqs = t.getList("requestList", Tag.TAG_COMPOUND), near = t.getList("nearPlayers", Tag.TAG_COMPOUND);
-        String[] tabs = {"Contacts", "Nearby", "Requests" + (reqs.isEmpty() ? "" : " " + reqs.size())};
-        int tw = (w - 4) / 3;
-        for (int i = 0; i < 3; i++) {
+        boolean council = rank() >= 6 || t.getBoolean("ascended");
+        String[] tabs = council ? new String[]{"Council", "Contacts", "Nearby", "Requests" + (reqs.isEmpty() ? "" : " " + reqs.size())}
+                : new String[]{"Contacts", "Nearby", "Requests" + (reqs.isEmpty() ? "" : " " + reqs.size())};
+        int nt = tabs.length, tw = (w - 2 * (nt - 1)) / nt, off = council ? 1 : 0;
+        if (!council && phoneTab >= 3) phoneTab = 0;
+        int sel0 = phoneTab;
+        for (int i = 0; i < nt; i++) {
             int bx = x + i * (tw + 2);
-            boolean sel = phoneTab == i, hov = over(bx, y, tw, 13);
+            boolean sel = sel0 == i, hov = over(bx, y, tw, 13);
             rbox(g, bx, y, tw, 13, 6, sel ? Terminal.SELECT : 0xFF08180E, sel || hov ? Terminal.SELECT : 0xFF163D24);
             String lb = tabs[i].toUpperCase(Locale.ROOT);
             g.pose().pushPose();
             g.pose().translate(bx + tw / 2F, y + 4, 0);
             g.pose().scale(0.75F, 0.75F, 1);
-            g.drawString(font, lb, -font.width(lb) / 2, 0, sel ? Terminal.ON_SELECT : i == 2 && !reqs.isEmpty() ? Terminal.AMBER : Terminal.GREEN, false);
+            g.drawString(font, lb, -font.width(lb) / 2, 0, sel ? Terminal.ON_SELECT : i == nt - 1 && !reqs.isEmpty() ? Terminal.AMBER : Terminal.GREEN, false);
             g.pose().popPose();
             final int idx = i;
-            hit(bx, y, tw, 13, () -> { phoneTab = idx; scroll = 0; if (idx == 1) send("refresh", 0); });
+            hit(bx, y, tw, 13, () -> { phoneTab = idx; scroll = 0; send("refresh", 0); });
         }
         y += 19;
-        if (phoneTab == 0) {
+        if (council && phoneTab == 0) return drawCouncilDirectory(g, x, y, w);
+        int tab = phoneTab - off;
+        if (tab == 0) {
             if (contacts.isEmpty()) { empty(g, y - 24, "No contacts", "Stand near another player and open Nearby to exchange numbers."); return y + 70; }
             for (int i = 0; i < contacts.size(); i++) {
                 CompoundTag c = contacts.getCompound(i);
@@ -1044,7 +1151,7 @@ public class PhoneScreen extends Screen {
             }
             return y;
         }
-        if (phoneTab == 1) {
+        if (tab == 1) {
             if (near.isEmpty()) { empty(g, y - 24, "Nobody in range", "Players within 8 blocks show up here."); return y + 60; }
             for (int i = 0; i < near.size(); i++) {
                 CompoundTag n = near.getCompound(i);
@@ -1077,6 +1184,24 @@ public class PhoneScreen extends Screen {
         CompoundTag t = t();
         int cx = SX + SW / 2;
         if (!t.contains("callText")) return drawContacts(g, top + 6 - scroll);
+        if (t.getBoolean("callOutgoing")) {
+            rect(g, SX, top, SW, SH, 0xFF0A120E);
+            String from = t.getString("callFrom");
+            long ms = System.currentTimeMillis();
+            int y = top + 30;
+            for (int i = 0; i < 3; i++) {
+                float p = ((ms / 1100F) + i / 3F) % 1F;
+                circle(g, cx, y + 22, 18 + (int) (p * 26), ((int) ((1 - p) * 70)) << 24 | 0x3AE07A);
+            }
+            circle(g, cx, y + 22, 18, seatColor(from));
+            textC(g, seatOf(from).replace("O5-", ""), cx, y + 18, 0xFFFFFFFF);
+            textC(g, ellipsize(nick(from), SW - 16), cx, y + 50, 0xFFFFFFFF);
+            textC(g, number(t.getInt("callSeat")), cx, y + 61, 0xFF8AE0A8);
+            String dots = ".".repeat((int) (ms / 400 % 4));
+            textC(g, "Calling" + dots, cx, y + 78, 0xFFB8FFCC);
+            pill(g, SX + 20, y + 100, SW - 40, 18, "Hang up", 0xFFC0383F, true, () -> send("hangup", 0));
+            return y + 124;
+        }
         rect(g, SX, top, SW, SH, 0xFF0A120E);
         if (false) {
             int y = top + 34;
@@ -1111,10 +1236,12 @@ public class PhoneScreen extends Screen {
         for (int i = 0; i < opts.size(); i++) {
             int color = i == 0 ? 0xFF2EA65A : i == opts.size() - 1 ? 0xFFC0383F : 0xFF3C6FB8;
             final int idx = i;
-            pill(g, SX + 10, y, SW - 20, 16, opts.getString(i), color, true, () -> { send("answer", idx); goHome(); });
+            pill(g, SX + 10, y, SW - 20, 16, opts.getString(i), color, true, () -> { send("answer", idx); scroll = 0; });
             y += 20;
         }
-        return y;
+        y += 4;
+        pill(g, SX + 40, y, SW - 80, 14, "Hang up", 0xFFC0383F, true, () -> { send("hangup", 0); scroll = 0; });
+        return y + 18;
     }
 
     // ---------------------------------------------------------------- Camera
@@ -2027,5 +2154,129 @@ public class PhoneScreen extends Screen {
             y += wrap(g, "• " + line, x + 4, y, w - 8, 0xFFB8C8D0) + 2;
         }
         return y + 4;
+    }
+
+    /** Each Overseer's secure line. */
+    private static String number(int seat) { return String.format("0500-%02d-%02d", seat, (seat * 37 + 11) % 100); }
+
+    /** The Council's numbers: tap the phone to ring them, and they pick up. */
+    private int drawCouncilDirectory(GuiGraphics g, int x, int y, int w) {
+        boolean busy = t().contains("callText");
+        for (com.breachprotocol.career.O5 o : com.breachprotocol.career.O5.values()) {
+            if (o.seat > 12) continue;
+            boolean hov = over(x, y, w, 24);
+            rbox(g, x, y, w, 24, 6, hov ? 0xFF0E3A1E : 0xFF08180E, hov ? Terminal.MID : 0xFF163D24);
+            avatar(g, o.sender(), x + 12, y + 12, 9);
+            text(g, ellipsize(o.nickname, w - 70), x + 26, y + 3, Terminal.BRIGHT);
+            small(g, number(o.seat), x + 26 + (int) (font.width(number(o.seat)) * 0.375F), y + 14, Terminal.DIM);
+            boolean hc = over(x + w - 26, y + 3, 22, 18);
+            rbox(g, x + w - 26, y + 3, 22, 18, 9, busy ? 0xFF07110A : hc ? 0xFF2EA65A : 0xFF1F6E3A, busy ? Terminal.LINE : Terminal.BRIGHT);
+            textC(g, "\u260E", x + w - 15, y + 8, busy ? Terminal.DIM : 0xFFFFFFFF);
+            final int seat = o.seat;
+            if (!busy) hit(x, y, w, 24, () -> { send("dial", seat); scroll = 0; });
+            y += 27;
+        }
+        if (busy) small(g, "FINISH YOUR CURRENT CALL FIRST", SX + SW / 2, y + 2, Terminal.AMBER);
+        return y + 12;
+    }
+
+    // ---------------------------------------------------------------- Calendar
+
+    private int schedSeat = 7;
+
+    private static String when(long at) {
+        long day = at / 24000 + 1;
+        int tod = (int) (at % 24000);
+        int h = (tod / 1000 + 6) % 24, m = (tod % 1000) * 60 / 1000;
+        return "Day " + day + " " + String.format("%02d:%02d", h, m);
+    }
+
+    private static String until(long at) {
+        long d = at - t().getLong("dayNow");
+        if (d <= 0) return "now";
+        long hours = d / 1000, mins = d % 1000 * 60 / 1000;
+        return hours >= 24 ? "in " + hours / 24 + "d " + hours % 24 + "h" : hours > 0 ? "in " + hours + "h " + mins + "m" : "in " + mins + "m";
+    }
+
+    private int drawCalendar(GuiGraphics g, int y) {
+        CompoundTag t = t();
+        int x = SX + 6, w = SW - 12;
+        long now = t.getLong("dayNow");
+        ListTag appts = t.getList("appts", Tag.TAG_COMPOUND);
+        // the week, with a mark on days that have meetings
+        long today = now / 24000;
+        int cw = (w - 12) / 7;
+        for (int i = 0; i < 7; i++) {
+            long day = today + i;
+            int bx = x + i * (cw + 2);
+            boolean has = false;
+            for (int k = 0; k < appts.size(); k++) if (appts.getCompound(k).getLong("at") / 24000 == day) has = true;
+            rbox(g, bx, y, cw, 26, 3, i == 0 ? 0xFF0E3A1E : 0xFF08180E, i == 0 ? Terminal.BRIGHT : 0xFF163D24);
+            textC(g, String.valueOf(day + 1), bx + cw / 2, y + 4, i == 0 ? Terminal.BRIGHT : Terminal.GREEN);
+            small(g, i == 0 ? "TODAY" : "DAY", bx + cw / 2, y + 15, Terminal.DIM);
+            if (has) circle(g, bx + cw - 4, y + 4, 2, AMBER);
+        }
+        y += 30;
+        small(g, "NOW: " + when(now).toUpperCase(Locale.ROOT), SX + SW / 2, y, Terminal.MID);
+        y += 12;
+
+        // requests
+        List<CompoundTag> reqs = new ArrayList<>(), booked = new ArrayList<>();
+        for (int k = 0; k < appts.size(); k++) (appts.getCompound(k).getBoolean("ok") ? booked : reqs).add(appts.getCompound(k));
+        booked.sort(Comparator.comparingLong(a -> a.getLong("at")));
+        label(g, "Meeting requests", x + 2, y);
+        y += 12;
+        if (reqs.isEmpty()) { text(g, "None waiting.", x + 4, y, MUTED); y += 14; }
+        boolean busy = t.contains("callText");
+        for (CompoundTag a : reqs) {
+            String from = com.breachprotocol.career.O5.seat(a.getInt("seat")).sender();
+            card(g, x, y, w, 56);
+            avatar(g, from, x + 12, y + 12, 8);
+            text(g, ellipsize(seatOf(from) + " " + nick(from), w - 30), x + 24, y + 4, 0xFFE8EEF4);
+            text(g, ellipsize(a.getString("about"), w - 30), x + 24, y + 14, AMBER);
+            small(g, ("PROPOSES " + when(a.getLong("at")) + " (" + until(a.getLong("at")) + ")").toUpperCase(Locale.ROOT), x + w / 2, y + 25, Terminal.DIM);
+            int id = a.getInt("id"), q = (w - 18) / 4;
+            pill(g, x + 4, y + 36, q, 15, "Accept", 0xFF2EA65A, true, () -> send("appt_accept", id));
+            pill(g, x + 6 + q, y + 36, q, 15, "Now", 0xFF3C6FB8, !busy, () -> { send("appt_now", id); go(View.CALL); });
+            pill(g, x + 8 + 2 * q, y + 36, q, 15, "+6h", 0xFF2E9E57, true, () -> send("appt_later", id));
+            pill(g, x + 10 + 3 * q, y + 36, q, 15, "Decline", 0xFFC0383F, true, () -> send("appt_decline", id));
+            y += 60;
+        }
+
+        // booked
+        label(g, "Upcoming", x + 2, y);
+        y += 12;
+        if (booked.isEmpty()) { text(g, "Nothing booked.", x + 4, y, MUTED); y += 14; }
+        for (CompoundTag a : booked) {
+            String from = com.breachprotocol.career.O5.seat(a.getInt("seat")).sender();
+            card(g, x, y, w, 40);
+            text(g, when(a.getLong("at")) + "  ·  " + until(a.getLong("at")), x + 6, y + 4, Terminal.BRIGHT);
+            text(g, ellipsize(seatOf(from) + " " + nick(from) + ": " + a.getString("about"), w - 12), x + 6, y + 14, 0xFFC8D8D0);
+            int id = a.getInt("id"), half = (w - 14) / 2;
+            pill(g, x + 4, y + 24, half, 13, "Take it now", 0xFF3C6FB8, !busy, () -> { send("appt_now", id); go(View.CALL); });
+            pill(g, x + 10 + half, y + 24, half, 13, "Cancel", 0xFFC0383F, true, () -> send("appt_cancel", id));
+            y += 44;
+        }
+
+        // book a meeting
+        label(g, "Book a meeting", x + 2, y);
+        y += 12;
+        int pw = (w - 10) / 6;
+        for (int sIdx = 1; sIdx <= 12; sIdx++) {
+            int bx = x + ((sIdx - 1) % 6) * (pw + 2), by = y + ((sIdx - 1) / 6) * 16;
+            final int seat = sIdx;
+            pill(g, bx, by, pw, 14, (schedSeat == sIdx ? ">" : "") + sIdx, schedSeat == sIdx ? 0xFF2EA65A : 0xFF2E9E57, true, () -> schedSeat = seat);
+        }
+        y += 34;
+        text(g, ellipsize("With " + com.breachprotocol.career.O5.seat(schedSeat).sender(), w - 8), x + 4, y, 0xFFE8EEF4);
+        y += 12;
+        String[] slots = {"In 1 hour", "In 3 hours", "This evening 18:00", "Tomorrow 08:00", "Tomorrow 14:00"};
+        for (int k = 0; k < slots.length; k++) {
+            final int arg = schedSeat * 10 + k;
+            pill(g, x, y, w, 14, slots[k], 0xFF2E9E57, true, () -> send("sched", arg));
+            y += 17;
+        }
+        pill(g, x, y + 2, w, 14, "Call them right now", 0xFF3C6FB8, !busy, () -> { send("dial", schedSeat); go(View.CALL); });
+        return y + 22;
     }
 }

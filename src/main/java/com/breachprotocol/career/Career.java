@@ -91,9 +91,10 @@ public final class Career {
     public static void message(ServerPlayer p, String sender, String body) {
         CareerData d = data(p);
         d.addMessage(sender, body, p.level().getGameTime());
-        p.sendSystemMessage(Component.literal("☎ ").withStyle(ChatFormatting.AQUA)
-                .append(Component.literal(sender + ": ").withStyle(ChatFormatting.WHITE))
-                .append(Component.literal(body.length() > 90 ? body.substring(0, 88) + "..." : body).withStyle(ChatFormatting.GRAY)));
+        // one notice, not a copy of the message: it's on the phone
+        p.displayClientMessage(Component.literal("✉ New message from ").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(sender).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(" · open your phone").withStyle(ChatFormatting.GRAY)), true);
         p.playNotifySound(ModSounds.PHONE_MESSAGE.get(), SoundSource.PLAYERS, 0.8F, 1.0F);
     }
 
@@ -838,14 +839,9 @@ public final class Career {
             d.nextMission = now + (4 + p.getRandom().nextInt(4)) * MINUTE;
         }
         // calls (council votes / requests for orders)
-        if (r.atLeast(Rank.OVERSEER)) {
-            if (d.nextCall == 0) d.nextCall = now + 2 * MINUTE;
-            if (now >= d.nextCall && d.call == null) {
-                Calls.startRandom(p);
-                d.nextCall = now + (r == Rank.ADMINISTRATOR ? 4 + p.getRandom().nextInt(3) : 7 + p.getRandom().nextInt(4)) * MINUTE;
-            }
-        }
-        if (d.call != null && now > d.call.expires) Calls.timeout(p);
+        // the Council no longer rings out of the blue: meetings go on the calendar (see Calendar)
+        Calendar.tick(p, d, now);
+        if (d.call != null && !d.call.outgoing && now > d.call.expires) Calls.timeout(p);
         // flavour intel
         if (d.nextFlavor == 0) d.nextFlavor = now + 6 * MINUTE;
         if (now >= d.nextFlavor) {
@@ -883,6 +879,7 @@ public final class Career {
         Rank next = r.next();
         t.putInt("toNext", next == null ? -1 : Math.max(0, next.xpRequired - d.xp));
         t.putLong("now", p.level().getGameTime());
+        t.putLong("dayNow", p.server.overworld().getDayTime());
         if (d.call != null) {
             Calls.Template tpl = Calls.get(d.call.templateId);
             if (tpl != null) {
@@ -891,6 +888,8 @@ public final class Career {
                 ListTag opts = new ListTag();
                 for (Calls.Option o : tpl.options()) opts.add(StringTag.valueOf(o.label()));
                 t.put("callOptions", opts);
+                t.putBoolean("callOutgoing", d.call.outgoing);
+                t.putInt("callSeat", d.call.caller);
             }
         }
         ListTag dirs = new ListTag();

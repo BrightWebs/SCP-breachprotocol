@@ -17,6 +17,10 @@ public final class ModBlocks {
             () -> new AscensionAltarBlock(BlockBehaviour.Properties.of().mapColor(MapColor.GOLD)
                     .strength(-1.0F, 3600000.0F).noLootTable().noOcclusion().lightLevel(s -> 15).sound(SoundType.AMETHYST)));
 
+    public static final DeferredBlock<com.breachprotocol.block.AdminTerminalBlock> ADMIN_TERMINAL = BLOCKS.register("admin_terminal",
+            () -> new com.breachprotocol.block.AdminTerminalBlock(BlockBehaviour.Properties.of().mapColor(MapColor.METAL)
+                    .strength(2.5F, 1200F).noOcclusion().lightLevel(s -> 7).sound(SoundType.METAL)));
+
     // fruit hanging from the Garden's trees
     public static final DeferredBlock<com.breachprotocol.block.HangingFruitBlock> FRUIT_APPLE = fruit("fruit_apple", () -> net.minecraft.world.item.Items.APPLE, 10, 0);
     public static final DeferredBlock<com.breachprotocol.block.HangingFruitBlock> FRUIT_PEAR = fruit("fruit_pear", () -> ModItems.PEAR.get(), 10, 0);

@@ -229,3 +229,14 @@ def security(d, s):
 icon("app_forces", (0, 0, 0), (0, 0, 0), forces)
 icon("app_security", (0, 0, 0), (0, 0, 0), security)
 print("desktop icons generated")
+
+def calendar(d, s):
+    d.rounded_rectangle([6 * s, 7 * s, 26 * s, 26 * s], radius=2 * s, fill=W)
+    d.rectangle([6 * s, 7 * s, 26 * s, 12 * s], fill=(200, 60, 60, 255))
+    for x in (11, 21):
+        d.rectangle([(x - 1) * s, 4 * s, (x + 1) * s, 9 * s], fill=W)
+    for row in range(3):
+        for c in range(4):
+            d.rectangle([(8 + c * 4.5) * s, (14 + row * 4) * s, (10.5 + c * 4.5) * s, (16 + row * 4) * s], fill=(70, 70, 70, 255))
+icon("app_calendar", (0, 0, 0), (0, 0, 0), calendar)
+print("calendar icon generated")

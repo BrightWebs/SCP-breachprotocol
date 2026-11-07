@@ -40,6 +40,35 @@ public final class Calls {
         };
     }
 
+    /** A short subject line for a calendar entry. */
+    public static String title(Template t) {
+        return switch (t.id()) {
+            case "o5_offer" -> "A seat on the Council";
+            case "termination_096" -> "SCP-096 termination order";
+            case "mtf_expand" -> "Permanent Epsilon-11 posting";
+            case "budget" -> "Quarterly budget";
+            case "insurgency_spy" -> "Insurgency spy in the ranks";
+            case "cafeteria_999" -> "SCP-999 in the cafeteria";
+            case "cell_173" -> "SCP-173 cell cleaning";
+            case "femur_breaker" -> "SCP-106 recontainment";
+            case "goc_jointop" -> "Joint operation with the GOC";
+            case "declassify_207" -> "Declassifying SCP-207";
+            case "network_code" -> "Hostile code in the network";
+            case "gate_stirs" -> "The Gate is stirring";
+            case "dclass_supply" -> "D-Class supply";
+            case "global_lockdown" -> "Global lockdown";
+            default -> "Council business";
+        };
+    }
+
+    /** A topic this Overseer would bring to you (their own business first). */
+    public static String topicFor(int seat, boolean admin, java.util.Random r) {
+        List<Template> pool = councilPool(admin);
+        List<Template> own = pool.stream().filter(t -> t.caller() == seat).toList();
+        List<Template> from = own.isEmpty() || r.nextInt(3) == 0 ? pool : own;
+        return from.isEmpty() ? "" : from.get(r.nextInt(from.size())).id();
+    }
+
     /** Why that option is the best one, as the Council would put it. */
     public static String bestReason(String id) {
         return switch (id) {
@@ -256,16 +285,22 @@ public final class Calls {
 
     public static void start(ServerPlayer p, String id) {
         Template t = TEMPLATES.get(id);
+        if (t != null) start(p, id, t.caller());
+    }
+
+    /** {@code seat} calls you about {@code id}. */
+    public static void start(ServerPlayer p, String id, int seat) {
+        Template t = TEMPLATES.get(id);
         if (t == null) return;
         CareerData d = Career.data(p);
         d.call = new CareerData.Call();
         d.call.templateId = id;
-        d.call.caller = t.caller();
+        d.call.caller = seat;
         d.call.expires = p.level().getGameTime() + (id.equals("o5_offer") ? 20 * 60 * 10 : 20 * 150);
         d.dirty = true;
-        p.sendSystemMessage(Component.literal("☎ INCOMING CALL: ").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)
-                .append(Component.literal(O5.seat(t.caller()).sender()).withStyle(ChatFormatting.WHITE))
-                .append(Component.literal("  (open your Foundation Phone)").withStyle(ChatFormatting.DARK_GRAY)));
+        p.displayClientMessage(Component.literal("☎ INCOMING CALL: ").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD)
+                .append(Component.literal(O5.seat(seat).sender()).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal("  · open your phone").withStyle(ChatFormatting.GRAY)), true);
         p.playNotifySound(ModSounds.PHONE_RING.get(), SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 
@@ -290,7 +325,10 @@ public final class Calls {
         if (!t.id().equals("o5_offer"))
             WorldNews.record(p.server, WorldNews.Kind.DECISION, t.id() + "|" + t.options().get(option).label(), WorldNews.headline(t.id(), t.options().get(option).label()),
                     d.stability - before, p.getGameProfile().getName(), java.util.Set.of(t.caller()));
-        Career.message(p, O5.seat(call.caller), reply);
+        // the answer is given on the call itself, not sent as a message afterwards
+        d.lastCallFrom = O5.seat(call.caller).sender();
+        d.lastCallText = reply;
+        d.lastCallAt = p.level().getGameTime();
         if (d.getRank().atLeast(Rank.OVERSEER) && !t.id().equals("o5_offer")) Career.addXp(p, 25, "decision made");
         Career.sync(p);
     }
@@ -307,7 +345,10 @@ public final class Calls {
             Career.message(p, O5.seat(caller), "You didn't answer. We'll call again when the seat is still empty.");
             return;
         }
-        Career.message(p, O5.seat(caller), "No answer. The Council proceeded without you.");
+        d.lastCallFrom = O5.seat(caller).sender();
+        d.lastCallText = "Missed call. The Council proceeded without you.";
+        d.lastCallAt = p.level().getGameTime();
+        p.displayClientMessage(Component.literal("☎ Missed call from " + O5.seat(caller).sender()).withStyle(ChatFormatting.RED), true);
         Career.changeStability(p, -3);
     }
 
@@ -328,6 +369,8 @@ public final class Calls {
 
     public static void flavor(ServerPlayer p) {
         CareerData d = Career.data(p);
+        // the Council only messages its own about things that can't wait; the rest goes on the calendar
+        if (d.ascended || d.getRank().atLeast(Rank.OVERSEER)) return;
         if (d.ascended) {
             Career.message(p, O5.seat(1 + p.getRandom().nextInt(12)), "Master. Your will is being carried out at every site.");
             return;

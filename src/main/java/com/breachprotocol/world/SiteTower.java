@@ -131,7 +131,7 @@ public final class SiteTower extends FacilityBuilder {
     private SiteTower(ServerLevel l, BlockPos o) { super(l, o); }
 
     /** Floor height of storey s (0 = ground, negative = basements), relative to the origin. */
-    private static int y(int s) { return s * STOREY; }
+    public static int y(int s) { return s * STOREY; }
 
     // ================================================================== entry point
 
@@ -919,6 +919,8 @@ public final class SiteTower extends FacilityBuilder {
         for (int x = 13; x <= 19; x++) set(x, Y + 1, 25, "office_desk[facing=south,left=" + (x > 13) + ",right=" + (x < 19) + "]");
         put(15, Y + 2, 25, "computer", Blocks.AIR, S);
         set(14, Y + 2, 25, "crt_monitor[facing=south,lit=true,screen=0]");
+        l.setBlock(at(16, Y + 2, 25), com.breachprotocol.registry.ModBlocks.ADMIN_TERMINAL.get().defaultBlockState()
+                .setValue(net.minecraft.world.level.block.HorizontalDirectionalBlock.FACING, net.minecraft.core.Direction.SOUTH), 3);
         set(17, Y + 2, 25, "paper_stack[facing=south,variant=2]");
         set(18, Y + 2, 25, "desk_lamp[facing=south,lit=true]");
         set(16, Y + 1, 26, "office_chair[facing=north]");

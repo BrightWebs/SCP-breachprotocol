@@ -2,54 +2,59 @@ package com.breachprotocol.career;
 
 import com.breachprotocol.BreachProtocol;
 import com.breachprotocol.network.DialoguePayload;
-import com.breachprotocol.world.Site01;
-import net.minecraft.ChatFormatting;
+import com.breachprotocol.registry.ModBlocks;
+import com.breachprotocol.world.SiteTower;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
+import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.Set;
-
 /**
- * The Administrator's computer: any Foundation monitor or terminal at a site (the one on the
- * Administrator's desk included) opens the Foundation desktop for the Administrator. Sneak to use
- * the device normally.
+ * Opens the Administrator's desktop (from the Administrator's Terminal block). Site towers built
+ * before the terminal existed get one on the Administrator's desk, in the free spot beside the
+ * monitor; nothing else in the office is touched.
  */
 @EventBusSubscriber(modid = BreachProtocol.MODID)
 public final class Desk {
     private Desk() {}
-
-    private static final Set<String> SCREENS = Set.of("crt_monitor", "computer_terminal", "security_monitor", "wall_monitor");
-
-    @SubscribeEvent
-    public static void click(PlayerInteractEvent.RightClickBlock event) {
-        if (event.getLevel().isClientSide || event.getHand() != InteractionHand.MAIN_HAND) return;
-        if (!(event.getEntity() instanceof ServerPlayer p) || p.isShiftKeyDown()) return;
-        ResourceLocation id = BuiltInRegistries.BLOCK.getKey(event.getLevel().getBlockState(event.getPos()).getBlock());
-        if (!id.getNamespace().equals("scp_unleashed") || !SCREENS.contains(id.getPath())) return;
-        if (Sites.at(event.getLevel(), event.getPos()) == null && !Site01.isInside(event.getLevel(), event.getPos())) return;
-        if (Career.rank(p) != Rank.ADMINISTRATOR && !Career.isAscended(p)) {
-            if (Career.rank(p).atLeast(Rank.OVERSEER))
-                p.displayClientMessage(Component.literal("ACCESS RESTRICTED · Administrator credentials required.").withStyle(ChatFormatting.RED), true);
-            return;
-        }
-        event.setCanceled(true);
-        event.setCancellationResult(InteractionResult.SUCCESS);
-        open(p);
-    }
 
     public static void open(ServerPlayer p) {
         Career.sync(p);
         CompoundTag t = new CompoundTag();
         t.putBoolean("desktop", true);
         PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
+    }
+
+    /** Where the terminal stands in a tower built around this site's centre. */
+    public static BlockPos deskSpot(Sites.Site s) {
+        BlockPos o = new BlockPos(s.x - SiteTower.T / 2, s.y, s.z - SiteTower.T / 2);
+        return o.offset(16, SiteTower.y(SiteTower.TOP) + 2, 25);
+    }
+
+    @SubscribeEvent
+    public static void tick(ServerTickEvent.Post event) {
+        if (event.getServer().getTickCount() % 100 != 37) return;
+        ServerLevel ow = event.getServer().overworld();
+        for (Sites.Site s : Sites.get(event.getServer()).sites) {
+            if (s.name.equals("Site-01") || !s.dim.equals("minecraft:overworld")) continue;
+            Forces.Data fd = Forces.data(event.getServer());
+            if (fd.terminals.contains(s.name)) continue;
+            BlockPos at = deskSpot(s);
+            if (!ow.isLoaded(at) || ow.getNearestPlayer(at.getX(), at.getY(), at.getZ(), 48, false) == null) continue;
+            // only on a tower's Administrator desk, and only if that spot is still empty
+            String desk = BuiltInRegistries.BLOCK.getKey(ow.getBlockState(at.below()).getBlock()).getPath();
+            if (!desk.equals("office_desk")) continue;
+            fd.terminals.add(s.name);
+            fd.setDirty();
+            if (!ow.getBlockState(at).isAir()) continue;
+            ow.setBlock(at, ModBlocks.ADMIN_TERMINAL.get().defaultBlockState().setValue(HorizontalDirectionalBlock.FACING, Direction.SOUTH), 3);
+        }
     }
 }

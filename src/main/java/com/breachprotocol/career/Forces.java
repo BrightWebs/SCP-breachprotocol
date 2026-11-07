@@ -119,6 +119,8 @@ public final class Forces {
         /** Deployments waiting for the site to be loaded: site name -> unit list. */
         public final ListTag pending = new ListTag();
         public long nextReview = -1;
+        /** Sites whose Administrator desk has been given its terminal. */
+        public final Set<String> terminals = new HashSet<>();
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
 
         static Data load(CompoundTag t, HolderLookup.Provider p) {
@@ -127,6 +129,7 @@ public final class Forces {
             for (String k : st.getAllKeys()) d.stations.put(k, Station.load(st.getCompound(k)));
             d.pending.addAll(t.getList("pending", Tag.TAG_COMPOUND));
             d.nextReview = t.contains("next") ? t.getLong("next") : -1;
+            for (Tag x : t.getList("terminals", Tag.TAG_STRING)) d.terminals.add(x.getAsString());
             return d;
         }
 
@@ -137,6 +140,9 @@ public final class Forces {
             t.put("stations", st);
             t.put("pending", pending);
             t.putLong("next", nextReview);
+            ListTag tl = new ListTag();
+            for (String x : terminals) tl.add(net.minecraft.nbt.StringTag.valueOf(x));
+            t.put("terminals", tl);
             return t;
         }
 

@@ -53,6 +53,39 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public String templateId = "";
         public int caller;
         public long expires;
+        /** You dialled them: it rings until {@link #pickupAt}. */
+        public boolean outgoing;
+        public long pickupAt;
+    }
+
+    /** A meeting on the calendar (or a request for one). {@code at} is in world day-time. */
+    public static class Appt {
+        public int id, seat;
+        public String topic = "";
+        public long at;
+        public boolean confirmed;
+
+        CompoundTag save() {
+            CompoundTag t = new CompoundTag();
+            t.putInt("id", id);
+            t.putInt("seat", seat);
+            t.putString("topic", topic);
+            t.putLong("at", at);
+            t.putBoolean("ok", confirmed);
+            Calls.Template tp = Calls.get(topic);
+            if (tp != null) t.putString("about", Calls.title(tp));
+            return t;
+        }
+
+        static Appt load(CompoundTag t) {
+            Appt a = new Appt();
+            a.id = t.getInt("id");
+            a.seat = t.getInt("seat");
+            a.topic = t.getString("topic");
+            a.at = t.getLong("at");
+            a.confirmed = t.getBoolean("ok");
+            return a;
+        }
     }
 
     /** A photo taken with the phone camera. */
@@ -108,6 +141,12 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public final List<Message> messages = new ArrayList<>();
     public final List<Mission> missions = new ArrayList<>();
     public Call call;
+    public final List<Appt> appts = new ArrayList<>();
+    public int nextApptId = 1;
+    public long nextRequest;
+    /** How the last call ended (shown on the phone, not as a message). */
+    public String lastCallFrom = "", lastCallText = "";
+    public long lastCallAt;
     public final Map<String, Long> cooldowns = new HashMap<>();
     public long nextMission, nextCall, nextFlavor, nextStabilityEvent;
     public boolean o5OfferPending;
@@ -204,8 +243,18 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             c.putString("id", call.templateId);
             c.putInt("caller", call.caller);
             c.putLong("expires", call.expires);
+            c.putBoolean("out", call.outgoing);
+            c.putLong("pickup", call.pickupAt);
             t.put("call", c);
         }
+        ListTag ap = new ListTag();
+        for (Appt a : appts) ap.add(a.save());
+        t.put("appts", ap);
+        t.putInt("nextAppt", nextApptId);
+        t.putLong("nextRequest", nextRequest);
+        t.putString("lastCallFrom", lastCallFrom);
+        t.putString("lastCallText", lastCallText);
+        t.putLong("lastCallAt", lastCallAt);
         CompoundTag cds = new CompoundTag();
         cooldowns.forEach(cds::putLong);
         t.put("cooldowns", cds);
@@ -258,7 +307,16 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             call.templateId = c.getString("id");
             call.caller = c.getInt("caller");
             call.expires = c.getLong("expires");
+            call.outgoing = c.getBoolean("out");
+            call.pickupAt = c.getLong("pickup");
         }
+        appts.clear();
+        for (Tag e : t.getList("appts", Tag.TAG_COMPOUND)) appts.add(Appt.load((CompoundTag) e));
+        nextApptId = Math.max(1, t.getInt("nextAppt"));
+        nextRequest = t.getLong("nextRequest");
+        lastCallFrom = t.getString("lastCallFrom");
+        lastCallText = t.getString("lastCallText");
+        lastCallAt = t.getLong("lastCallAt");
         cooldowns.clear();
         CompoundTag cds = t.getCompound("cooldowns");
         for (String k : cds.getAllKeys()) cooldowns.put(k, cds.getLong(k));

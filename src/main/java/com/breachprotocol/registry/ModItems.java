@@ -16,6 +16,8 @@ public final class ModItems {
             () -> new PhoneItem(new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
 
 
+    public static final DeferredItem<BlockItem> ADMIN_TERMINAL = ITEMS.register("admin_terminal",
+            () -> new BlockItem(ModBlocks.ADMIN_TERMINAL.get(), new Item.Properties().rarity(Rarity.EPIC).stacksTo(1)));
     public static final DeferredItem<BlockItem> ASCENSION_ALTAR = ITEMS.register("ascension_altar",
             () -> new BlockItem(ModBlocks.ASCENSION_ALTAR.get(), new Item.Properties().rarity(Rarity.EPIC)));
 
