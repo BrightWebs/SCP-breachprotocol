@@ -29,7 +29,7 @@ import net.minecraft.world.level.Level;
  * up now and then to stretch their legs. An Overseer who has given up their seat to a player is
  * "unseated": they wander the site and sit wherever they like. Talk to them.
  */
-public class O5MemberEntity extends PathfinderMob {
+public class O5MemberEntity extends PathfinderMob implements Person {
     private static final EntityDataAccessor<Integer> SEAT = SynchedEntityData.defineId(O5MemberEntity.class, EntityDataSerializers.INT);
 
     private static final String[] LINES_STAFF = {
@@ -75,7 +75,30 @@ public class O5MemberEntity extends PathfinderMob {
     protected void defineSynchedData(SynchedEntityData.Builder builder) {
         super.defineSynchedData(builder);
         builder.define(SEAT, 7);
+        builder.define(TALKING, false);
     }
+
+    private static final net.minecraft.network.syncher.EntityDataAccessor<Boolean> TALKING =
+            net.minecraft.network.syncher.SynchedEntityData.defineId(O5MemberEntity.class, net.minecraft.network.syncher.EntityDataSerializers.BOOLEAN);
+
+    // ================================================================== how they look (MCA-style body)
+
+    /** The Gardener, the Ambassador, Blackbird, the Oracle and the Archivist are women. */
+    @Override
+    public boolean isFemale() { int s = entityData.get(SEAT); return s == 2 || s == 4 || s == 5 || s == 9 || s == 10; }
+
+    @Override
+    public float bustSize() { return 0.25F + gene(8) * 0.5F; }
+
+    @Override
+    public boolean isTalking() { return entityData.get(TALKING); }
+
+    /** The Founder is silver-haired; the Fountain keeps the rest of them from greying. */
+    @Override
+    public int greyHair() { return entityData.get(SEAT) == 1 ? 0xFFD0D0D4 : 0; }
+
+    @Override
+    public String uniform() { return "textures/entity/staff/uniform/o5_" + Math.max(1, Math.min(13, entityData.get(SEAT))) + ".png"; }
 
     @Override
     protected void registerGoals() {
@@ -119,6 +142,7 @@ public class O5MemberEntity extends PathfinderMob {
 
     @Override
     public void aiStep() {
+        if (!level().isClientSide && tickCount % 10 == 0) entityData.set(TALKING, Dialogue.talkingTo(this) != null);
         super.aiStep();
         if (!level().isClientSide && tickCount % 200 == 0) {
             restrict();

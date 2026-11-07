@@ -33,7 +33,7 @@ import java.util.UUID;
  * you when they see you, according to your rank (a D-Class gets ordered about; the Administrator
  * gets everyone on their feet). Right-click one to talk; some can help.
  */
-public class FoundationStaff extends PathfinderMob {
+public class FoundationStaff extends PathfinderMob implements Person {
     public enum Role {
         RESEARCHER("Researcher", "Dr."), GUARD("Security", "Officer"), MEDIC("Medical", "Dr."),
         TECHNICIAN("Technician", "Tech"), CLERK("Administration", ""), JANITOR("Janitorial", ""),
@@ -84,40 +84,11 @@ public class FoundationStaff extends PathfinderMob {
     /** Her figure, 0 (slight) to 1 (full). */
     public float bustSize() { return gene(8); }
 
-    // ================================================================== genetics (MCA-style genes, fixed per person, 0..1)
-
-    /** A stable pseudo-random gene from who they are. */
-    public float gene(int salt) {
-        long x = getUUID().getMostSignificantBits() * 31 + getUUID().getLeastSignificantBits() * (salt * 2654435761L + 1);
-        x ^= x >>> 33; x *= 0xff51afd7ed558ccdL; x ^= x >>> 33; x *= 0xc4ceb9fe1a85ec53L; x ^= x >>> 33;
-        return ((x >>> 11) & 0xFFFFFF) / (float) 0xFFFFFF;
-    }
-
-    /** Where their family came from: the Foundation hires from everywhere. */
-    private float heritage() { return gene(3) * 1.5F - 0.25F; }
-
-    private static float clamp01(float f) { return Math.max(0, Math.min(1, f)); }
-
-    public float melanin() { return clamp01((gene(2) - 0.5F) * 0.35F + heritage() * 0.4F + 0.1F); }
-
-    public float hemoglobin() { return clamp01(((gene(4) - 0.5F) * 0.35F + heritage() * 0.4F + 0.1F) * 0.5F); }
-
-    public float eumelanin() { return gene(5); }
-
-    public float pheomelanin() { return gene(6); }
-
-    public float faceGene() { return gene(7); }
-
-    public float eyeBrightness() { return gene(12); }
-
-    public int skinIndex() { return Math.min(4, (int) (gene(1) * 5)); }
-
-    public int hairIndex(int count) { return Math.min(count - 1, (int) (gene(11) * count)); }
-
     /** Greying with age (white when old). 0 = natural colour. */
     public int greyHair() { return elder() ? 0xFFD8D8DC : age() >= 52 && gene(14) < 0.5F ? 0xFFA6A4A2 : 0; }
 
-    public float widthScale() { return (isFemale() ? 0.95F : 1.0F) * (0.94F + gene(10) * 0.12F); }
+    @Override
+    public String uniform() { return "textures/entity/staff/uniform/" + role().name().toLowerCase(java.util.Locale.ROOT) + "_" + Math.floorMod(variant(), 3) + ".png"; }
 
     private static final String[] MEN = {"short", "short", "buzz", "sidepart", "sidepart", "curly", "bun"};
     private static final String[] WOMEN = {"long", "long", "bob", "ponytail", "bun", "curly", "bob"};
@@ -137,7 +108,7 @@ public class FoundationStaff extends PathfinderMob {
     public boolean glasses() { return role() != Role.RESEARCHER && look(25, 6) == 0; }
 
     /** A little taller or shorter than average. */
-    public float heightScale() { return (isFemale() ? 0.94F : 0.97F) + gene(9) * 0.09F; }
+
 
     public boolean isTalking() { return entityData.get(TALKING); }
 

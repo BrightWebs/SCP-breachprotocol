@@ -9,7 +9,6 @@
 package com.breachprotocol.client.mca;
 
 import com.breachprotocol.BreachProtocol;
-import com.breachprotocol.entity.FoundationStaff;
 import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
@@ -26,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 /** A player-shaped body with clothing layers and a chest that follows the torso, animated like a person. */
-public class McaStaffModel extends HumanoidModel<FoundationStaff> {
+public class McaStaffModel<T extends net.minecraft.world.entity.Mob & com.breachprotocol.entity.Person> extends HumanoidModel<T> {
     public static final ModelLayerLocation BODY = layer("body"), FACE = layer("face"), CLOTHES = layer("clothes"), HAIR = layer("hair");
 
     private static ModelLayerLocation layer(String n) { return new ModelLayerLocation(BreachProtocol.id("mca_staff"), n); }
@@ -88,7 +87,7 @@ public class McaStaffModel extends HumanoidModel<FoundationStaff> {
 
     public List<ModelPart> breastParts() { return List.of(breasts, breastsWear); }
 
-    public McaStaffModel hideWears() {
+    public McaStaffModel<T> hideWears() {
         wearsHidden = true;
         breastsWear.visible = false;
         leftArmwear.visible = rightArmwear.visible = leftLegwear.visible = rightLegwear.visible = bodyWear.visible = false;
@@ -132,7 +131,7 @@ public class McaStaffModel extends HumanoidModel<FoundationStaff> {
     // ================================================================== animation
 
     @Override
-    public void setupAnim(FoundationStaff e, float limbSwing, float amount, float age, float headYaw, float headPitch) {
+    public void setupAnim(T e, float limbSwing, float amount, float age, float headYaw, float headPitch) {
         boolean armed = !e.getMainHandItem().isEmpty();
         boolean aiming = armed && e.isAggressive();
         rightArmPose = aiming ? ArmPose.BOW_AND_ARROW : armed ? ArmPose.ITEM : ArmPose.EMPTY;
@@ -205,9 +204,9 @@ public class McaStaffModel extends HumanoidModel<FoundationStaff> {
     }
 
     @Override
-    public void copyPropertiesTo(HumanoidModel<FoundationStaff> target) {
+    public void copyPropertiesTo(HumanoidModel<T> target) {
         super.copyPropertiesTo(target);
-        if (target instanceof McaStaffModel m) {
+        if (target instanceof McaStaffModel<?> m) {
             m.breastSize = breastSize;
             m.breasts.visible = breasts.visible;
             m.breasts.copyFrom(breasts);

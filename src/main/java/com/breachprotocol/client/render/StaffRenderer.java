@@ -19,11 +19,9 @@ import java.util.List;
  */
 public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, HumanoidModel<FoundationStaff>> {
     public StaffRenderer(EntityRendererProvider.Context ctx) {
-        super(ctx, new McaStaffModel(ctx.bakeLayer(McaStaffModel.BODY)), 0.45F);
-        McaLooks.attachTo(this, ctx);
+        super(ctx, new McaStaffModel<>(ctx.bakeLayer(McaStaffModel.BODY)), 0.45F);
+        McaLooks.attachTo(layers, this, ctx);
     }
-
-    public List<RenderLayer<FoundationStaff, HumanoidModel<FoundationStaff>>> layersList() { return layers; }
 
     @Override
     protected void scale(FoundationStaff e, PoseStack pose, float partial) {

@@ -11,7 +11,8 @@
 package com.breachprotocol.client.mca;
 
 import com.breachprotocol.BreachProtocol;
-import com.breachprotocol.entity.FoundationStaff;
+import com.breachprotocol.entity.Person;
+import net.minecraft.world.entity.Mob;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
@@ -82,7 +83,7 @@ public final class McaLooks {
 
     private static final int BLUE = 0xFF3A98E8, GREEN = 0xFF4CB346, HAZEL = 0xFFC29B35, BROWN = 0xFF7C4825, DETAILS_TINT = 0xFF808080;
 
-    static int eyeColour(FoundationStaff e) {
+    static int eyeColour(Person e) {
         float c = Mth.frac(e.faceGene());
         int col = c < 0.35F ? FastColor.ARGB32.lerp(c / 0.35F, BLUE, GREEN) : c < 0.70F ? FastColor.ARGB32.lerp((c - 0.35F) / 0.35F, GREEN, HAZEL) : FastColor.ARGB32.lerp((c - 0.70F) / 0.30F, HAZEL, BROWN);
         float f = 0.5F + Mth.clamp(e.eyeBrightness(), 0, 1);
@@ -133,20 +134,20 @@ public final class McaLooks {
 
     // ================================================================== the layers
 
-    abstract static class Layer extends RenderLayer<FoundationStaff, HumanoidModel<FoundationStaff>> {
-        final McaStaffModel model;
+    abstract static class Layer<T extends Mob & Person> extends RenderLayer<T, HumanoidModel<T>> {
+        final McaStaffModel<T> model;
 
-        Layer(RenderLayerParent<FoundationStaff, HumanoidModel<FoundationStaff>> parent, McaStaffModel model) {
+        Layer(RenderLayerParent<T, HumanoidModel<T>> parent, McaStaffModel<T> model) {
             super(parent);
             this.model = model;
         }
 
         void visibility() { model.setAllVisible(true); }
 
-        abstract void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, FoundationStaff e, float partial);
+        abstract void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, T e, float partial);
 
         @Override
-        public void render(PoseStack pose, MultiBufferSource buf, int light, FoundationStaff e, float limb, float amount, float partial, float age, float yaw, float pitch) {
+        public void render(PoseStack pose, MultiBufferSource buf, int light, T e, float limb, float amount, float partial, float age, float yaw, float pitch) {
             if (e.isInvisible()) return;
             model.copyVisibility(getParentModel());
             getParentModel().copyPropertiesTo(model);
@@ -161,30 +162,34 @@ public final class McaLooks {
     }
 
     /** Skin, tinted from the skin colour map by their genes. */
-    static final class Skin extends Layer {
-        Skin(RenderLayerParent<FoundationStaff, HumanoidModel<FoundationStaff>> p, McaStaffModel m) { super(p, m.hideWears()); }
+    static final class Skin<T extends Mob & Person> extends Layer<T> {
+        Skin(RenderLayerParent<T, HumanoidModel<T>> p, McaStaffModel<T> m) { super(p, m.hideWears()); }
 
         @Override
-        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, FoundationStaff e, float partial) {
+        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, T e, float partial) {
             ResourceLocation t = tex("skin/" + (e.isFemale() ? "female" : "male") + "/" + e.skinIndex() + ".png");
             put(pose, buf, light, overlay, t, SKIN.colour(e.melanin(), e.hemoglobin()), false);
         }
     }
 
     /** The face: whites, coloured irises, details, and a blink now and then. */
-    static final class Face extends Layer {
+    static final class Face<T extends Mob & Person> extends Layer<T> {
         private static final int FACES = 11;
 
-        Face(RenderLayerParent<FoundationStaff, HumanoidModel<FoundationStaff>> p, McaStaffModel m) { super(p, m.hideWears()); }
+        Face(RenderLayerParent<T, HumanoidModel<T>> p, McaStaffModel<T> m) { super(p, m.hideWears()); }
 
         @Override
         void visibility() { model.setAllVisible(false); model.head.visible = true; }
 
         @Override
-        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, FoundationStaff e, float partial) {
+        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, T e, float partial) {
             int time = e.tickCount / 2 + (int) (e.hemoglobin() * 65536);
             if (time % 50 == 1 || time % 57 == 1 || e.isDeadOrDying() || e.isSleeping()) {
                 put(pose, buf, light, overlay, tex("face/blink.png"), 0xFFFFFFFF, true);
+                return;
+            }
+            if (e instanceof com.breachprotocol.entity.O5MemberEntity && !clearedForCouncil()) {
+                put(pose, buf, light, overlay, BreachProtocol.id("textures/entity/staff/uniform/redacted.png"), 0xFFFFFFFF, true);
                 return;
             }
             ResourceLocation f = tex("face/" + Math.min(FACES - 1, (int) (e.faceGene() * FACES)) + ".png");
@@ -195,21 +200,20 @@ public final class McaLooks {
     }
 
     /** The Foundation uniform of their department. */
-    static final class Clothes extends Layer {
-        Clothes(RenderLayerParent<FoundationStaff, HumanoidModel<FoundationStaff>> p, McaStaffModel m) { super(p, m); }
+    static final class Clothes<T extends Mob & Person> extends Layer<T> {
+        Clothes(RenderLayerParent<T, HumanoidModel<T>> p, McaStaffModel<T> m) { super(p, m); }
 
         @Override
-        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, FoundationStaff e, float partial) {
-            String role = e.role().name().toLowerCase(Locale.ROOT);
-            put(pose, buf, light, overlay, BreachProtocol.id("textures/entity/staff/uniform/" + role + "_" + Math.floorMod(e.variant(), 3) + ".png"), 0xFFFFFFFF, false);
+        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, T e, float partial) {
+            put(pose, buf, light, overlay, BreachProtocol.id(e.uniform()), 0xFFFFFFFF, false);
         }
     }
 
     /** Hair: one of MCA's styles, coloured from the hair colour map, greying with age. */
-    static final class Hair extends Layer {
+    static final class Hair<T extends Mob & Person> extends Layer<T> {
         private static final int STYLES = 40;
 
-        Hair(RenderLayerParent<FoundationStaff, HumanoidModel<FoundationStaff>> p, McaStaffModel m) { super(p, m); }
+        Hair(RenderLayerParent<T, HumanoidModel<T>> p, McaStaffModel<T> m) { super(p, m); }
 
         @Override
         void visibility() {
@@ -219,20 +223,24 @@ public final class McaLooks {
         }
 
         @Override
-        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, FoundationStaff e, float partial) {
+        void draw(PoseStack pose, MultiBufferSource buf, int light, int overlay, T e, float partial) {
             int grey = e.greyHair();
             int colour = grey != 0 ? grey : HAIR.colour(e.eumelanin(), e.pheomelanin());
             put(pose, buf, light, overlay, tex("hair/" + (e.isFemale() ? "female" : "male") + "/" + e.hairIndex(STYLES) + ".png"), colour, false);
         }
     }
 
-    /** Adds the look layers to the staff renderer, in MCA's order. */
-    static void attach(com.breachprotocol.client.render.StaffRenderer r, net.minecraft.client.renderer.entity.EntityRendererProvider.Context ctx) {
-        r.layersList().add(0, new Skin(r, new McaStaffModel(ctx.bakeLayer(McaStaffModel.BODY))));
-        r.layersList().add(1, new Face(r, new McaStaffModel(ctx.bakeLayer(McaStaffModel.FACE))));
-        r.layersList().add(2, new Clothes(r, new McaStaffModel(ctx.bakeLayer(McaStaffModel.CLOTHES))));
-        r.layersList().add(3, new Hair(r, new McaStaffModel(ctx.bakeLayer(McaStaffModel.HAIR))));
+    /** Only the Council (and above) may look an Overseer in the face; everyone else sees a classified blur. */
+    static boolean clearedForCouncil() {
+        var t = com.breachprotocol.network.ClientCareerState.tag;
+        return t != null && (t.getBoolean("ascended") || t.getInt("rankId") >= com.breachprotocol.career.Rank.OVERSEER.ordinal());
     }
 
-    public static void attachTo(com.breachprotocol.client.render.StaffRenderer r, net.minecraft.client.renderer.entity.EntityRendererProvider.Context ctx) { attach(r, ctx); }
+    /** Adds the look layers to a renderer, in MCA's order. */
+    public static <T extends Mob & Person> void attachTo(java.util.List<RenderLayer<T, HumanoidModel<T>>> layers, RenderLayerParent<T, HumanoidModel<T>> r, net.minecraft.client.renderer.entity.EntityRendererProvider.Context ctx) {
+        layers.add(0, new Skin<>(r, new McaStaffModel<>(ctx.bakeLayer(McaStaffModel.BODY))));
+        layers.add(1, new Face<>(r, new McaStaffModel<>(ctx.bakeLayer(McaStaffModel.FACE))));
+        layers.add(2, new Clothes<>(r, new McaStaffModel<>(ctx.bakeLayer(McaStaffModel.CLOTHES))));
+        layers.add(3, new Hair<>(r, new McaStaffModel<>(ctx.bakeLayer(McaStaffModel.HAIR))));
+    }
 }
