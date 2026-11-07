@@ -53,7 +53,6 @@ import java.util.Map;
  * Every floor is joined by one stairwell in the north-east corner, opening onto a central corridor.
  */
 public final class SiteTower {
-    private SiteTower() {}
 
     /** Tower footprint is 0..T on x and z; storeys are 6 blocks (floor, 4 clear, ceiling). */
     public static final int T = 32, STOREY = 6, TOP = 9, ROOF = 10;
