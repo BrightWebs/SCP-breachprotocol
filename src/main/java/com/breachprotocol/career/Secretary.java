@@ -160,7 +160,7 @@ public final class Secretary {
                 if (next != null) parts.add("Next on your calendar: " + Calendar.who(next) + ", " + Calendar.when(next.at) + ".");
                 if (reqs > 0) parts.add(reqs + " meeting request" + (reqs == 1 ? "" : "s") + " waiting for your answer.");
                 CareerData.Appt weekly = Calendar.weekly(d);
-                if (weekly != null) parts.add("The Council sits " + Calendar.when(weekly.at) + ", as usual.");
+                if (weekly != null) parts.add("The Council sits " + Calendar.when(weekly.at) + ", as usual" + (d.agenda.isEmpty() ? "." : ", with " + d.agenda.size() + " item" + (d.agenda.size() == 1 ? "" : "s") + " added so far, on top of the week's business and Peanut's cell."));
                 Defence.Alert al = Defence.alertAt(deskOf(p) == null ? "" : deskOf(p).name);
                 if (al != null) parts.add("And security reports " + al.org + " on the grounds. They're handling it.");
                 Dialogue.line(p, me, greeting(p) + " " + String.join(" ", parts), c);

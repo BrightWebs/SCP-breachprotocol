@@ -57,7 +57,12 @@ public final class Calls {
             case "gate_stirs" -> "The Gate is stirring";
             case "dclass_supply" -> "D-Class supply";
             case "global_lockdown" -> "Global lockdown";
-            default -> "Council business";
+            case "w_attack" -> "Answering this week's attack";
+            case "w_losses" -> "This week's losses";
+            case "w_breach" -> "The breach";
+            case "w_stability" -> "Emergency measures";
+            case "w_rift" -> "The lost rift crew";
+            default -> t.id().startsWith("w_short_") ? "Under-strength garrison" : "Council business";
         };
     }
 

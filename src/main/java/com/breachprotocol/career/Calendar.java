@@ -158,26 +158,21 @@ public final class Calendar {
             if (d.nextRequest > 0 && n >= d.nextRequest) d.nextRequest = n + HOUR;
             return;
         }
-        // a request for a meeting every couple of days
+        // every couple of days an Overseer puts something on the next Council session's agenda
         if (d.nextRequest == 0) d.nextRequest = n + DAY / 2;
         if (n >= d.nextRequest) {
             d.nextRequest = n + 2L * DAY + r.nextInt(DAY);
-            long open = d.appts.stream().filter(a -> !a.confirmed && a.seat != 0).count();
-            int skip = faceToFace;
-            if (open < 3 && d.appts.size() < MAX) {
-                CareerData.Appt a = new CareerData.Appt();
-                a.id = d.nextApptId++;
-                a.seat = 1 + r.nextInt(12);
-                if (a.seat == skip) a.seat = a.seat % 12 + 1;
-                a.topic = Calls.topicFor(a.seat, admin(d), r);
-                a.at = r.nextBoolean() ? inHours(p, 2 + r.nextInt(6)) : at(p, new int[]{9, 11, 14, 16, 19}[r.nextInt(5)], r.nextInt(2));
-                a.confirmed = false;
-                if (!a.topic.isEmpty()) {
-                    d.appts.add(a);
-                    d.dirty = true;
-                    p.displayClientMessage(Component.literal("▣ " + O5.seat(a.seat).sender() + " requests a meeting: " + Calls.title(Calls.get(a.topic)) + " · " + when(a.at)).withStyle(ChatFormatting.AQUA), true);
-                    p.playNotifySound(ModSounds.PHONE_MESSAGE.get(), SoundSource.PLAYERS, 0.6F, 1.2F);
-                }
+            int seat = 1 + r.nextInt(12);
+            if (seat == faceToFace) seat = seat % 12 + 1;
+            String topic = Calls.topicFor(seat, admin(d), r);
+            long day = n / DAY;
+            Long last = d.agendaUsed.get(topic);
+            if (!topic.isEmpty() && !d.agenda.contains(topic) && d.agenda.size() < 4 && (last == null || day - last >= 21)) {
+                d.agenda.add(topic);
+                d.dirty = true;
+                CareerData.Appt w = weekly(d);
+                p.displayClientMessage(Component.literal("▣ " + O5.seat(seat).sender() + " added \"" + Calls.title(Calls.get(topic)) + "\" to the Council agenda" + (w != null ? " for " + when(w.at) : "") + ".").withStyle(ChatFormatting.AQUA), true);
+                p.playNotifySound(ModSounds.PHONE_MESSAGE.get(), SoundSource.PLAYERS, 0.5F, 1.3F);
             }
         }
         // meetings that are due ring you; requests nobody answered lapse

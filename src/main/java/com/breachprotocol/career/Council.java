@@ -339,10 +339,23 @@ public final class Council {
         int[] votes;
         final Map<Integer, Integer> stance = new HashMap<>();
 
+        /** The Administrator's sitting covers the whole week's agenda in one go (see AgendaBuilder). */
+        final List<Calls.Template> agenda;
+        final List<String> covered = new ArrayList<>();
+
         Agenda(ServerPlayer p, boolean admin) {
             super(p);
             this.admin = admin;
             this.pool = Calls.councilPool(admin);
+            this.agenda = admin ? new ArrayList<>(AgendaBuilder.build(p)) : null;
+        }
+
+        int total() { return agenda != null ? agenda.size() : Math.min(3, pool.size()); }
+
+        @Override
+        void close() {
+            super.close();
+            if (agenda != null && !covered.isEmpty()) AgendaBuilder.done(p, covered);
         }
 
         @Override
@@ -354,13 +367,18 @@ public final class Council {
             p.playNotifySound(SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 0.8F, 0.6F);
             List<Integer> s = seated();
             int chair = s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0);
-            then(50, () -> speak(chair, admin ? "The Administrator is seated. This session of the O5 Council is called to order."
+            then(50, () -> speak(chair, admin ? "The Administrator is seated. This session of the O5 Council is called to order. We have " + total() + " item" + (total() == 1 ? "" : "s") + " before us."
                     : "Thirteen is seated. We have a quorum. Let's begin."));
+            if (agenda != null && !agenda.isEmpty()) {
+                StringBuilder b = new StringBuilder("On the agenda: ");
+                for (int i = 0; i < agenda.size(); i++) b.append(i == 0 ? "" : "; ").append(i + 1).append(". ").append(Calls.title(agenda.get(i)));
+                then(40, () -> tell(Component.literal(b + ".").withStyle(ChatFormatting.GRAY)));
+            }
             next();
         }
 
         void next() {
-            if (items >= 3 || pool.isEmpty()) {
+            if (agenda != null ? items >= agenda.size() : items >= 3 || pool.isEmpty()) {
                 then(0, () -> {
                     List<Integer> s = seated();
                     speak(s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0), "That concludes the agenda. This session is adjourned.");
@@ -369,8 +387,12 @@ public final class Council {
                 return;
             }
             items++;
-            List<Calls.Template> fresh = pool.stream().filter(t -> !used.contains(t.id())).toList();
-            item = (fresh.isEmpty() ? pool : fresh).get(rnd.nextInt((fresh.isEmpty() ? pool : fresh).size()));
+            if (agenda != null) {
+                item = agenda.get(items - 1);
+            } else {
+                List<Calls.Template> fresh = pool.stream().filter(t -> !used.contains(t.id())).toList();
+                item = (fresh.isEmpty() ? pool : fresh).get(rnd.nextInt((fresh.isEmpty() ? pool : fresh).size()));
+            }
             used.add(item.id());
             List<Integer> s = new ArrayList<>(seated());
             if (s.isEmpty()) { done = true; return; }
@@ -379,7 +401,7 @@ public final class Council {
             stance.clear();
             final int itemNo = items;
             then(70, () -> {
-                Dialogue.subtitle(p, "Agenda item " + itemNo + " of " + Math.min(3, pool.size()) + (admin ? " · the Administrator presides" : " · O5-13 is seated"));
+                Dialogue.subtitle(p, "Agenda item " + itemNo + " of " + total() + " · " + Calls.title(item) + (admin ? "" : " · O5-13 is seated"));
                 tell(Component.literal("— Item " + itemNo + " —").withStyle(ChatFormatting.DARK_GRAY));
                 speak(caller, item.text());
             });
@@ -483,6 +505,7 @@ public final class Council {
 
         void resolve(int option, boolean overruled, boolean delegated) {
             Calls.Option chosen = item.options().get(option);
+            covered.add(item.id());
             tell(Component.literal("Decided: " + chosen.label()).withStyle(ChatFormatting.GOLD));
             if (overruled) {
                 List<Integer> s = seated();

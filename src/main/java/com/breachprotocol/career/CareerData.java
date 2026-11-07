@@ -150,6 +150,10 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public long nextRequest;
     /** The weekly Council session: weekday (0 = Monday, so Tuesday = 1) and hour; a week to skip. */
     public int weeklyDow = 1, weeklyHour = 10;
+    /** Items the Overseers added for the next session; when each topic was last debated (day); when the last session was (game time). */
+    public final List<String> agenda = new ArrayList<>();
+    public final Map<String, Long> agendaUsed = new HashMap<>();
+    public long lastSession;
     public long skipWeek = -1;
     /** How the last call ended (shown on the phone, not as a message). */
     public String lastCallFrom = "", lastCallText = "";
@@ -262,6 +266,16 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         t.putInt("weeklyDow", weeklyDow);
         t.putInt("weeklyHour", weeklyHour);
         t.putLong("skipWeek", skipWeek);
+        ListTag ag = new ListTag();
+        for (String a : agenda) ag.add(net.minecraft.nbt.StringTag.valueOf(a));
+        t.put("agenda", ag);
+        ListTag agt = new ListTag();
+        for (String a : agenda) { Calls.Template tp = Calls.get(a); agt.add(net.minecraft.nbt.StringTag.valueOf(tp == null ? a : Calls.title(tp))); }
+        t.put("agendaTitles", agt);
+        CompoundTag au = new CompoundTag();
+        agendaUsed.forEach(au::putLong);
+        t.put("agendaUsed", au);
+        t.putLong("lastSession", lastSession);
         t.putString("lastCallFrom", lastCallFrom);
         t.putString("lastCallText", lastCallText);
         t.putLong("lastCallAt", lastCallAt);
@@ -324,6 +338,12 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         for (Tag e : t.getList("appts", Tag.TAG_COMPOUND)) appts.add(Appt.load((CompoundTag) e));
         nextApptId = Math.max(1, t.getInt("nextAppt"));
         nextRequest = t.getLong("nextRequest");
+        agenda.clear();
+        for (Tag e : t.getList("agenda", Tag.TAG_STRING)) agenda.add(e.getAsString());
+        agendaUsed.clear();
+        CompoundTag au = t.getCompound("agendaUsed");
+        for (String k : au.getAllKeys()) agendaUsed.put(k, au.getLong(k));
+        lastSession = t.getLong("lastSession");
         if (t.contains("weeklyDow")) { weeklyDow = t.getInt("weeklyDow"); weeklyHour = t.getInt("weeklyHour"); skipWeek = t.getLong("skipWeek"); }
         lastCallFrom = t.getString("lastCallFrom");
         lastCallText = t.getString("lastCallText");

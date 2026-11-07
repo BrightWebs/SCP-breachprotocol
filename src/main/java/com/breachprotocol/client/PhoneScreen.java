@@ -2268,7 +2268,8 @@ public class PhoneScreen extends Screen {
                 boolean late = a.getBoolean("tx");
                 rbox(g, x, y, w, 40, 4, late ? 0xFF2E0E0E : 0xFF0E2A16, late ? 0xFFB84848 : AMBER);
                 text(g, (late ? "LATE · " : "") + when(a.getLong("at")) + "  ·  " + until(a.getLong("at")), x + 6, y + 4, late ? 0xFFFFB3B3 : AMBER);
-                text(g, "Weekly O5 Council session, Site-01", x + 6, y + 14, 0xFFE8EEF4);
+                ListTag ag = t.getList("agendaTitles", Tag.TAG_STRING);
+                text(g, ellipsize("Council session, Site-01 · " + (ag.isEmpty() ? "SCP-173 cell + the week's business" : ag.size() + " added: " + ag.getString(0) + (ag.size() > 1 ? "…" : "")), w - 12), x + 6, y + 14, 0xFFE8EEF4);
                 int id = a.getInt("id"), q = (w - 14) / 4;
                 if (late) {
                     pill(g, x + 4, y + 24, q, 13, "On my way", 0xFF2EA65A, true, () -> send("week_otw", id));
