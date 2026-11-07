@@ -184,6 +184,7 @@ final class Convo {
     /** The topic buttons down the right of the screen (and the facts down the left). */
     static void topics(ServerPlayer p, FoundationStaff s) {
         subtitle(p, s);
+        if (!Dialogue.hasAnswers(p)) Converse.replies(p, s); // there is always something to say back
         Scene.Tier tier = Scene.tier(p);
         if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) Talk.opt(p, s, "You wanted to tell me something?", "recall", "They remember your last conversation", SECRET);
         if (tier == Scene.Tier.DCLASS) {
@@ -250,7 +251,7 @@ final class Convo {
         Talk.Temper t = Talk.temper(s);
         String a = Career.address(p);
         int trust = trust(s, p);
-        if (Social.handle(p, s, what)) return true;
+        if (Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
             case "gift" -> {

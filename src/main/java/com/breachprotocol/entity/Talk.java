@@ -329,6 +329,7 @@ public final class Talk {
         }
         else if (line.startsWith(Clearance.RAW)) line = line.substring(1);
         Dialogue.line(p, who.getName().getString(), line, who instanceof O5MemberEntity ? O5_C : STAFF_C);
+        if (who instanceof FoundationStaff fs) Converse.heard(p, fs, line);
         if (who instanceof Mob m) m.getLookControl().setLookAt(p, 30, 30);
     }
 
@@ -617,6 +618,7 @@ public final class Talk {
                 case "follow", "stay", "post", "sit" -> {
                     if (!mayCommand(p, s)) { orders(p, s); break; }
                     s.order(what, p);
+                    Memory.put(s, p, "last_order", what); // they'll bring it up
                     say(p, s, switch (what) {
                         case "follow" -> pick(new Random(), "Right behind you.", "Lead the way.", "On you.");
                         case "stay" -> s.role() == FoundationStaff.Role.GUARD ? "Holding this position." : "I'll wait here.";

@@ -104,6 +104,11 @@ public final class Dialogue {
         while (s.lines.size() > 14) s.lines.removeFirst();
     }
 
+    public static boolean hasAnswers(ServerPlayer p) {
+        for (CompoundTag o : st(p).options) if (o.getBoolean("answer")) return true;
+        return false;
+    }
+
     public static void clearOptions(ServerPlayer p) { st(p).options.clear(); st(p).input = ""; }
 
     /** An answer to what they just said (shown under their words, MCA-style), rather than a topic button. */
