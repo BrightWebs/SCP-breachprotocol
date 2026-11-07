@@ -32,6 +32,10 @@ public final class Names {
             "Zofia", "Adele", "Daria", "Freya", "Hana", "Jasmine", "Leona", "Nadia", "Paloma", "Sigrid", "Uma", "Willa", "Clara", "Isabelle", "Margot",
             "Naomi", "Celeste", "Vivienne", "Aiko", "Lucia", "Helena", "Ophelia", "Simone", "Talia"};
 
+    private static final java.util.Set<String> WOMEN_SET = new java.util.HashSet<>(java.util.Arrays.asList(WOMEN));
+
+    public static boolean isWoman(String first) { return WOMEN_SET.contains(first); }
+
     /** A woman's first name and a surname, unused anywhere in this world. */
     public static String woman(MinecraftServer s, RandomSource r) {
         Data d = data(s);

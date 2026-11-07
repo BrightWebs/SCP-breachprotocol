@@ -115,7 +115,7 @@ public final class Defence {
     public static boolean intruder(MinecraftServer s, Entity e) {
         if (e instanceof Player p) return !p.isCreative() && !p.isSpectator() && data(s).hostile.contains(p.getGameProfile().getName().toLowerCase(Locale.ROOT));
         String org = orgOf(e);
-        return !org.isEmpty() && !invited(s, org);
+        return !org.isEmpty() && !invited(s, org) && !Policy.truce(s, org);
     }
 
     private static boolean topBrass(Player p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }

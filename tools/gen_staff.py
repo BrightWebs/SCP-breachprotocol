@@ -45,13 +45,50 @@ def face(img, skin, hair, rnd, glasses=False, cap=None):
         for (x, y, w, h) in [(40, 0, 8, 8), (40, 8, 8, 3), (32, 8, 8, 3), (48, 8, 8, 3), (56, 8, 8, 3)]:
             rect(img, x, y, w, h, cap)
 
-def make(name, top, under, legs, rnd, v, badge=None, vest=None, glasses=False, cap=None, stripe=None, cross=None, old=False):
+def extras(img, top, front, skin, rnd):
+    """Model extras painted in the free lower half: three chest builds (for women) and eyelids (for blinking)."""
+    for (u, v, w, h, d) in [(0, 32, 6, 3, 1), (0, 40, 6, 3, 2), (0, 48, 6, 4, 3)]:
+        box(img, u, v, w, h, d, top, rnd, 5)
+        # the front: the shirt/blouse showing, shaded so it reads as a shape
+        for j in range(h):
+            k = 1.08 - 0.12 * j
+            for i in range(w):
+                c = front if (front and 2 <= i <= 3) else top
+                img.putpixel((u + d + i, v + d + j), shade(c, k))
+    box(img, 24, 32, 6, 1, 1, skin, rnd, 2)
+
+FHAIR_ALL = [(70, 44, 28, 255), (22, 18, 16, 255), (168, 92, 52, 255)]
+
+def feminine(img, skin, hair, rnd, cap=None):
+    """Long hair framing the face, lashes, lips."""
+    if not cap:
+        rect(img, 0, 8, 8, 8, hair); rect(img, 16, 8, 8, 8, hair); rect(img, 24, 8, 8, 8, hair)
+        rect(img, 8, 8, 8, 1, hair); rect(img, 8, 9, 5, 1, hair)
+        rect(img, 8, 10, 1, 6, hair); rect(img, 15, 10, 1, 6, hair)
+        rect(img, 32, 20, 8, 5, hair)                   # down her back
+    else:
+        rect(img, 24, 11, 8, 5, hair)                   # tied back under the cap
+        rect(img, 32, 20, 4, 3, hair)
+    for ex in (9, 13):
+        rect(img, ex, 11, 2, 1, (30, 24, 22, 255))
+    rect(img, 11, 15, 2, 1, (176, 84, 92, 255))
+
+def make(name, top, under, legs, rnd, v, badge=None, vest=None, glasses=False, cap=None, stripe=None, cross=None, old=False, female=False):
     img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
-    skin, hair = SKIN[v], ((200, 200, 204, 255) if old else HAIR[(v + 1) % 3])
+    skin = SKIN[v]
+    hair = (200, 200, 204, 255) if old else (FHAIR_ALL[(v + 1) % 3] if female else HAIR[(v + 1) % 3])
     face(img, skin, hair, rnd, glasses, cap)
+    if female:
+        feminine(img, skin, hair, rnd, cap)
+        if glasses:
+            for x in (9, 13):
+                rect(img, x, 11, 2, 1, (30, 30, 30, 255)); rect(img, x, 13, 2, 1, (30, 30, 30, 255))
     if old:
         for (x, y) in [(9, 11), (14, 11), (10, 14), (13, 14)]: img.putpixel((x, y), shade(skin, 0.82))
     box(img, 16, 16, 8, 12, 4, top, rnd)            # body
+    if female:
+        if cap: rect(img, 32, 20, 4, 3, hair)
+        else: rect(img, 32, 20, 8, 5, hair)          # her hair down her back
     box(img, 40, 16, 4, 12, 4, top, rnd)            # arm
     box(img, 0, 16, 4, 12, 4, legs, rnd)            # leg
     rect(img, 44, 30, 4, 2, skin); rect(img, 40, 30, 4, 2, skin)      # hands
@@ -66,16 +103,17 @@ def make(name, top, under, legs, rnd, v, badge=None, vest=None, glasses=False, c
         rect(img, 21, 22, 2, 2, badge)
     if cross:
         rect(img, 25, 22, 1, 3, cross); rect(img, 24, 23, 3, 1, cross)
-    img.save(os.path.join(OUT, f"{name}_{v}{'_old' if old else ''}.png"))
+    extras(img, vest or top, under, skin, rnd)
+    img.save(os.path.join(OUT, f"{name}_{v}{'_f' if female else ''}{'_old' if old else ''}.png"))
 
-for v, old in [(a, o) for o in (False, True) for a in range(3)]:
-    rnd = random.Random(100 + v)
-    make("researcher", (232, 234, 236, 255), (70, 100, 150, 255), (52, 56, 66, 255), rnd, v, badge=(200, 40, 40, 255), glasses=(v != 1), old=old)
-    make("guard", (34, 38, 44, 255), None, (30, 34, 40, 255), rnd, v, vest=(58, 64, 52, 255), badge=(220, 200, 80, 255), cap=(28, 30, 34, 255), old=old)
-    make("medic", (120, 180, 200, 255), None, (110, 170, 190, 255), rnd, v, cross=(220, 40, 40, 255), old=old)
-    make("technician", (210, 120, 40, 255), None, (190, 110, 36, 255), rnd, v, stripe=(230, 230, 80, 255), cap=(220, 200, 60, 255), old=old)
-    make("clerk", (80, 84, 92, 255), (230, 230, 235, 255), (60, 62, 70, 255), rnd, v, badge=(200, 40, 40, 255), old=old)
-    make("janitor", (60, 90, 70, 255), None, (54, 80, 62, 255), rnd, v, stripe=(200, 200, 200, 255), old=old)
+for v, old, female in [(a, o, f) for f in (False, True) for o in (False, True) for a in range(3)]:
+    rnd = random.Random(100 + v + (50 if female else 0))
+    make("researcher", (232, 234, 236, 255), (70, 100, 150, 255), (52, 56, 66, 255), rnd, v, badge=(200, 40, 40, 255), glasses=(v != 1), old=old, female=female)
+    make("guard", (34, 38, 44, 255), None, (30, 34, 40, 255), rnd, v, vest=(58, 64, 52, 255), badge=(220, 200, 80, 255), cap=(28, 30, 34, 255), old=old, female=female)
+    make("medic", (120, 180, 200, 255), None, (110, 170, 190, 255), rnd, v, cross=(220, 40, 40, 255), old=old, female=female)
+    make("technician", (210, 120, 40, 255), None, (190, 110, 36, 255), rnd, v, stripe=(230, 230, 80, 255), cap=(220, 200, 60, 255), old=old, female=female)
+    make("clerk", (80, 84, 92, 255), (230, 230, 235, 255), (60, 62, 70, 255), rnd, v, badge=(200, 40, 40, 255), old=old, female=female)
+    make("janitor", (60, 90, 70, 255), None, (54, 80, 62, 255), rnd, v, stripe=(200, 200, 200, 255), old=old, female=female)
 print("ok", len(os.listdir(OUT)))
 
 # ---------------------------------------------------------------- the Administrator's secretary
@@ -116,6 +154,7 @@ def secretary(v, old):
     for x in (0, 4, 8, 12):
         rect(img, x, 27, 4, 3, shade(skin, 0.82))
         rect(img, x, 30, 4, 2, (20, 18, 22, 255))
+    extras(img, suit, (238, 238, 242, 255), skin, rnd)
     img.save(os.path.join(OUT, f"secretary_{v}{'_old' if old else ''}.png"))
 
 for v in range(3):

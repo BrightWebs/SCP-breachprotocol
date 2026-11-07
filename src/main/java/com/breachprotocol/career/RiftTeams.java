@@ -66,6 +66,10 @@ public final class RiftTeams {
     private static final List<Job> JOBS = new ArrayList<>();
 
     public static void send(ServerPlayer p, int riftId, boolean mtf) {
+        if (!mtf && Policy.data(p.server).riftMtfOnly && (Career.rank(p).atLeast(Rank.OVERSEER) || Career.isAscended(p))) {
+            mtf = true; // the Council's rule: rifts are task force work
+            p.displayClientMessage(Component.literal("Council policy: rifts are MTF work. Sending a task force instead.").withStyle(ChatFormatting.AQUA), true);
+        }
         Rank r = Career.rank(p);
         if (mtf ? !r.atLeast(Rank.OVERSEER) && !Career.isAscended(p) : !r.atLeast(Rank.LEVEL_4) && !Career.isAscended(p)) {
             p.displayClientMessage(Component.literal(mtf ? "Only the Council can send an MTF extraction team." : "Level 4 can assign D-Class to rift duty.").withStyle(ChatFormatting.RED), true);
@@ -184,7 +188,7 @@ public final class RiftTeams {
 
     private static void finish(ServerLevel l, Job j, Entity rift, ServerPlayer p) {
         Vec3 c = rift.position();
-        if (!j.mtf && new Random().nextFloat() < 0.3F) {
+        if (!j.mtf && new Random().nextFloat() < (Policy.data(l.getServer()).crewGear ? 0.1F : 0.3F)) {
             j.failed = true;
             // the rift takes them
             for (UUID id : j.crew) {

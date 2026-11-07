@@ -31,7 +31,7 @@ final class Openers {
             String what = Unleashed.designation(loose);
             return new Opener(Talk.howAreThings(s, p), List.of(
                     r("Stay calm. It's being handled.", guard ? "Copy. Holding position." : "...Okay. Okay. If you say so.", "", 1),
-                    r("Get to safety. Now.", guard ? "Not while " + what + " is on my floor." : "Going! Don't have to tell me twice.", "", 0),
+                    r("Get to safety. Now.", guard ? "Not while " + what + " is on my floor." : "Going! Don't have to tell me twice.", guard ? "" : "!flee", 0),
                     r("I'll deal with it myself.", "You're either very brave or very senior. I hope you're both.", "", 1)));
         }
         // an attack on the site
@@ -39,21 +39,21 @@ final class Openers {
         Defence.Alert al = site == null ? null : Defence.alertAt(site.name);
         if (al != null) {
             return new Opener(guard ? al.org + " on the grounds! Stay behind me, " + a + "!" : "We're under attack! " + al.org + "! What do we do?", List.of(
-                    r("Hold the line.", guard ? "Holding! They won't get past this floor." : "I... I'll try. I'm not exactly trained for this.", "", 1),
-                    r("Get inside and lock the doors.", "Doors. Right. Locking them now.", "", 0),
+                    r("Hold the line.", guard ? "Holding! They won't get past this floor." : "I... I'll try. I'm not exactly trained for this.", "!hold", 1),
+                    r("Get inside and lock the doors.", guard ? "Get inside, " + a + ". I'll cover you." : "Inside. Right. Going now.", guard ? "" : "!shelter", 0),
                     r("Who sent them?", al.org + ". Who else? They've wanted this site for years.", "", 0)));
         }
         if (Career.isAscended(p)) {
             return new Opener(Talk.howAreThings(s, p), List.of(
                     r("Breathe. You're safe with me.", "...Thank you. I... thank you. I'm sorry.", "reassured", 2),
-                    r("Back to work.", "Yes. Of course. Right away.", "", 0),
+                    r("Back to work.", "Yes. Of course. Right away.", "!work", 0),
                     r("You should be afraid.", "...I am.", "feared", -2)));
         }
         if (!s.illness().isEmpty()) {
             return new Opener(Talk.howAreThings(s, p), List.of(
-                    r("Get to Medical.", t == Talk.Temper.CYNICAL ? "Medical. Right. Where they gave me this." : "I will. After my shift.", "", 0),
-                    r("I'll find you some SCP-500.", "You'd do that? ...Thank you.", "promised500", 2),
-                    r("Take the rest of the day off.", "I... yes. Thank you. I didn't know you could do that.", "", 1)));
+                    r("Get to Medical.", t == Talk.Temper.CYNICAL ? "Fine. Medical. Where they gave me this." : "You're right. I'm going now.", "!medical", 0),
+                    r("I'll find you some SCP-500.", "You'd do that? ...Thank you. I'll hold you to it.", "promised500", 2),
+                    r("Take the rest of the day off.", "I... yes. Thank you. I'll sit down for a while.", "!dayoff", 1)));
         }
         if (p.getHealth() < 6) {
             return new Opener(Talk.howAreThings(s, p), medic ? List.of(
@@ -68,7 +68,7 @@ final class Openers {
             return new Opener(Talk.howAreThings(s, p), List.of(
                     r("Orders.", "Whose orders? ...Never mind. I don't want to know.", "", 0),
                     r("Sorry. Putting it away.", "Thank you. Some of us don't like guns in the corridors.", "", 1),
-                    r("Mind your own business.", "Fine. Security can mind it for me.", "", -2)));
+                    r("Mind your own business.", "Fine. Security can mind it for me.", "!report", -2)));
         }
         // what they remember about you
         String recall = Memory.recall(s, p, rnd);

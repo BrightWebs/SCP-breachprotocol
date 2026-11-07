@@ -246,6 +246,7 @@ final class Convo {
             case "promise" -> {
                 Talk.you(p, "I'll see to it.");
                 Memory.count(s, p, "promised");
+                if (s.role() == FoundationStaff.Role.MEDIC || !s.illness().isEmpty()) Memory.put(s, p, "op_promised500", "1"); // they'll expect SCP-500 from you
                 s.getPersistentData().putInt(tkey(p), Math.min(10, trust + 1));
                 if (s.role() == FoundationStaff.Role.GUARD && Talk.topBrass(p)) {
                     Sites.Site x = site(s);
@@ -524,6 +525,13 @@ final class Convo {
                             p.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.REGENERATION, 20 * 12, 1));
                             p.removeEffect(net.minecraft.world.effect.MobEffects.POISON);
                         }
+                        case "!flee" -> { net.minecraft.world.entity.Mob loose = Talk.anomalyNear(s, 24); s.flee(loose != null ? loose.position() : p.position()); }
+                        case "!hold" -> s.order("stay", p);
+                        case "!shelter" -> s.shelter();
+                        case "!work" -> s.order("post", p);
+                        case "!medical" -> s.toMedical();
+                        case "!dayoff" -> s.dayOff();
+                        case "!report" -> s.callGuard(p, "is keeping an eye on you.");
                         case "" -> {}
                         default -> Memory.put(s, p, "op_" + rp.remember(), "1");
                     }
@@ -541,6 +549,8 @@ final class Convo {
                     Talk.you(p, rp.label());
                     Talk.say(p, s, rp.reaction());
                     Memory.put(s, p, "s_" + id, rp.remember());
+                    if (rp.remember().equals("summoned")) s.callGuard(p, "has been sent to see you. They saw the Gate Guardian look at them.");
+                    if (rp.remember().equals("recruiter")) Memory.put(s, p, "asking", "recruiter");
                     s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, trust + rp.trust())));
                     Dialogue.clearOptions(p);
                     subtitle(p, s);

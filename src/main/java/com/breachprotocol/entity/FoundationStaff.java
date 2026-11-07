@@ -47,6 +47,9 @@ public class FoundationStaff extends PathfinderMob {
     private static final EntityDataAccessor<Integer> ROLE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> VARIANT = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> AGE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Boolean> FEMALE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Boolean> TALKING = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
+    private static final EntityDataAccessor<Integer> WAVE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
 
     /** One year of a staff member's life passes every Minecraft day. */
     public static final int YEAR = 24000;
@@ -67,6 +70,108 @@ public class FoundationStaff extends PathfinderMob {
     private long lastShout;
 
     public com.breachprotocol.career.Forces.Unit unit() { return unit; }
+
+    public boolean isFemale() { return entityData.get(FEMALE); }
+
+    /** Her build: 0, 1 or 2. */
+    public int bust() { return (int) Math.floorMod(getUUID().getMostSignificantBits() >>> 11, 3L); }
+
+    public boolean isTalking() { return entityData.get(TALKING); }
+
+    public boolean isWaving() { return entityData.get(WAVE) > 0; }
+
+    /** Women and men by their (first) name; the secretary is always a woman. */
+    private void gender() {
+        if (role() == Role.SECRETARY) { entityData.set(FEMALE, true); return; }
+        String n = getCustomName() == null ? "" : getCustomName().getString();
+        boolean f = false;
+        for (String part : n.split(" ")) if (Names.isWoman(part)) f = true;
+        entityData.set(FEMALE, f);
+    }
+
+    // ================================================================== doing what they said they'd do
+
+    private void until(long ticks) { backToPostAt = level().getGameTime() + ticks; }
+
+    /** "Going!": away from whatever is loose, then back to work once it's quiet. */
+    void flee(net.minecraft.world.phys.Vec3 from) {
+        net.minecraft.world.phys.Vec3 to = net.minecraft.world.entity.ai.util.DefaultRandomPos.getPosAway(this, 16, 7, from);
+        if (Seats.seated(this)) Seats.stand(this);
+        mode = "stay";
+        clearRestriction();
+        if (to != null) { stayAt = BlockPos.containing(to); getNavigation().moveTo(to.x, to.y, to.z, 1.5); setSprinting(true); }
+        until(20 * 60);
+    }
+
+    /** "Locking them now": into the middle of the site, and stay there until it's over. */
+    void shelter() {
+        com.breachprotocol.career.Sites.Site x = com.breachprotocol.career.Sites.at(level(), blockPosition());
+        if (x == null) { order("stay", null); return; }
+        BlockPos c = new BlockPos(x.x, x.y + 1, x.z);
+        if (Seats.seated(this)) Seats.stand(this);
+        mode = "stay";
+        stayAt = c;
+        clearRestriction();
+        getNavigation().moveTo(c.getX() + 0.5, c.getY(), c.getZ() + 0.5, 1.4);
+        until(20 * 120);
+    }
+
+    /** "After my shift" / "I'll go": off to the nearest medic, who treats them when they get there. */
+    void toMedical() {
+        FoundationStaff best = null;
+        double bd = 64 * 64;
+        for (FoundationStaff o : level().getEntitiesOfClass(FoundationStaff.class, getBoundingBox().inflate(64)))
+            if (o != this && o.role() == Role.MEDIC && distanceToSqr(o) < bd) { bd = distanceToSqr(o); best = o; }
+        if (best == null) { tellNearby(name() + ": There's no medic on this floor. I'll manage.", ChatFormatting.GRAY); return; }
+        if (Seats.seated(this)) Seats.stand(this);
+        errand = "medical";
+        errandTarget = best.getId();
+        mode = "stay";
+        clearRestriction();
+        until(20 * 180);
+    }
+
+    /** "Thank you": they take the rest of the day off, sitting down somewhere. */
+    void dayOff() {
+        order("sit", null);
+        errand = "rest";
+        until(24000);
+    }
+
+    /** "Security can mind it for me": the nearest guard comes over and keeps an eye on you for a minute. */
+    void callGuard(ServerPlayer p, String why) {
+        FoundationStaff g = null;
+        double bd = 48 * 48;
+        for (FoundationStaff o : level().getEntitiesOfClass(FoundationStaff.class, getBoundingBox().inflate(48)))
+            if (o != this && o.role() == Role.GUARD && distanceToSqr(o) < bd) { bd = distanceToSqr(o); g = o; }
+        if (g == null) return;
+        g.order("follow", p);
+        g.until(20 * 60);
+        p.displayClientMessage(Component.literal(g.name() + " " + why).withStyle(ChatFormatting.DARK_AQUA), true);
+    }
+
+    private void errandTick() {
+        if (backToPostAt > 0 && level().getGameTime() >= backToPostAt) {
+            backToPostAt = 0;
+            errand = "";
+            setSprinting(false);
+            order("post", null);
+            return;
+        }
+        if (errand.equals("medical")) {
+            net.minecraft.world.entity.Entity m = level().getEntity(errandTarget);
+            if (!(m instanceof FoundationStaff medic) || !medic.isAlive()) { errand = ""; return; }
+            if (distanceToSqr(medic) > 9) { if (tickCount % 20 == 0) getNavigation().moveTo(medic, 1.0); return; }
+            errand = "";
+            getNavigation().stop();
+            if (!illness.isEmpty() && random.nextFloat() < 0.6F) {
+                tellNearby(medic.name() + " treats " + name() + " for " + illness + ". " + name() + " looks better already.", ChatFormatting.GRAY);
+                illness = "";
+                removeEffect(MobEffects.WEAKNESS);
+            } else tellNearby(medic.name() + " checks " + name() + " over and sends them back with something to take.", ChatFormatting.GRAY);
+            until(20 * 10);
+        }
+    }
 
     public boolean following(Player p) { return "follow".equals(mode) && p.getUUID().equals(leader); }
 
@@ -109,6 +214,10 @@ public class FoundationStaff extends PathfinderMob {
     private String mode = "post";
     private UUID leader;
     private BlockPos stayAt, sitTarget;
+    /** An errand they're running (going to Medical, taking shelter, fleeing), and when they go back to their post. */
+    private String errand = "";
+    private int errandTarget = -1;
+    private long backToPostAt;
     private int sitTries;
     private long healReady;
 
@@ -127,6 +236,9 @@ public class FoundationStaff extends PathfinderMob {
         builder.define(ROLE, 0);
         builder.define(VARIANT, 0);
         builder.define(AGE, 30);
+        builder.define(FEMALE, false);
+        builder.define(TALKING, false);
+        builder.define(WAVE, 0);
     }
 
     @Override
@@ -171,7 +283,7 @@ public class FoundationStaff extends PathfinderMob {
     /** An order from a player: follow, stay, post (back to work) or sit. */
     public void order(String what, ServerPlayer p) {
         switch (what) {
-            case "follow" -> { mode = "follow"; leader = p.getUUID(); clearRestriction(); Seats.stand(this); }
+            case "follow" -> { if (p == null) return; mode = "follow"; leader = p.getUUID(); clearRestriction(); Seats.stand(this); }
             case "stay" -> { mode = "stay"; stayAt = blockPosition(); restrictTo(stayAt, 1); getNavigation().stop(); }
             case "post" -> { mode = "post"; leader = null; if (post != null) { restrictTo(post, 12); getNavigation().moveTo(post.getX() + 0.5, post.getY(), post.getZ() + 0.5, 0.9); } }
             case "sit" -> {
@@ -221,7 +333,7 @@ public class FoundationStaff extends PathfinderMob {
         int a = (int) age;
         if (role() == Role.SECRETARY && a >= 58) { retire(); return; }
         if (illness.isEmpty()) {
-            float chance = a < 45 ? 0.02F : a < 65 ? 0.06F : 0.14F;
+            float chance = (a < 45 ? 0.02F : a < 65 ? 0.06F : 0.14F) * (com.breachprotocol.career.Policy.safety(getServer()) ? 0.5F : 1F);
             if (random.nextFloat() < chance) {
                 String[] kinds = {"a fever", "pneumonia", "a heart condition", "an infection", "a bad cough"};
                 illness = kinds[random.nextInt(kinds.length)];
@@ -320,7 +432,16 @@ public class FoundationStaff extends PathfinderMob {
         String line;
         if (id.equals("scp_unleashed:scp500_pill")) {
             if (illness.isEmpty()) line = "I'm not sick. Save it for someone who is.";
-            else { line = "SCP-500? For me? ...I can breathe again. Thank you."; illness = ""; removeEffect(MobEffects.WEAKNESS); held.shrink(1); }
+            else {
+                boolean promised = !Memory.get(this, p, "op_promised500").isEmpty();
+                line = promised ? "You remembered. You actually found some. ...I won't forget this." : "SCP-500? For me? ...I can breathe again. Thank you.";
+                if (promised) {
+                    Memory.put(this, p, "op_promised500", "");
+                    Memory.put(this, p, "kept500", "1");
+                    getPersistentData().putInt("bp_trust_" + p.getUUID(), Math.min(10, getPersistentData().getInt("bp_trust_" + p.getUUID()) + 3));
+                }
+                illness = ""; removeEffect(MobEffects.WEAKNESS); held.shrink(1);
+            }
         } else if (id.equals("scp_unleashed:scp006_bucket")) {
             if (age < 35) line = "I'm young enough, thanks. Give it to someone who needs the years.";
             else {
@@ -359,6 +480,7 @@ public class FoundationStaff extends PathfinderMob {
         setCustomName(Component.literal((prefix.isEmpty() ? "" : prefix + " ") + n).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
         setCustomNameVisible(false);
         named = true;
+        gender();
     }
 
     @Override
@@ -366,6 +488,12 @@ public class FoundationStaff extends PathfinderMob {
         super.aiStep();
         if (!named && !level().isClientSide) name(role());
         if (!level().isClientSide && tickCount % 40 == 3 && role() == Role.GUARD && getMainHandItem().isEmpty()) arm();
+        if (!level().isClientSide && tickCount % 5 == 0) errandTick();
+        if (!level().isClientSide) {
+            if (tickCount % 10 == 0) entityData.set(TALKING, Dialogue.talkingTo(this) != null);
+            int w = entityData.get(WAVE);
+            if (w > 0) entityData.set(WAVE, w - 1);
+        }
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
         if (level().isClientSide || tickCount % 20 != 0) return;
         if (tickCount % 200 == 0 && !getTags().contains(com.breachprotocol.career.RiftTeams.CREW_TAG)) {
@@ -397,6 +525,7 @@ public class FoundationStaff extends PathfinderMob {
         // the top brass gets everyone on their feet
         if ((r.atLeast(Rank.OVERSEER) || Career.isAscended(p)) && Seats.seated(this)) Seats.stand(this);
         say(p, Talk.greeting(this, p, greeting(p, r)));
+        if (!Seats.seated(this)) entityData.set(WAVE, 30);
     }
 
     private String greeting(ServerPlayer p, Rank r) {
@@ -472,6 +601,8 @@ public class FoundationStaff extends PathfinderMob {
         tag.putDouble("Fountain", fountainAt);
         tag.putBoolean("Declined", declined);
         tag.putBoolean("Named", named);
+        tag.putString("Errand", errand);
+        tag.putLong("BackToPost", backToPostAt);
         if (unit != null) tag.putString("Unit", unit.name());
         if (leader != null) tag.putUUID("Leader", leader);
         if (stayAt != null) { tag.putInt("StayX", stayAt.getX()); tag.putInt("StayY", stayAt.getY()); tag.putInt("StayZ", stayAt.getZ()); }
@@ -491,6 +622,9 @@ public class FoundationStaff extends PathfinderMob {
         fountainAt = tag.contains("Fountain") ? tag.getDouble("Fountain") : -100;
         declined = tag.getBoolean("Declined");
         named = tag.getBoolean("Named");
+        if (getCustomName() != null) gender();
+        errand = tag.getString("Errand");
+        backToPostAt = tag.getLong("BackToPost");
         unit = com.breachprotocol.career.Forces.Unit.of(tag.getString("Unit"));
         var spd = getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
         if (spd != null && spd.getBaseValue() < 0.28) spd.setBaseValue(0.28);

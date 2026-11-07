@@ -88,6 +88,19 @@ final class Memory {
             case "terrifying" -> lines.add("I've been thinking about the Garden. Terrifying, you said. I'm glad I've never seen it.");
             default -> {}
         }
+        CompoundTag m = of(s, p);
+        if (!m.getString("op_promised500").isEmpty()) {
+            long since = s.level().getGameTime() - m.getLong("t_op_promised500");
+            if (since > 3 * 24000L) {
+                m.putString("op_promised500", "");
+                s.getPersistentData().putInt("bp_trust_" + p.getUUID(), Math.max(0, s.getPersistentData().getInt("bp_trust_" + p.getUUID()) - 2));
+                lines.clear();
+                lines.add("You said you'd find me SCP-500. That was days ago. ...It's fine. I'm used to it.");
+                return lines.get(0);
+            }
+            lines.add("Did you manage to find any SCP-500? You said you would.");
+        }
+        if (m.getString("kept500").equals("1") && r.nextInt(3) == 0) lines.add("I'm still telling people you found me SCP-500. Nobody believes me.");
         if (of(s, p).getInt("listened") >= 2) lines.add("You always listen. Not many people around here do.");
         if (of(s, p).getInt("promised") > 0 && r.nextBoolean()) lines.add("You said you'd see to what I needed. I haven't forgotten.");
         if (get(s, p, "story_reply").equals("hard")) lines.add("Last time you said it must have been hard. It was. Still is, some days.");

@@ -40,8 +40,15 @@ public final class AgendaBuilder {
                                 Forces.order(q.server, site, Forces.Unit.SECURITY, 4);
                                 return stab(q, 4, "Nu-7 and fresh security are on their way to " + site + ". Let them try again.");
                             }),
-                            opt("Send Alpha-1 after them", (q, x) -> stab(q, q.getRandom().nextBoolean() ? 6 : -3, "Alpha-1 is hunting. We'll know by morning whether that was wise.")),
-                            opt("Open talks with them", (q, x) -> stab(q, -4, "Talks. The field teams think we've gone soft. Perhaps we have.")))));
+                            opt("Send Alpha-1 after them", (q, x) -> {
+                                Forces.order(q.server, site, Forces.Unit.ALPHA_1, 3);
+                                return stab(q, 3, "Three Alpha-1 operatives are on their way to " + site + ". They'll hunt anything that comes back.");
+                            }),
+                            opt("Open talks with them", (q, x) -> {
+                                String org = attackerOrg(attack.headline());
+                                if (!org.isEmpty()) Policy.set(q.server, d2 -> d2.truce.put(org, Policy.days(q.server, 3)));
+                                return stab(q, -4, "Talks. Three days of ceasefire: our guards hold fire unless fired on. The field teams think we've gone soft.");
+                            }))));
         }
         long deaths = week.stream().filter(i -> i.kind() == WorldNews.Kind.DEATH).count();
         if (deaths >= 2) {
@@ -49,7 +56,10 @@ public final class AgendaBuilder {
             out.add(new Calls.Template("w_losses", 2, true,
                     "We lost " + deaths + " of our people this week. Most recently, " + one.headline() + ". The staff are asking what we'll do about it.",
                     List.of(opt("A memorial, and new hires", (q, x) -> stab(q, 3, "The memorial is tomorrow at noon. The new hires start next week.")),
-                            opt("Tighten safety protocols", (q, x) -> stab(q, 2, "New protocols are going out to every site. Expect complaints.")),
+                            opt("Tighten safety protocols", (q, x) -> {
+                                Policy.set(q.server, d2 -> d2.safetyUntil = Policy.days(q.server, 7));
+                                return stab(q, 2, "New protocols at every site for a week: fewer people fall ill, fewer accidents. Expect complaints.");
+                            }),
                             opt("Keep working. We can't stop", (q, x) -> stab(q, -2, "Understood. They'll work. They won't forget.")))));
         }
         WorldNews.Item breach = week.stream().filter(i -> i.kind() == WorldNews.Kind.BREACH).findFirst().orElse(null);
@@ -67,7 +77,10 @@ public final class AgendaBuilder {
         if (d.stability < 45) {
             out.add(new Calls.Template("w_stability", 7, true,
                     "Site stability is at " + d.stability + "%. If it falls much further, we will lose a site. I'm asking for emergency measures.",
-                    List.of(opt("Lock down every site for a day", (q, x) -> stab(q, 8, "Lockdown in effect. The world will notice nothing, and that's the point.")),
+                    List.of(opt("Lock down every site for a day", (q, x) -> {
+                                Policy.set(q.server, d2 -> d2.lockdownUntil = Policy.days(q.server, 1));
+                                return stab(q, 8, "Lockdown in effect for a day: every guard on high alert, shooting at twice the range. The world will notice nothing.");
+                            }),
                             opt("Amnestic sweep of the region", (q, x) -> stab(q, 5, "The sweep starts tonight. A lot of people are going to have a very ordinary week.")),
                             opt("Ride it out", (q, x) -> stab(q, -3, "Then we pray. I don't, usually.")))));
         }
@@ -88,8 +101,14 @@ public final class AgendaBuilder {
         if (week.stream().anyMatch(i -> i.kind() == WorldNews.Kind.RIFT_LOST)) {
             out.add(new Calls.Template("w_rift", 9, true,
                     "A rift took one of our D-Class crews this week. The others won't go near a rift now without a task force.",
-                    List.of(opt("Only MTF close rifts from now on", (q, x) -> stab(q, 2, "Rifts are task force work from today.")),
-                            opt("Better equipment for the crews", (q, x) -> stab(q, 1, "The crews get new tethers. They'll grumble, and live.")),
+                    List.of(opt("Only MTF close rifts from now on", (q, x) -> {
+                                Policy.set(q.server, d2 -> d2.riftMtfOnly = true);
+                                return stab(q, 2, "Rifts are task force work from today. Any crew you send will be an MTF team.");
+                            }),
+                            opt("Better equipment for the crews", (q, x) -> {
+                                Policy.set(q.server, d2 -> d2.crewGear = true);
+                                return stab(q, 1, "The crews get new tethers. Far fewer of them will be lost.");
+                            }),
                             opt("D-Class are expendable", (q, x) -> stab(q, -2, "That's... the official position. It won't help morale.")))));
         }
 
@@ -120,6 +139,12 @@ public final class AgendaBuilder {
         int room = Math.max(0, 5 - out.size());
         out.addAll(fresh.subList(0, Math.min(room, Math.min(2, fresh.size()))));
         return out;
+    }
+
+    private static String attackerOrg(String headline) {
+        String h = headline.toLowerCase(java.util.Locale.ROOT);
+        for (int i = 0; i < Defence.ORGS.length; i++) if (h.contains(Defence.ORG_NAMES[i].toLowerCase(java.util.Locale.ROOT).replaceFirst("^the ", ""))) return Defence.ORGS[i];
+        return "";
     }
 
     /** After the session: what was covered isn't brought up again for a while. */

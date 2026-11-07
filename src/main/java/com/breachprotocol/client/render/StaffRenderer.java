@@ -12,6 +12,8 @@ import net.minecraft.resources.ResourceLocation;
 public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, HumanoidModel<FoundationStaff>> {
     private static final ResourceLocation[][] SKINS = new ResourceLocation[FoundationStaff.Role.values().length][3];
     private static final ResourceLocation[][] OLD = new ResourceLocation[FoundationStaff.Role.values().length][3];
+    private static final ResourceLocation[][] SKINS_F = new ResourceLocation[FoundationStaff.Role.values().length][3];
+    private static final ResourceLocation[][] OLD_F = new ResourceLocation[FoundationStaff.Role.values().length][3];
 
     static {
         for (FoundationStaff.Role r : FoundationStaff.Role.values())
@@ -19,15 +21,19 @@ public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, Humanoid
             {
                 SKINS[r.ordinal()][v] = BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + ".png");
                 OLD[r.ordinal()][v] = BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + "_old.png");
+                boolean sec = r == FoundationStaff.Role.SECRETARY;
+                SKINS_F[r.ordinal()][v] = sec ? SKINS[r.ordinal()][v] : BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + "_f.png");
+                OLD_F[r.ordinal()][v] = sec ? OLD[r.ordinal()][v] : BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + "_f_old.png");
             }
     }
 
     public StaffRenderer(EntityRendererProvider.Context ctx) {
-        super(ctx, new HumanoidModel<>(ctx.bakeLayer(ModelLayers.ZOMBIE)), 0.4F);
+        super(ctx, new StaffModel(ctx.bakeLayer(StaffModel.LAYER)), 0.4F);
     }
 
     @Override
     public ResourceLocation getTextureLocation(FoundationStaff e) {
-        return (e.elder() ? OLD : SKINS)[e.role().ordinal()][Math.floorMod(e.variant(), 3)];
+        boolean f = e.isFemale();
+        return (e.elder() ? (f ? OLD_F : OLD) : (f ? SKINS_F : SKINS))[e.role().ordinal()][Math.floorMod(e.variant(), 3)];
     }
 }

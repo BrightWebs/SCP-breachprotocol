@@ -43,7 +43,7 @@ public class GuardGoal extends Goal {
 
     private double reach() {
         Defence.Alert a = Defence.alertNear(g);
-        return a != null ? 48 : 30;
+        return a != null || com.breachprotocol.career.Policy.lockdown(g.getServer()) ? 48 : 30;
     }
 
     private LivingEntity find() {
