@@ -534,7 +534,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        return PathfinderMob.createMobAttributes().add(Attributes.MAX_HEALTH, 24).add(Attributes.MOVEMENT_SPEED, 0.28).add(Attributes.ATTACK_DAMAGE, 4).add(Attributes.FOLLOW_RANGE, 24);
+        return PathfinderMob.createMobAttributes().add(Attributes.MAX_HEALTH, 24).add(Attributes.MOVEMENT_SPEED, 0.28).add(Attributes.ATTACK_DAMAGE, 4).add(Attributes.FOLLOW_RANGE, 64); // long walks: to the residence and back
     }
 
     @Override
