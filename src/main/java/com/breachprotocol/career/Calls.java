@@ -148,7 +148,7 @@ public final class Calls {
                 List.of(
                         opt("Fund containment", (p, d) -> stab(p, 6, "Walls are cheaper than funerals.")),
                         opt("Fund research", (p, d) -> {
-                            Career.give(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 3);
+                            Career.budget(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 3);
                             Career.addXp(p, 40, "research grant");
                             return stab(p, -3, "Research sent you a gift basket. Containment sent a complaint.");
                         }))), true);
@@ -210,7 +210,7 @@ public final class Calls {
                 "The Global Occult Coalition wants a joint operation. They're offering one of their own medical anomalies in exchange for intel.",
                 List.of(
                         opt("Share intel", (p, d) -> {
-                            Career.give(p, Unleashed.scp500(), 1);
+                            Career.budget(p, Unleashed.scp500(), 1);
                             return stab(p, 3, "A fair trade. They sent the pill. I'd keep it safe.");
                         }),
                         opt("Refuse", (p, d) -> {
@@ -222,7 +222,7 @@ public final class Calls {
                 "Research wants SCP-207's files declassified. If I open them, samples go out to the teams.",
                 List.of(
                         opt("Declassify", (p, d) -> {
-                            Career.give(p, Unleashed.item("scp207_bottle", Items.HONEY_BOTTLE), 2);
+                            Career.budget(p, Unleashed.item("scp207_bottle", Items.HONEY_BOTTLE), 2);
                             return stab(p, -2, "Two bottles found their way to your office. Do not drink both.");
                         }),
                         opt("Keep it sealed", (p, d) -> stab(p, 2, "Sealed. History will thank you. Or forget you.")))), true);
@@ -252,7 +252,7 @@ public final class Calls {
                 List.of(
                         opt("Death row only", (p, d) -> stab(p, 2, "The usual paperwork, then.")),
                         opt("Widen the net", (p, d) -> {
-                            Career.give(p, Items.IRON_INGOT, 16);
+                            Career.budget(p, Items.IRON_INGOT, 16);
                             return stab(p, -6, "Staffing solved. The Ethics Committee would like a word.");
                         }))), true);
 

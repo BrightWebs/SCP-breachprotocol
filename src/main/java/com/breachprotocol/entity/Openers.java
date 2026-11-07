@@ -101,22 +101,73 @@ final class Openers {
                     r("We still need you.", "...That's kind. It's nice to be needed at my age.", "", 2),
                     r("Have you thought about the Fountain?", s.age() > 75 ? "Every day. I haven't decided yet." : "Not yet. Ask me in ten years.", "", 0)));
         }
-        // the top brass walks in
-        if (Talk.topBrass(p) && rnd.nextInt(3) == 0) {
-            return new Opener(Talk.pick(rnd, "Administrator! We didn't know you were coming.", "Administrator. Everything is in order. I think.", "Administrator. Is there something you need from me?"), List.of(
-                    r("At ease.", "Thank you, Administrator.", "", 1),
-                    r("Just passing through.", "Of course. Mind the wet floor by the lifts.", "", 0),
+        // otherwise: who you are to them, and where you both are
+        Scene sc = Scene.of(p, s);
+        String place = placeLine(sc);
+        return switch (sc.tier) {
+            case DCLASS -> guard
+                    ? new Opener("Eyes down, " + a + ". What do you want?" + (place.isEmpty() ? "" : " " + place), List.of(
+                    r("Nothing, sir.", "Then move along.", "", 0),
+                    r("When do I get out of here?", "When the Council says so. Your file says thirty days. I've never seen anyone do thirty days.", "", 0),
+                    r("I need something to eat.", "", "!food", 0)))
+                    : s.role() == FoundationStaff.Role.RESEARCHER
+                    ? new Opener("Ah. Subject " + a + ". You're on my list." + (place.isEmpty() ? "" : " " + place), List.of(
+                    r("What's the test?", "", "→dtest", 0),
+                    r("I'm not doing it.", "Everyone says that. Then they do it. The alternative is worse, and you know it.", "", -1),
+                    r("Please. I have a family.", "...So do I. I'll put you on the easy ones this week. That's all I can do.", "", 2)))
+                    : new Opener("Careful. If they see me talking to you, we both get a write-up." + (place.isEmpty() ? "" : " " + place), List.of(
+                    r("I just need someone to talk to.", "...Alright. A minute. Then you go back.", "", 2),
+                    r("Got anything to eat?", "", "!food", 0),
+                    r("Never mind.", "Probably for the best.", "", 0)));
+            case JUNIOR -> new Opener(sc.pick("Hey, " + a + ". ", "Oh, hi. ", a + "! ") + (place.isEmpty() ? Talk.howAreThings(s, p) : place), List.of(
+                    r("Busy day?", sc.pick("Every day's a busy day. Some are just busier.", "Two breach drills and a coffee machine that bites. So, yes."), "", 0),
+                    r("Heard anything good?", "", "→news", 0),
+                    r("Catch you later.", "See you around.", "", 0)));
+            case STAFF -> new Opener(a + ". " + (place.isEmpty() ? Talk.howAreThings(s, p) : place), List.of(
+                    r("Status?", "", "→report", 0),
+                    r("Anything I should know?", "", "→news", 0),
+                    r("Carry on.", "Will do.", "", 0)));
+            case DIRECTOR -> new Opener("Director. " + (place.isEmpty() ? "All quiet " + sc.here() + "." : place), List.of(
+                    r("Full report.", "", "→report", 0),
+                    r("Any problems?", "", "→work_problems", 0),
+                    r("Carry on.", "Director.", "", 0)));
+            default -> new Opener(sc.pick("Administrator! We didn't know you were coming. ", "Administrator. ", a + ". ") + (place.isEmpty() ? "Everything is in order " + sc.here() + "." : place), List.of(
+                    r("At ease.", "Thank you, " + a + ".", "", 1),
+                    r("Report.", "", "→report", 0),
                     r("How are things, really?", "", "→how_real", 0)));
-        }
-        // otherwise: how things are, and what they make of the news
-        String line = Talk.howAreThings(s, p);
-        boolean newsy = line.contains("talking about");
-        return new Opener(line, newsy ? List.of(
-                r("What do you make of it?", "", "→news_think", 0),
-                r("Who's saying that?", "Everyone. The canteen, the lifts, the smoking area nobody admits exists.", "", 0),
-                r("Let's not gossip.", "Fair enough. Old habit.", "", 0))
-                : List.of(r("Glad to hear it.", t == Talk.Temper.CYNICAL ? "Don't get used to it." : "Me too.", "", 0),
-                r("Anything I can do?", "", "→how_need", 1),
-                r("Keep at it.", Talk.pick(rnd, "Always do.", "Will do, " + a + ".", "That's the plan."), "", 0)));
+        };
+    }
+
+    /** What they say about where you both are (empty when there's nothing to say). */
+    static String placeLine(Scene sc) {
+        FoundationStaff s = sc.s;
+        Sites.Cell c = sc.cell();
+        String scp = c == null ? "" : Unleashed.designation(c.entity.contains(":") ? c.entity.substring(c.entity.indexOf(':') + 1) : c.entity);
+        return switch (sc.place.kind()) {
+            case "dclass" -> s.role() == FoundationStaff.Role.GUARD ? "Headcount's right on the block. Everyone's where they should be." : "The block's quiet today. Nobody's cried since breakfast.";
+            case "deep", "keter", "heavy" -> !scp.isEmpty() ? scp + " is in the cell behind that door. " + sc.pick("I don't turn my back on it.", "It's been quiet. That's when I worry.", "Readings are normal. Whatever normal means for " + scp + ".")
+                    : "Nobody's ever calm " + sc.here() + ". The walls hum.";
+            case "light" -> !scp.isEmpty() ? "Light Containment. " + scp + " is next door. The safe ones, supposedly." : "Light Containment. The safe ones, supposedly.";
+            case "lobby" -> "Visitors in and out all day. Half of them shouldn't be here.";
+            case "research" -> sc.pick("Two tests booked this afternoon. Both on the Safe list, thankfully.", "The lab's running a long observation. Don't touch the red folders.");
+            case "medical" -> {
+                int sick = 0;
+                for (FoundationStaff o : s.level().getEntitiesOfClass(FoundationStaff.class, s.getBoundingBox().inflate(64))) if (!o.illness().isEmpty()) sick++;
+                yield sick == 0 ? "The ward's empty. Let's keep it that way." : sick + " of our people are on the ward. We're short of SCP-500.";
+            }
+            case "security" -> {
+                int armed = sc.site == null ? 0 : Forces.data(sc.p.server).station(sc.site.name).members.size();
+                yield armed + " armed personnel on " + (sc.site == null ? "site" : sc.site.name) + " right now. " + (armed < 6 ? "Not enough." : "Enough, if nothing big comes.");
+            }
+            case "archive" -> "Every dossier you're cleared for is in that terminal. Some you aren't.";
+            case "servers" -> "Server temperature's normal. Mostly.";
+            case "launch" -> "Launch Control's quiet. It should always be quiet.";
+            case "councilfloor", "chamber" -> "This floor makes everyone whisper.";
+            case "adminoffice" -> "The Administrator's office. I always straighten my collar before coming up.";
+            case "site01" -> "Site-01. Older than the Foundation, some say.";
+            case "garden" -> "Is this... the Garden? I don't think I should be here.";
+            case "outside" -> "We're off site ground. Nobody's watching our backs out here.";
+            default -> "";
+        };
     }
 }

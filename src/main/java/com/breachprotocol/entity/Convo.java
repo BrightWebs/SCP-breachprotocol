@@ -7,6 +7,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
+import com.breachprotocol.compat.Unleashed;
 import java.util.*;
 
 /**
@@ -143,20 +144,55 @@ final class Convo {
     static void menu(ServerPlayer p, FoundationStaff s) {
         Dialogue.clearOptions(p);
         subtitle(p, s);
+        Scene.Tier tier = Scene.tier(p);
         if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) Talk.opt(p, s, "You wanted to tell me something?", "recall", "They remember your last conversation", SECRET);
+        if (tier == Scene.Tier.DCLASS) {
+            // a D-Class gets what a D-Class gets
+            Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
+            Talk.opt(p, s, "What happens to me next?", "dtest", "Your next test, if there is one", TOPIC);
+            Talk.opt(p, s, "Can I get something to eat?", "dfood", "Some staff will slip you food", TOPIC);
+            Talk.opt(p, s, "Tell me about yourself", "story", "Not everyone will tell a D-Class", TOPIC);
+            if (trust(s, p) >= 6) Talk.opt(p, s, "Off the record...", "secret", "They trust you, D-Class or not", SECRET);
+            Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+            return;
+        }
         if (s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)) Talk.opt(p, s, "Brief me", "brief", "Messages, calendar and site status", Talk.ORDER_C);
+        if (tier.ordinal() >= Scene.Tier.STAFF.ordinal()) Talk.opt(p, s, tier.ordinal() >= Scene.Tier.DIRECTOR.ordinal() ? "Report" : "Status?", "report", "What's happening where they are, in numbers", Talk.ORDER_C);
         Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
         Talk.opt(p, s, "Tell me about yourself", "story", "Their life, one chapter at a time", TOPIC);
         Talk.opt(p, s, "What's the news?", "news", "What people are talking about", TOPIC);
         Talk.opt(p, s, "Your work", "work", "What they're doing and what they need", TOPIC);
         Talk.opt(p, s, "The Council", "council", "Their view of the O5 and their decisions", TOPIC);
         Talk.opt(p, s, "Site security", "safe", "Guards, attacks and threats at " + siteName(s), TOPIC);
-        if (trust(s, p) >= 6) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
+        if (trust(s, p) >= (tier.ordinal() >= Scene.Tier.COUNCIL.ordinal() ? 7 : 6)) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
         Talk.opt(p, s, "Orders", "orders", "Tell them what to do", Talk.ORDER_C);
         Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
     }
 
-    private static void page(ServerPlayer p, FoundationStaff s, String[][] opts) {
+    /** A factual report on where they are: what's contained nearby, who's on duty, who's ill, what's happened. */
+    static String report(Scene sc) {
+        List<String> out = new ArrayList<>();
+        out.add(Scene.cap(sc.place.name()) + (sc.site != null ? ", " + sc.site.name : "") + ".");
+        Sites.Cell c = sc.cell();
+        if (c != null) out.add("Nearest cell: the " + c.name + (Sites.get(sc.p.server).cells.isEmpty() ? "" : "") + ".");
+        if (sc.loose != null) out.add(Unleashed.designation(sc.loose) + " is OUT, within twenty metres.");
+        if (sc.site != null) {
+            Forces.Station st = Forces.data(sc.p.server).station(sc.site.name);
+            int want = 0;
+            for (Forces.Unit u : Forces.Unit.values()) want += st.wanted(u);
+            out.add(st.members.size() + " of " + want + " armed personnel on duty.");
+            if (sc.alert != null) out.add("Under attack: " + sc.alert.org + ", " + sc.alert.hostiles + " hostiles, " + sc.alert.kills + " down.");
+        }
+        int sick = 0, staff = 0;
+        for (FoundationStaff o : sc.s.level().getEntitiesOfClass(FoundationStaff.class, sc.s.getBoundingBox().inflate(48))) { staff++; if (!o.illness().isEmpty()) sick++; }
+        out.add(staff + " staff nearby" + (sick > 0 ? ", " + sick + " of them ill." : ", all fit."));
+        out.add("Site stability " + Career.data(sc.p).stability + "%.");
+        List<WorldNews.Item> n = sc.news();
+        if (!n.isEmpty()) out.add("Latest: " + sc.event(n.get(0)));
+        return String.join(" ", out);
+    }
+
+        private static void page(ServerPlayer p, FoundationStaff s, String[][] opts) {
         Dialogue.clearOptions(p);
         subtitle(p, s);
         for (String[] o : opts) Talk.opt(p, s, o[0], o[1], o.length > 2 ? o[2] : "", DEEP);
@@ -172,6 +208,44 @@ final class Convo {
         int trust = trust(s, p);
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
+            case "report" -> {
+                Scene sc = Scene.of(p, s);
+                Talk.you(p, sc.high() ? "Report." : "Status?");
+                if (sc.tier.ordinal() < Scene.Tier.STAFF.ordinal()) { Talk.say(p, s, "That's above your clearance. Sorry."); menu(p, s); return true; }
+                Talk.say(p, s, report(sc));
+                page(p, s, new String[][]{{"Site security", "safe", "Guards and threats"}, {"Any problems?", "work_problems", "What's getting in their way"}});
+                return true;
+            }
+            case "dtest" -> {
+                Talk.you(p, "What happens to me next?");
+                CareerData cd = Career.data(p);
+                String line = !cd.missions.isEmpty() ? "Your file says: " + cd.missions.get(0).description + " Do it, and you might see next month."
+                        : s.role() == FoundationStaff.Role.GUARD ? "Next? You go back to your cell. Then you wait. That's what's next."
+                        : "Nothing's scheduled for you. Enjoy it. That doesn't happen often.";
+                Talk.say(p, s, line);
+                menu(p, s);
+                return true;
+            }
+            case "dfood" -> {
+                Talk.you(p, "Can I get something to eat?");
+                return handle(p, s, "op_food_direct");
+            }
+            case "op_food_direct" -> {
+                long day = s.level().getDayTime() / 24000;
+                String k = "bp_fed_" + p.getUUID();
+                boolean kind = s.role() != FoundationStaff.Role.GUARD || trust >= 4;
+                if (!kind) Talk.say(p, s, "Meals are at the canteen, at the times on the wall. Move along.");
+                else if (s.getPersistentData().getLong(k) == day + 1) Talk.say(p, s, "I already gave you something today. Don't push it.");
+                else {
+                    s.getPersistentData().putLong(k, day + 1);
+                    ItemStack food = new ItemStack(trust >= 6 ? net.minecraft.world.item.Items.COOKED_BEEF : net.minecraft.world.item.Items.BREAD, 2);
+                    if (!p.getInventory().add(food)) p.drop(food, false);
+                    Talk.say(p, s, trust >= 6 ? "Here. From the staff canteen. Don't tell anyone where you got it." : "Here. It's not much. Eat it before someone sees.");
+                    s.getPersistentData().putInt(tkey(p), Math.min(10, trust + 1));
+                }
+                menu(p, s);
+                return true;
+            }
             case "recall" -> {
                 Talk.you(p, "You wanted to tell me something?");
                 String m = Memory.recall(s, p, r);
@@ -339,7 +413,7 @@ final class Convo {
                 if (i >= n.size()) { Talk.say(p, s, "That's everything I've heard. You know as much as I do now. Well. Almost."); i = 0; s.getPersistentData().putInt(k, -1); page(p, s, new String[][]{}); return true; }
                 s.getPersistentData().putInt(k, i);
                 WorldNews.Item it = n.get(i);
-                Talk.say(p, s, Talk.pick(r, "Did you hear? ", "Word is ", "So, ") + it.headline() + ". That was " + WorldNews.ago(p.server, it) + ".");
+                Talk.say(p, s, Scene.of(p, s).relay(it));
                 bump(s, p, "news");
                 page(p, s, new String[][]{{"What do you think about it?", "news_think", "Their opinion"}, {"Who told you that?", "news_who", "Where they heard it"},
                         {"Tell me more", "news_more", "The details"}, {"What else is going on?", "news_next", "The next story"}});
@@ -393,6 +467,7 @@ final class Convo {
             // ------------------------------------------------------------ the Council
             case "council" -> {
                 Talk.you(p, "What do you make of the Council?");
+                if (Scene.tier(p) == Scene.Tier.DCLASS) { Talk.say(p, s, "The Council? You'll never see them. Pray they never see you."); menu(p, s); return true; }
                 Talk.say(p, s, Talk.councilView(s, p));
                 bump(s, p, "council");
                 page(p, s, new String[][]{{"Do you agree with them?", "council_agree", "Their honest view"}, {"What would you have done?", "council_instead", "The road not taken"},
@@ -532,6 +607,7 @@ final class Convo {
                         case "!medical" -> s.toMedical();
                         case "!dayoff" -> s.dayOff();
                         case "!report" -> s.callGuard(p, "is keeping an eye on you.");
+                        case "!food" -> { handle(p, s, "op_food_direct"); return true; }
                         case "" -> {}
                         default -> Memory.put(s, p, "op_" + rp.remember(), "1");
                     }

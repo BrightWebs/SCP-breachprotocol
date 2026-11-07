@@ -202,8 +202,10 @@ public final class Talk {
         }
         if (news != null && r.nextBoolean()) {
             return (morale >= 0 ? pick(r, "Better, honestly. ", "Not bad. ") : pick(r, "Tense. ", "Honestly? Rattled. "))
-                    + "Everyone's talking about how " + news + ".";
+                    + "Everyone's talking about how " + news + " " + WorldNews.ago(srv, last) + ".";
         }
+        String pl = Openers.placeLine(Scene.of(p, s));
+        if (!pl.isEmpty() && r.nextInt(5) < 2) return pl;
         if (night(s.level())) return pick(r, "Long shift. They always feel longer at night.", "Tired. Nights are when things move.");
         if (s.level().isRaining()) return pick(r, "Rain on the roof. I like it. It's normal.", "Weather's grim. Good day to stay inside.");
         return switch (t) {
@@ -278,8 +280,8 @@ public final class Talk {
         if (d == null) return "The Council hasn't decided anything we've heard about lately. Which means they've decided plenty we haven't.";
         boolean overruled = d.who().contains("over the Council");
         if (topBrass(p) && d.who().contains("Administrator"))
-            return "Your decision: " + d.headline() + ". " + (d.mood() >= 0 ? "From where I stand, it was the right one." : "It's been hard on the site, but we'll see it through.");
-        String a = "Last I heard, " + d.headline() + ". ";
+            return "Your decision on " + WorldNews.topic(d) + ", " + WorldNews.ago(p.server, d) + ": " + d.headline() + ". " + (d.mood() >= 0 ? "From where I stand, it was the right one." : "It's been hard on the site, but we'll see it through.");
+        String a = "Last I heard, " + d.headline() + ", " + WorldNews.ago(p.server, d) + ". ";
         if (overruled) a += "And the Administrator overruled the lot of them. ";
         return a + opinion(temper(s), d.mood(), r);
     }
@@ -400,7 +402,7 @@ public final class Talk {
         boolean forIt = d.supporters().contains(seat);
         String reason = forIt ? (d.mood() >= 0 ? "And it was the right call." : "I'd make the same call again, whatever it cost.")
                 : (d.mood() >= 0 ? "I was wrong, as it turns out. Don't tell anyone." : "I said so at the time.");
-        return "On whether " + d.headline() + ": I " + (forIt ? "argued for it. " : "voted against it. ") + reason
+        return "On " + WorldNews.topic(d) + " " + WorldNews.ago(p.server, d) + " (" + d.headline() + "): I " + (forIt ? "argued for it. " : "voted against it. ") + reason
                 + (d.who().contains("over the Council") ? " In the end it was the Administrator's call, as it should be." : "");
     }
 
@@ -731,7 +733,7 @@ public final class Talk {
             l2 = h[1];
         } else if (!news.isEmpty() && r.nextInt(3) > 0) {
             WorldNews.Item i = news.get(r.nextInt(Math.min(3, news.size())));
-            l1 = pick(r, "Did you hear " + i.headline() + "?", "So apparently " + i.headline() + ".", "They're saying " + i.headline() + ".");
+            l1 = pick(r, "Did you hear " + i.headline() + " " + WorldNews.ago(sl.getServer(), i) + "?", "So apparently " + i.headline() + ", " + WorldNews.ago(sl.getServer(), i) + ".", "They're saying " + i.headline() + ".");
             l2 = opinion(temper(b), i.mood(), r);
         } else {
             String[][] small = {{"Coffee machine's broken again.", "Someone said it's anomalous now. It makes tea."},

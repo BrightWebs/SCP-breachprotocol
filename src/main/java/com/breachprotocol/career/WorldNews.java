@@ -94,7 +94,26 @@ public final class WorldNews {
     /** How a decision is talked about around the site. */
     public static String headline(String template, String option) {
         String k = template + "|" + option.toLowerCase(Locale.ROOT);
+        if (template.startsWith("w_short_")) {
+            String site = template.substring(8);
+            return option.toLowerCase(Locale.ROOT).startsWith("replace") ? "the Council sent reinforcements to bring " + site + " back to strength" : site + " was left short of guards until the next review";
+        }
         return switch (k) {
+            case "w_attack|double the garrison" -> "the Council doubled the garrison after the attack";
+            case "w_attack|send alpha-1 after them" -> "Alpha-1 was sent to hunt down the attackers";
+            case "w_attack|open talks with them" -> "the Council opened ceasefire talks with the attackers";
+            case "w_losses|a memorial, and new hires" -> "there's to be a memorial for this week's dead, and new hires to fill their posts";
+            case "w_losses|tighten safety protocols" -> "safety protocols were tightened at every site";
+            case "w_losses|keep working. we can't stop" -> "the Council told everyone to keep working through the losses";
+            case "w_breach|rebuild the containment chamber" -> "the chamber that breached is being rebuilt";
+            case "w_breach|discipline the shift on duty" -> "the shift on duty during the breach was disciplined";
+            case "w_breach|double the guard on that cell" -> "Epsilon-11 now stands guard on the cell that breached";
+            case "w_stability|lock down every site for a day" -> "every site was locked down for a day";
+            case "w_stability|amnestic sweep of the region" -> "there was an amnestic sweep of the whole region";
+            case "w_stability|ride it out" -> "the Council chose to ride out the instability";
+            case "w_rift|only mtf close rifts from now on" -> "only task forces may close rifts from now on";
+            case "w_rift|better equipment for the crews" -> "rift crews are getting better equipment";
+            case "w_rift|d-class are expendable" -> "the Council called the lost rift crew expendable";
             case "termination_096|sign it" -> "the Council signed the termination order on SCP-096";
             case "termination_096|refuse" -> "the termination order on SCP-096 was refused";
             case "mtf_expand|approve" -> "Epsilon-11 is being stationed with us permanently";
@@ -122,18 +141,41 @@ public final class WorldNews {
             case "global_lockdown|global lockdown" -> "every site went into global lockdown";
             case "global_lockdown|let sites handle it" -> "the sites were left to handle the activity themselves";
             case "global_lockdown|send alpha-1" -> "Alpha-1 was sent out";
-            default -> "the Council decided: " + option.toLowerCase(Locale.ROOT);
+            default -> {
+                Calls.Template t = Calls.get(template);
+                String about = t != null ? Calls.title(t) : Calls.title(new Calls.Template(template, 0, false, "", java.util.List.of()));
+                yield "the Council ruled on " + (about.equals("Council business") ? "a matter before it" : "the matter of " + Character.toLowerCase(about.charAt(0)) + about.substring(1)) + ": " + option.toLowerCase(Locale.ROOT);
+            }
         };
     }
 
     /** The one-line gist of an event, for staff who mention it in passing. */
     public static String gist(Item i) { return i.headline(); }
 
-    public static String ago(MinecraftServer s, Item i) {
-        long t = s.overworld().getGameTime() - i.time();
-        if (t < 2400) return "just now";
-        if (t < 24000) return "earlier today";
-        if (t < 48000) return "yesterday";
-        return (t / 24000) + " days ago";
+    public static String ago(MinecraftServer s, Item i) { return ago(s, i.time()); }
+
+    /** Natural time words: "a few minutes ago", "this morning", "yesterday", "three days ago", "last week". */
+    public static String ago(MinecraftServer srv, long time) {
+        long now = srv.overworld().getGameTime(), t = now - time;
+        if (t < 1200) return "a few minutes ago";
+        if (t < 6000) return "within the hour";
+        long dayNow = srv.overworld().getDayTime();
+        if (t < 24000 && (dayNow % 24000) >= t) {
+            int h = (int) (((dayNow - t) % 24000) / 1000 + 6) % 24;
+            return h < 12 ? "this morning" : h < 18 ? "this afternoon" : "this evening";
+        }
+        long days = Math.max(1, t / 24000);
+        if (days == 1) return "yesterday";
+        if (days < 7) return new String[]{"", "", "two", "three", "four", "five", "six"}[(int) days] + " days ago";
+        if (days < 14) return "last week";
+        return days / 7 + " weeks ago";
+    }
+
+    /** What a decision was about, for "On the SCP-096 termination order, ..." */
+    public static String topic(Item i) {
+        String tpl = i.id().contains("|") ? i.id().substring(0, i.id().indexOf('|')) : i.id();
+        Calls.Template t = Calls.get(tpl);
+        String title = t != null ? Calls.title(t) : tpl.startsWith("w_short_") ? "Under-strength garrison" : Calls.title(new Calls.Template(tpl, 0, false, "", java.util.List.of()));
+        return title.equals("Council business") ? "the last matter before the Council" : "the " + Character.toLowerCase(title.charAt(0)) + title.substring(1);
     }
 }

@@ -53,6 +53,54 @@ public final class Secretary {
         return e instanceof FoundationStaff f && f.isAlive() ? f : null;
     }
 
+    // ================================================================== deliveries
+
+    public static boolean has(ServerPlayer p) { return !Forces.data(p.server).secretaries.isEmpty(); }
+
+    /** She takes delivery; it goes in the chest by the Administrator's desk. */
+    public static boolean deliver(ServerPlayer p, net.minecraft.world.item.ItemStack stack) {
+        Forces.Data d = Forces.data(p.server);
+        if (d.secretaries.isEmpty() || stack.isEmpty()) return false;
+        d.deliveries.add(stack.copy());
+        d.setDirty();
+        p.displayClientMessage(Component.literal("▣ Your secretary has taken delivery of " + stack.getCount() + "× " + stack.getHoverName().getString() + ".").withStyle(ChatFormatting.AQUA), true);
+        return true;
+    }
+
+    static BlockPos officeChest(Sites.Site s) { return origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 26); }
+
+    /** Puts waiting deliveries in the office chest (or a new chest beside it if that one is full). */
+    private static void stock(ServerLevel l, Sites.Site s, Forces.Data d) {
+        if (d.deliveries.isEmpty()) return;
+        BlockPos c = officeChest(s);
+        List<String> what = new ArrayList<>();
+        for (BlockPos at : new BlockPos[]{c, c.west(), c.west(2)}) {
+            if (d.deliveries.isEmpty()) break;
+            if (l.getBlockState(at).isAir()) l.setBlock(at, net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState()
+                    .setValue(net.minecraft.world.level.block.ChestBlock.FACING, net.minecraft.core.Direction.WEST), 3);
+            if (!(l.getBlockEntity(at) instanceof net.minecraft.world.level.block.entity.ChestBlockEntity chest)) continue;
+            for (Iterator<net.minecraft.world.item.ItemStack> it = d.deliveries.iterator(); it.hasNext(); ) {
+                net.minecraft.world.item.ItemStack st = it.next();
+                String label = st.getCount() + "× " + st.getHoverName().getString();
+                for (int i = 0; i < chest.getContainerSize() && !st.isEmpty(); i++) {
+                    net.minecraft.world.item.ItemStack in = chest.getItem(i);
+                    if (in.isEmpty()) { chest.setItem(i, st.copy()); st.setCount(0); }
+                    else if (net.minecraft.world.item.ItemStack.isSameItemSameComponents(in, st) && in.getCount() < in.getMaxStackSize()) {
+                        int m = Math.min(st.getCount(), in.getMaxStackSize() - in.getCount());
+                        in.grow(m); st.shrink(m);
+                    }
+                }
+                if (st.isEmpty()) { it.remove(); what.add(label); }
+            }
+            chest.setChanged();
+        }
+        d.setDirty();
+        if (what.isEmpty()) return;
+        String name = d.secretaryNames.getOrDefault(s.name, "Your secretary");
+        for (ServerPlayer q : l.getServer().getPlayerList().getPlayers())
+            if (topBrass(q)) Career.message(q, name + " (Secretary)", "A delivery came for you from the Council: " + String.join(", ", what) + ". I've put it in the chest by your desk at " + s.name + ".");
+    }
+
     // ================================================================== staffing
 
     private static FoundationStaff hire(ServerLevel l, Sites.Site s) {
@@ -100,6 +148,7 @@ public final class Secretary {
             if (s.name.equals("Site-01") || !s.dim.equals("minecraft:overworld")) continue;
             BlockPos at = post(s);
             if (!ow.isLoaded(at) || ow.getNearestPlayer(at.getX(), at.getY(), at.getZ(), 64, false) == null || !isTower(ow, s)) continue;
+            if (d.secretaries.containsKey(s.name)) stock(ow, s, d);
             Long due = d.secretaryDue.get(s.name);
             if (!d.secretaries.containsKey(s.name) && (due == null || now >= due)) {
                 FoundationStaff f = hire(ow, s);
@@ -158,6 +207,7 @@ public final class Secretary {
                 long reqs = d.appts.stream().filter(a -> !a.confirmed).count();
                 CareerData.Appt next = d.appts.stream().filter(a -> a.confirmed).min(Comparator.comparingLong(a -> a.at)).orElse(null);
                 if (next != null) parts.add("Next on your calendar: " + Calendar.who(next) + ", " + Calendar.when(next.at) + ".");
+                if (!Forces.data(p.server).deliveries.isEmpty()) parts.add("There's a delivery from the Council waiting; I'll put it in the chest by your desk.");
                 if (reqs > 0) parts.add(reqs + " meeting request" + (reqs == 1 ? "" : "s") + " waiting for your answer.");
                 CareerData.Appt weekly = Calendar.weekly(d);
                 if (weekly != null) parts.add("The Council sits " + Calendar.when(weekly.at) + ", as usual" + (d.agenda.isEmpty() ? "." : ", with " + d.agenda.size() + " item" + (d.agenda.size() == 1 ? "" : "s") + " added so far, on top of the week's business and Peanut's cell."));

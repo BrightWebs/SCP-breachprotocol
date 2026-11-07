@@ -125,6 +125,8 @@ public final class Forces {
         public final Map<String, UUID> secretaries = new HashMap<>();
         public final Map<String, Long> secretaryDue = new HashMap<>();
         public final Map<String, String> secretaryNames = new HashMap<>();
+        /** Deliveries waiting for the secretary to put them in the Administrator's office. */
+        public final List<net.minecraft.world.item.ItemStack> deliveries = new ArrayList<>();
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
 
         static Data load(CompoundTag t, HolderLookup.Provider p) {
@@ -140,6 +142,7 @@ public final class Forces {
             for (String k : sd.getAllKeys()) d.secretaryDue.put(k, sd.getLong(k));
             CompoundTag sn = t.getCompound("secretaryNames");
             for (String k : sn.getAllKeys()) d.secretaryNames.put(k, sn.getString(k));
+            for (Tag x : t.getList("deliveries", Tag.TAG_COMPOUND)) net.minecraft.world.item.ItemStack.parse(p, x).ifPresent(d.deliveries::add);
             return d;
         }
 
@@ -162,6 +165,9 @@ public final class Forces {
             CompoundTag sn = new CompoundTag();
             secretaryNames.forEach(sn::putString);
             t.put("secretaryNames", sn);
+            ListTag dl = new ListTag();
+            for (net.minecraft.world.item.ItemStack st : deliveries) if (!st.isEmpty()) dl.add(st.save(p));
+            t.put("deliveries", dl);
             return t;
         }
 

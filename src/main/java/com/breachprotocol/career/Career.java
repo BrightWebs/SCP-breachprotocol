@@ -207,6 +207,12 @@ public final class Career {
         return Unleashed.keycard(level);
     }
 
+    /** Budget and Council deliveries: with a secretary, they go to her (and into the chest by your desk), not your pockets. */
+    public static void budget(ServerPlayer p, Item item, int count) {
+        if ((rank(p) == Rank.ADMINISTRATOR || isAscended(p)) && Secretary.deliver(p, new ItemStack(item, count))) return;
+        give(p, item, count);
+    }
+
     public static void give(ServerPlayer p, Item item, int count) {
         ItemStack s = new ItemStack(item, count);
         if (!p.getInventory().add(s)) p.drop(s, false);
@@ -859,9 +865,9 @@ public final class Career {
                     message(p, O5.O5_9, "Site stability is collapsing. I saw this coming. Brace yourself.");
                     breachNear(p, opts.get(p.getRandom().nextInt(opts.size())));
                 } else if (d.stability > 85) {
-                    message(p, O5.O5_12, "Stability is excellent. The budget surplus is in your inventory.");
-                    give(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 2);
-                    give(p, Items.DIAMOND, 2);
+                    message(p, O5.O5_12, "Stability is excellent. The budget surplus has been sent " + (Secretary.has(p) ? "to your secretary." : "to you."));
+                    budget(p, Unleashed.item("amnestic_canister", Items.GOLDEN_APPLE), 2);
+                    budget(p, Items.DIAMOND, 2);
                 }
             }
         }
