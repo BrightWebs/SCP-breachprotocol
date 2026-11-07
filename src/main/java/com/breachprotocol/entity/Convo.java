@@ -27,13 +27,15 @@ final class Convo {
 
     static int trust(FoundationStaff s, ServerPlayer p) { return s.getPersistentData().getInt(tkey(p)); }
 
+    static void setTrust(FoundationStaff s, ServerPlayer p, int v) { s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, v))); }
+
     /** Talking about something new builds trust, once per topic per day. */
     private static void bump(FoundationStaff s, ServerPlayer p, String topic) {
         long day = s.level().getDayTime() / 24000;
         String k = "bp_tt_" + p.getUUID() + "_" + topic;
         if (s.getPersistentData().getLong(k) == day + 1) return;
         s.getPersistentData().putLong(k, day + 1);
-        s.getPersistentData().putInt(tkey(p), Math.min(10, trust(s, p) + 1));
+        s.getPersistentData().putInt(tkey(p), Math.min(10, trust(s, p) + (Social.admirer(s) ? 2 : 1))); // admirers warm quickly
     }
 
     private static String hearts(int t) {
@@ -52,13 +54,20 @@ final class Convo {
         mood(p, s);
         List<String> info = new ArrayList<>();
         info.add((s.unit() != null ? s.unit().title : s.role().title) + " · age " + s.age());
-        info.add("Personality: " + Scene.cap(Talk.temper(s).name().toLowerCase(Locale.ROOT)));
+        Personality pe = Personality.of(s);
+        info.add("Personality: " + pe.label + " - " + pe.about);
+        int rs = Social.respect(s, p);
+        info.add("Respect: " + Social.bar(rs) + " " + Social.respectWord(rs));
         List<String> traits = new ArrayList<>();
         int yrs = Math.min(Talk.years(s), Math.max(1, s.age() - 21));
         if (yrs >= 15) traits.add("veteran (" + yrs + " years)");
         if (s.elder()) traits.add("elderly");
         if (!s.illness().isEmpty()) traits.add("ill with " + s.illness());
         if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) traits.add("remembers you");
+        traits.addAll(Social.familyTraits(s));
+        if (Social.partner(s, p)) traits.add("your partner");
+        if (Social.slighted(s, p)) traits.add("insolent");
+        if (Memory.get(s, p, "reprimanded").equals("1")) traits.add("reprimanded");
         if (!traits.isEmpty()) info.add("Traits: " + String.join(", ", traits));
         info.add(Scene.cap(bond(t)) + " · " + Scene.of(p, s).place.name());
         Dialogue.info(p, info, t);
@@ -84,6 +93,12 @@ final class Convo {
             c = 0x80E0A0;
         }
         if (trust(s, p) >= 8 && c == 0x80E0A0) m = "Glad to see you";
+        if (c == 0x80E0A0 || c == 0xE0B060) {
+            if (Social.partner(s, p)) { m = "Happy to see you"; c = 0xF0A0C0; }
+            else if (Social.admirer(s) && !Memory.get(s, p, "admire").equals("over") && trust(s, p) >= 2) { m = "Flustered"; c = 0xF0A0C0; }
+            if (Social.slighted(s, p)) { m = "Insolent"; c = 0xC07050; }
+        }
+        if (Social.widowedRecently(s) && c != 0xFF6060) { m = "Grieving"; c = 0x90A8C8; }
         Dialogue.mood(p, m, c);
     }
 
@@ -142,7 +157,15 @@ final class Convo {
 
     /** They speak first; you answer from the replies that fit what they said. */
     static void open(ServerPlayer p, FoundationStaff s) {
-        Openers.Opener op = Openers.of(p, s);
+        if (s.getPersistentData().getBoolean("bp_escorted")) {
+            Talk.note(p, "(" + s.getName().getString() + " won't look at you.)");
+            Dialogue.clearOptions(p);
+            Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+            return;
+        }
+        Social.seed(s, p);
+        Openers.Opener op = Social.opener(p, s);
+        if (op == null) op = Openers.of(p, s);
         Talk.say(p, s, op.text());
         OPENING.put(p.getUUID(), op.replies());
         Dialogue.clearOptions(p);
@@ -169,6 +192,7 @@ final class Convo {
             Talk.opt(p, s, "What happens to me next?", "dtest", "Your next test, if there is one", TOPIC);
             Talk.opt(p, s, "Can I get something to eat?", "dfood", "Some staff will slip you food", TOPIC);
             Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
+            Talk.opt(p, s, "Socialise", "socialise", "Chat, joke, comfort", Social.SOCIAL_C);
             Talk.opt(p, s, "Tell me about yourself", "story", "Not everyone will tell a D-Class", TOPIC);
             if (trust(s, p) >= 6) Talk.opt(p, s, "Off the record...", "secret", "They trust you, D-Class or not", SECRET);
             Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
@@ -184,6 +208,8 @@ final class Convo {
         Talk.opt(p, s, "Site security", "safe", "Guards, attacks and threats at " + siteName(s), TOPIC);
         if (trust(s, p) >= (tier.ordinal() >= Scene.Tier.COUNCIL.ordinal() ? 7 : 6)) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
         Talk.opt(p, s, "Orders", "orders", "Tell them what to do", Talk.ORDER_C);
+        if (Social.slighted(s, p)) Talk.opt(p, s, "Discipline", "discipline", "They disrespected you. Deal with it", Social.DISCIPLINE_C);
+        Talk.opt(p, s, "Socialise", "socialise", "Chat, jokes, compliments" + (trust(s, p) >= 5 ? ", flirting" : "") + (trust(s, p) >= 6 ? ", hugs" : ""), Social.SOCIAL_C);
         Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
         Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
     }
@@ -211,7 +237,7 @@ final class Convo {
         return String.join(" ", out);
     }
 
-        private static void page(ServerPlayer p, FoundationStaff s, String[][] opts) {
+    static void page(ServerPlayer p, FoundationStaff s, String[][] opts) {
         Dialogue.clearOptions(p);
         subtitle(p, s);
         for (String[] o : opts) Talk.ans(p, s, o[0], o[1], o.length > 2 ? o[2] : "");
@@ -224,6 +250,7 @@ final class Convo {
         Talk.Temper t = Talk.temper(s);
         String a = Career.address(p);
         int trust = trust(s, p);
+        if (Social.handle(p, s, what)) return true;
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
             case "gift" -> {
@@ -416,14 +443,7 @@ final class Convo {
             }
             case "story_family" -> {
                 Talk.you(p, "Do you have family?");
-                String line = trust < 2 ? "That's... personal. Ask me again when we know each other better."
-                        : switch (Math.floorMod(s.getUUID().hashCode(), 5)) {
-                    case 0 -> "A daughter. She's nine. She thinks I test cosmetics. I've never been so glad to be called boring.";
-                    case 1 -> "My parents. They're old now. I visit when I can, and I don't tell them anything, and they don't ask.";
-                    case 2 -> "I had a husband. The Foundation has a word for what happened. I don't use it.";
-                    case 3 -> "No. This place is the family. That's either very sad or very Foundation. Probably both.";
-                    default -> "A brother. He works in insurance. We compare horror stories at Christmas. He thinks he wins.";
-                };
+                String line = trust < 2 ? "That's... personal. Ask me again when we know each other better." : Social.familyLine(s, p, r);
                 Talk.say(p, s, line);
                 bump(s, p, "story_family");
                 page(p, s, new String[][]{{"How are you holding up, really?", "how_real", "Ask them honestly"}});
@@ -664,7 +684,10 @@ final class Convo {
                         case "!report" -> s.callGuard(p, "is keeping an eye on you.");
                         case "!food" -> { handle(p, s, "op_food_direct"); return true; }
                         case "" -> {}
-                        default -> Memory.put(s, p, "op_" + rp.remember(), "1");
+                        default -> {
+                            if (rp.remember().startsWith("!soc:")) { if (Social.code(p, s, rp.remember())) return true; }
+                            else Memory.put(s, p, "op_" + rp.remember(), "1");
+                        }
                     }
                     menu(p, s);
                     return true;

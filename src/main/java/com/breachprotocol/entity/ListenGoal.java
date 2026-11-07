@@ -25,12 +25,12 @@ public class ListenGoal extends Goal {
     @Override
     public boolean canUse() {
         who = Dialogue.talkingTo(mob);
-        return who != null && !walking(who);
+        return who != null && !walking(who) && !mob.getPersistentData().getBoolean("bp_escorted");
     }
 
     @Override
     public boolean canContinueToUse() {
-        return who != null && who.isAlive() && Dialogue.talkingTo(mob) == who && !walking(who);
+        return who != null && who.isAlive() && Dialogue.talkingTo(mob) == who && !walking(who) && !mob.getPersistentData().getBoolean("bp_escorted");
     }
 
     @Override

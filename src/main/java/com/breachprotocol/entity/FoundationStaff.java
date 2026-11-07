@@ -434,7 +434,18 @@ public class FoundationStaff extends PathfinderMob implements Person {
         discard();
     }
 
+    /** Leaves the Foundation's service (reclassified or terminated): the post is filled again. */
+    void leaveService() {
+        if (level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            if (role() == Role.SECRETARY) com.breachprotocol.career.Secretary.vacancy(this, "was dismissed");
+            else if (unit == null && post != null) Hires.schedule(sl, post, role());
+        }
+        Seats.stand(this);
+        discard();
+    }
+
     private void die(String cause) {
+        Social.died(this, "died " + cause);
         news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + " (" + role().title + ") died " + cause + " at " + (int) age, -2);
         tellNearby(name() + " has died " + cause + ", aged " + (int) age + ".", ChatFormatting.GRAY);
         if (level() instanceof net.minecraft.server.level.ServerLevel sl) {
@@ -453,6 +464,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
         if (!(level() instanceof net.minecraft.server.level.ServerLevel sl) || isRemoved() && !isDeadOrDying()) return;
         net.minecraft.world.entity.Entity k = src.getEntity();
         String by = k == null ? "in an incident" : "by " + (k instanceof Player pl ? pl.getGameProfile().getName() : k.getName().getString());
+        Social.died(this, "was killed " + by);
         if (unit != null) {
             com.breachprotocol.career.Forces.died(this, "killed " + by);
         } else if (role() == Role.SECRETARY) {

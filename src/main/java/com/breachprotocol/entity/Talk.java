@@ -49,7 +49,10 @@ public final class Talk {
 
     public enum Temper { BOLD, CAREFUL, CYNICAL, EARNEST }
 
-    public static Temper temper(Entity e) { return Temper.values()[Math.floorMod(e.getUUID().getLeastSignificantBits(), 4)]; }
+    public static Temper temper(Entity e) {
+        if (e instanceof FoundationStaff fs) return Personality.of(fs).temper;
+        return Temper.values()[Math.floorMod(e.getUUID().getLeastSignificantBits(), 4)];
+    }
 
     public static int years(Entity e) { return 2 + (int) Math.floorMod(e.getUUID().getMostSignificantBits(), 19L); }
 
@@ -314,7 +317,15 @@ public final class Talk {
 
     static void say(ServerPlayer p, Entity who, String line) {
         // staff only say what your clearance allows (the Overseers themselves speak freely to those they meet)
-        if (who instanceof FoundationStaff) line = Clearance.filter(p, line);
+        if (who instanceof FoundationStaff fs) {
+            boolean raw = line.startsWith(Clearance.RAW);
+            line = Clearance.filter(p, line);
+            if (!raw) {
+                Random vr = new Random();
+                line = Social.colour(p, fs, line, vr);                       // respect, nerves, grief
+                line = Personality.of(fs).voice(line, Career.address(p), vr); // and each in their own voice
+            }
+        }
         else if (line.startsWith(Clearance.RAW)) line = line.substring(1);
         Dialogue.line(p, who.getName().getString(), line, who instanceof O5MemberEntity ? O5_C : STAFF_C);
         if (who instanceof Mob m) m.getLookControl().setLookAt(p, 30, 30);
@@ -747,6 +758,7 @@ public final class Talk {
         Random r = new Random();
         List<WorldNews.Item> news = WorldNews.recent(sl.getServer(), 4);
         String l1, l2;
+        String[] h2;
         ServerPlayer boss = null;
         for (ServerPlayer q : ears) if (topBrass(q)) boss = q;
         if (boss != null && r.nextInt(3) == 0) {
@@ -758,6 +770,9 @@ public final class Talk {
             String[] h = hush[r.nextInt(hush.length)];
             l1 = h[0];
             l2 = h[1];
+        } else if ((h2 = Social.chatter(a, b, ears, r)) != null) {
+            l1 = h2[0];
+            l2 = h2[1];
         } else if (!news.isEmpty() && r.nextInt(3) > 0) {
             WorldNews.Item i = news.get(r.nextInt(Math.min(3, news.size())));
             l1 = pick(r, "Did you hear " + i.headline() + " " + WorldNews.ago(sl.getServer(), i) + "?", "So apparently " + i.headline() + ", " + WorldNews.ago(sl.getServer(), i) + ".", "They're saying " + i.headline() + ".");
