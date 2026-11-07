@@ -160,7 +160,7 @@ public final class Recruiting {
         // a post going? they go straight onto the shortlist
         for (Management.Vacancy vac : Management.open(s)) {
             if (!vac.site.equals(site.name) || vac.kind.equals("head") || vac.state.equals("running")) continue;
-            vac.cands.add(0, Management.candidateFrom(s, f, vac.role()));
+            vac.cands.add(0, Management.candidateFrom(s, f, vac.role));
             Management.data(s).setDirty();
             break;
         }
@@ -248,13 +248,13 @@ public final class Recruiting {
         f.setSex(female);
         f.setGenome(genome, traits);
         // their family is the village family (not one invented for them)
-        CompoundTag fam = new CompoundTag();
+        CompoundTag ff = new CompoundTag();
         Registry.Rec sp = Registry.find(s, e.spouse);
-        fam.putBoolean("married", sp != null);
-        if (sp != null) fam.putString("spouse", sp.name.split(" ")[0]);
-        fam.putBoolean("parents", e.mother != null || e.father != null);
-        fam.putString("cover", "the village");
-        f.getPersistentData().put("bp_fam", fam);
+        ff.putBoolean("married", sp != null);
+        if (sp != null) ff.putString("spouse", sp.name.split(" ")[0]);
+        ff.putBoolean("parents", e.mother != null || e.father != null);
+        ff.putString("cover", "the village");
+        f.getPersistentData().put("bp_fam", ff);
         f.getPersistentData().putBoolean("bp_famreg", true);
         return f;
     }
