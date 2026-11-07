@@ -162,6 +162,8 @@ public final class SiteTower extends FacilityBuilder {
         for (int s = 0; s <= TOP; s++) b.facade(s);
         b.roof();
         b.stairwell();
+        b.reception();
+        b.residence();
         b.seal();
         b.staff();
         String name = b.register(ownerUuid, ownerName);
@@ -956,9 +958,9 @@ public final class SiteTower extends FacilityBuilder {
         // library along the west wall, seating along the east
         for (int z = 11; z <= 30; z++) if (z != 20) { set(1, Y + 1, z, "binder_shelf[facing=east]"); set(1, Y + 2, z, "binder_shelf[facing=east]"); }
         put(3, Y + 1, 20, "archive_database_terminal", Blocks.LECTERN, E);
-        couch("couch_leather", T - 1, 12, Y, 5, false, W);
-        couch("couch_leather", 25, 18, Y, 5, true, N);
-        table("conference_table", null, 27, 13, 29, 15, Y, 1);
+        couch("couch_leather", T - 1, 19, Y, 5, false, W);
+        couch("couch_leather", 22, 18, Y, 5, true, N);
+        table("conference_table", null, 25, 22, 27, 24, Y, 1);
         for (int[] pp : new int[][]{{2, 9 + 1}, {T - 1, 30}, {12, 30}, {20, 30}}) set(pp[0], Y + 1, pp[1], "ez_planter[facing=north]");
         for (int x = 6; x <= 26; x += 20) set(x, Y + 3, 9, "wall_clock[facing=south]");
 
@@ -1040,55 +1042,207 @@ public final class SiteTower extends FacilityBuilder {
                 ui("creative_wire", Items.STRING, 32), ui("portable_launch_pad", Items.IRON_BLOCK, 1));
     }
 
-    // ================================================================== stairwell
+    // ================================================================== stairwell and lift
+
+    /** The clearance each floor asks for (stair doors are keyed to it, and the lift won't stop there for less). */
+    public static int floorClearance(int s) {
+        return switch (s) {
+            case -5 -> 2; case -4, -3 -> 4; case -2 -> 3; case -1 -> 2;
+            case 0 -> 0; case 1 -> 2; case 2 -> 1; case 3 -> 3; case 4 -> 2; case 5 -> 2; case 6 -> 3; case 7 -> 4;
+            case 8, 9 -> 5; default -> 4;
+        };
+    }
+
+    public static String floorName(int s) {
+        return switch (s) {
+            case -5 -> "B5  D-Class Block"; case -4 -> "B4  Deep Containment"; case -3 -> "B3  Keter Wing";
+            case -2 -> "B2  Heavy Containment"; case -1 -> "B1  Light Containment"; case 0 -> "G  Entrance";
+            case 1 -> "1  Research"; case 2 -> "2  Medical"; case 3 -> "3  Security"; case 4 -> "4  Archive";
+            case 5 -> "5  Offices"; case 6 -> "6  Servers"; case 7 -> "7  Launch Control"; case 8 -> "8  O5 Council";
+            case 9 -> "9  Administrator"; default -> "R  Roof";
+        };
+    }
+
+    /** The lift car's floor spot on storey s (relative to the origin). */
+    public static BlockPos liftCar(int s) { return new BlockPos(31, y(s) + 1, 6); }
+
+    /** The lift's call panel on storey s (relative to the origin). */
+    public static BlockPos liftPanel(int s) { return new BlockPos(30, y(s) + 2, 7); }
+
+    /** Where someone stands on the stair landing of storey s. */
+    public static BlockPos landing(int s) { return new BlockPos(27, y(s) + 1, 7); }
+
+    public static final int LOWEST_FLOOR = LOWEST;
 
     /**
-     * One stairwell from B2 to the roof in the north-east corner (x 26..32, z 0..8): two flights of
-     * three steps per storey around a centre wall, a landing at every floor with a door onto the
-     * corridor (the roof door opens onto the deck). Floors 8 and 9 are keyed at Level 5.
+     * The core in the north-east corner (x 26..32, z 0..8): a narrow switch-back stair on the west
+     * (x 27..28) and the lift on the east (x 30..31) behind a dividing wall. Every floor has a stair
+     * door (keyed to the floor's clearance) and a lift door, side by side onto the corridor; inside the
+     * lift car is the call panel. The lift serves B5 to the roof, stopping only where you're cleared.
      */
     private void stairwell() {
         int bottom = y(LOWEST), top = y(ROOF);
         // shaft walls
         for (int yy = bottom; yy <= top + 5; yy++) {
             for (int x = 26; x <= T; x++) { set(x, yy, 0, "facility_painted_concrete"); set(x, yy, 8, "facility_painted_concrete"); }
-            for (int z = 0; z <= 8; z++) { set(26, yy, z, "facility_painted_concrete"); set(T, yy, z, "facility_painted_concrete"); }
+            for (int z = 0; z <= 8; z++) { set(26, yy, z, "facility_painted_concrete"); set(T, yy, z, "facility_painted_concrete"); set(29, yy, z, "facility_painted_concrete"); }
         }
-        for (int s = 0; s <= TOP; s++) for (int yy = y(s) + 2; yy <= y(s) + 4; yy++) for (int z = 2; z <= 6; z += 2) set(T, yy, z, "reinforced_glass");
-        air(27, bottom + 1, 1, 31, top + 4, 7);
-        fill(27, bottom, 1, 31, bottom, 7, "facility_concrete");
+        for (int s = 0; s <= TOP; s++) for (int yy = y(s) + 2; yy <= y(s) + 4; yy++) for (int z = 2; z <= 4; z += 2) set(T, yy, z, "reinforced_glass");
+        air(27, bottom + 1, 1, 28, top + 4, 7);
+        fill(27, bottom, 1, 28, bottom, 7, "facility_concrete");
         fill(26, top + 5, 0, T, top + 5, 8, "facility_precast_concrete");
+        // the lift shaft: machinery above and below each car
+        fill(30, bottom, 1, 31, top + 4, 7, "facility_concrete");
         for (int s = LOWEST; s <= ROOF; s++) {
             int Y = y(s);
-            // floor landing (v 0..1 -> z 7..6) and the arrival step from below (u 3..4, v 2 -> x 30..31, z 5)
-            fill(27, Y, 6, 31, Y, 7, "facility_concrete");
-            fill(30, Y, 5, 31, Y, 5, "facility_concrete");
-            set(28, Y + (s == ROOF ? 4 : 5), 7, "fluorescent_light[face=ceiling,facing=east,lit=true]");
-            // the floor's own sign beside the door
-            String label = switch (s) {
-                case -5 -> "B5  D-CLASS BLOCK"; case -4 -> "B4  DEEP CONT."; case -3 -> "B3  KETER WING";
-                case -2 -> "B2  HEAVY CONT."; case -1 -> "B1  LIGHT CONT."; case 0 -> "G  ENTRANCE";
-                case 1 -> "1  RESEARCH"; case 2 -> "2  MEDICAL"; case 3 -> "3  SECURITY"; case 4 -> "4  ARCHIVE";
-                case 5 -> "5  OFFICES"; case 6 -> "6  SERVERS"; case 7 -> "7  LAUNCH CTRL"; case 8 -> "8  O5 COUNCIL";
-                case 9 -> "9  ADMINISTRATOR"; default -> "ROOF";
-            };
-            plate(30, Y + 2, 7, N, "FLOOR", label);
+            // stair landing (z 6..7) and the arrival step from below (x 28, z 5)
+            fill(27, Y, 6, 28, Y, 7, "facility_concrete");
+            set(28, Y, 5, "facility_concrete");
+            set(27, Y + (s == ROOF ? 4 : 5), 7, "fluorescent_light[face=ceiling,facing=east,lit=true]");
+            plate(28, Y + 2, 6, W, "FLOOR", floorName(s).replaceFirst("  ", " "));
             set(27, Y + 3, 9, "facility_sign_stairs_small[facing=south]");
             if (s < ROOF) {
-                // flight 1 up the west side (x 27..28) toward the north
-                for (int k = 1; k <= 3; k++) fill(27, Y + k, 6 - k, 28, Y + k, 6 - k, "facility_concrete_stairs[facing=north,half=bottom,shape=straight]");
-                // mid landing (z 1..2) at Y+3
-                fill(27, Y + 3, 1, 31, Y + 3, 2, "facility_concrete");
-                // flight 2 back down the east side (x 30..31) toward the south
-                fill(30, Y + 4, 3, 31, Y + 4, 3, "facility_concrete_stairs[facing=south,half=bottom,shape=straight]");
-                fill(30, Y + 5, 4, 31, Y + 5, 4, "facility_concrete_stairs[facing=south,half=bottom,shape=straight]");
-                // centre wall between the flights
-                for (int yy = Y + 1; yy <= Y + 5; yy++) for (int z = 3; z <= 5; z++) set(29, yy, z, "facility_painted_concrete");
+                // up the west side (x 27) northward, then back down the east side (x 28) southward
+                for (int k = 1; k <= 3; k++) set(27, Y + k, 6 - k, "facility_concrete_stairs[facing=north,half=bottom,shape=straight]");
+                fill(27, Y + 3, 1, 28, Y + 3, 2, "facility_concrete");
+                set(28, Y + 4, 3, "facility_concrete_stairs[facing=south,half=bottom,shape=straight]");
+                set(28, Y + 5, 4, "facility_concrete_stairs[facing=south,half=bottom,shape=straight]");
             }
-            // the door onto the floor
-            if (s == ROOF) door("ez_room_door", 2, 2, 28, 8, Y, S);
-            else if (s >= 8) gate("glass_room_door", 2, 2, 28, 8, Y, N, 5);
-            else ezDoor(28, 8, Y, S);
+            // the lift car: 2 x 3, lit, with its panel
+            air(30, Y + 1, 5, 31, Y + 4, 7);
+            fill(30, Y, 5, 31, Y, 7, "facility_epoxy_floor");
+            fill(30, Y + 5, 5, 31, Y + 5, 7, "facility_precast_concrete");
+            set(30, Y + 4, 6, "fluorescent_light[face=ceiling,facing=east,lit=true]");
+            set(liftPanel(s).getX(), liftPanel(s).getY(), liftPanel(s).getZ(), "door_button[facing=east,powered=false]");
+            set(31, Y + 3, 9, "facility_sign_elevator_small[facing=south]");
+            // the doors onto the floor: stairs keyed to the floor's clearance, the lift by hand
+            int lvl = floorClearance(s);
+            if (s == ROOF) door("ez_room_door", 2, 2, 27, 8, Y, S);
+            else if (lvl >= 1) gate(s >= 8 ? "glass_room_door" : "ez_room_door", 2, 2, 27, 8, Y, S, lvl);
+            else ezDoor(27, 8, Y, S);
+            ezDoor(30, 8, Y, S);
         }
+    }
+
+    // ================================================================== 9: the secretary's reception
+
+    /**
+     * The anteroom outside the Administrator's office (x 21..31, z 9..15): you arrive by stairs or lift
+     * into it, the Executive Secretary's desk faces you, visitors wait on the bench, and a keyed door
+     * leads through to the office.
+     */
+    private void reception() {
+        int Y = y(9);
+        air(21, Y + 1, 9, T - 1, Y + 4, 16);
+        Pal office = OFFICE.floor("facility_carpet_blue");
+        for (int z = 9; z <= 16; z++) column(office, 21, z, Y, 4);
+        for (int x = 21; x <= T - 1; x++) column(office, x, 16, Y, 4);
+        fill(22, Y, 9, T - 1, Y, 15, "facility_carpet_blue");
+        // her desk, facing the doors
+        for (int x = 24; x <= 27; x++) set(x, Y + 1, 13, "reception_desk[facing=north,left=" + (x > 24) + ",right=" + (x < 27) + ",shape=straight]");
+        set(25, Y + 2, 13, "computer_terminal[facing=north,lit=true,screen=1]");
+        set(26, Y + 2, 13, "paper_stack[facing=north,variant=1]");
+        set(27, Y + 2, 13, "desk_lamp[facing=north,lit=true]");
+        set(25, Y + 1, 14, "office_chair[facing=north]");
+        set(T - 1, Y + 1, 15, "filing_cabinet[facing=west,open=false]");
+        set(T - 1, Y + 1, 14, "filing_cabinet[facing=west,open=false]");
+        // visitors' bench and a plant
+        for (int z = 10; z <= 12; z++) set(22, Y + 1, z, "ez_waiting_chairs[facing=east]");
+        set(22, Y + 1, 15, "ez_planter[facing=east]");
+        set(24, Y + 3, 16, "wall_clock[facing=north]");
+        plate(26, Y + 3, 15, N, "EXECUTIVE", "SECRETARY");
+        // through to the office: keyed at Level 5
+        gate("glass_room_door", 2, 2, 21, 11, Y, E, 5);
+        plate(22, Y + 3, 10, E, "THE", "ADMINISTRATOR");
+        lights(21, 9, T - 1, 16, Y);
+    }
+
+    /** Where the Executive Secretary sits in a tower with a reception (relative to the origin). */
+    public static BlockPos secretaryChair() { return new BlockPos(25, y(9) + 1, 14); }
+
+    // ================================================================== staff residence
+
+    /** The residence block east of the tower (x RX0..RX1, z 0..T): two floors of rooms, two beds in each. */
+    public static final int RX0 = T + 9, RX1 = T + 33;
+
+    /** Every bed in the residence (relative to the origin), head end. */
+    public static List<BlockPos> beds() {
+        List<BlockPos> out = new ArrayList<>();
+        for (int f = 0; f < 2; f++) {
+            int Y = f * STOREY;
+            for (int i = 0; i < 4; i++) {
+                int x0 = RX0 + 1 + i * 6;
+                out.add(new BlockPos(x0 + 1, Y + 1, 2)); out.add(new BlockPos(x0 + 4, Y + 1, 2));
+                out.add(new BlockPos(x0 + 1, Y + 1, T - 2)); out.add(new BlockPos(x0 + 4, Y + 1, T - 2));
+            }
+        }
+        return out;
+    }
+
+    private void residence() {
+        // the plot: cleared, levelled, and a path from the tower doors
+        air(RX0 - 4, 1, -3, RX1 + 3, 2 * STOREY + 6, T + 5);
+        fill(RX0 - 4, 0, -3, RX1 + 3, 0, T + 3, "facility_precast_concrete");
+        fill(RX0 - 4, -1, -3, RX1 + 3, -1, T + 3, "facility_concrete");
+        for (int x = 20; x <= RX0; x++) { set(x, 0, T + 3, "ez_floor"); set(x, 0, T + 4, "ez_floor"); }
+        for (int z = 15; z <= T + 4; z++) { set(RX0 - 2, 0, z, "ez_floor"); set(RX0 - 1, 0, z, "ez_floor"); }
+        for (int f = 0; f < 2; f++) {
+            int Y = f * STOREY;
+            Pal hall = EZ, rooms = OFFICE.floor("facility_carpet_blue");
+            room(hall, RX0, 14, RX1, 18, Y, true);                       // corridor
+            for (int i = 0; i < 4; i++) {
+                int x0 = RX0 + i * 6, x1 = x0 + 6;
+                room(rooms, x0, 0, x1, 14, Y, true);
+                room(rooms, x0, 18, x1, T, Y, true);
+                ezDoor(x0 + 2, 14, Y, S);
+                ezDoor(x0 + 2, 18, Y, N);
+                for (int[] b : new int[][]{{x0 + 1, 2, 0}, {x0 + 4, 2, 0}, {x0 + 1, T - 2, 1}, {x0 + 4, T - 2, 1}}) {
+                    BlockPos head = at(b[0], Y + 1, b[1]);
+                    Direction foot = b[2] == 0 ? S : N;
+                    l.setBlock(head, Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD), FLAGS);
+                    l.setBlock(head.relative(foot), Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), FLAGS);
+                }
+                tall(x0 + 5, Y + 1, b2(i, 0), "locker", W);
+                tall(x0 + 5, Y + 1, b2(i, 1), "locker", W);
+                set(x0 + 3, Y + 1, 6, "desk_lamp[facing=south,lit=true]");
+                set(x0 + 3, Y + 1, T - 6, "desk_lamp[facing=north,lit=true]");
+            }
+            // the facade: glass along both long sides
+            for (int x = RX0; x <= RX1; x++) for (int yy = Y + 2; yy <= Y + 3; yy++) if ((x - RX0) % 6 != 0) { set(x, yy, 0, "reinforced_glass"); set(x, yy, T, "reinforced_glass"); }
+        }
+        // the entrance from the path, and the stairs at the far end of the corridor
+        ezDoor(RX0, 15, 0, W);
+        plate(RX0 - 1, 3, 17, W, "STAFF", "RESIDENCE");
+        air(RX1 - 5, STOREY - 1, 15, RX1 - 1, STOREY, 17);
+        for (int k = 1; k <= 5; k++) set(RX1 - k, k, 16, "facility_concrete_stairs[facing=west,half=bottom,shape=straight]");
+    }
+
+    private static int b2(int i, int side) { return side == 0 ? 7 : T - 7; }
+
+    // ================================================================== refitting an older tower
+
+    /** Brings an older tower up to date in place: the new core (stairs + lift, keyed doors), the secretary's reception, the residence. */
+    public static void refit(ServerLevel l, BlockPos origin) {
+        SiteTower b = new SiteTower(l, origin);
+        for (int cx = (origin.getX() - 2) >> 4; cx <= (origin.getX() + RX1 + 4) >> 4; cx++)
+            for (int cz = (origin.getZ() - NZ - 2) >> 4; cz <= (origin.getZ() + T + 6) >> 4; cz++) l.getChunk(cx, cz);
+        // the old core: clear the shaft (doors first, so their parts don't drop) and rebuild it
+        for (int s = LOWEST; s <= ROOF; s++) {
+            for (int x = 26; x <= T; x++) for (int yy = 1; yy <= 4; yy++) b.set(x, y(s) + yy, 8, "facility_painted_concrete");
+            // the old door's scanner and button
+            for (int x = 26; x <= T; x++) for (int z : new int[]{7, 9}) {
+                String id = BuiltInRegistries.BLOCK.getKey(l.getBlockState(b.at(x, y(s) + 2, z)).getBlock()).getPath();
+                if (id.equals("keycard_scanner") || id.equals("door_button")) b.set(x, y(s) + 2, z, "minecraft:air");
+            }
+        }
+        b.air(27, y(LOWEST) + 1, 1, 31, y(ROOF) + 4, 7);
+        b.stairwell();
+        // the office: the couch and meeting table move further in, the reception goes where they stood
+        b.reception();
+        int Y = y(9);
+        b.couch("couch_leather", T - 1, 19, Y, 5, false, W);
+        b.table("conference_table", null, 25, 22, 27, 24, Y, 1);
+        b.residence();
+        b.seal();
     }
 }

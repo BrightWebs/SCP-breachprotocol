@@ -210,6 +210,149 @@ public class FoundationStaff extends PathfinderMob implements Person {
 
     public BlockPos post() { return post; }
 
+    // ================================================================== clearance, doors, the lift, and a day in their life
+
+    /** The doors and floors they're cleared for: by job, and higher for heads, the secretary and armed units. */
+    public int clearance() {
+        if (unit != null) return 5;
+        if (role() == Role.SECRETARY) return 5;
+        int base = switch (role()) { case JANITOR -> 2; case CLERK, TECHNICIAN -> 2; case RESEARCHER, MEDIC -> 3; case GUARD -> 3; case SECRETARY -> 5; };
+        return Management.headOf(this) != null ? Math.min(5, base + 1) : base;
+    }
+
+    @Override
+    protected net.minecraft.world.entity.ai.navigation.PathNavigation createNavigation(Level level) { return new StaffNavigation(this, level); }
+
+    /** Where they're headed (possibly via the lift), what they'll do there, and their bed. */
+    private BlockPos goal;
+    private boolean sleepAtGoal;
+    private String activity = "";
+    private BlockPos towerOrigin;
+    private long towerCheck;
+
+    public String activity() { return activity; }
+
+    private BlockPos tower() {
+        if (level().getGameTime() >= towerCheck && level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            towerCheck = level().getGameTime() + 400;
+            com.breachprotocol.career.Sites.Site t = Lift.towerAt(sl, post != null ? post : blockPosition());
+            towerOrigin = t == null ? null : com.breachprotocol.career.Secretary.origin(t);
+            if (towerOrigin != null && !Lift.hasLift(sl, towerOrigin)) towerOrigin = null;
+        }
+        return towerOrigin;
+    }
+
+    /** Which lift stop serves this spot (the residence counts as the ground floor). */
+    private int stop(BlockPos o, BlockPos p) {
+        return p.getX() - o.getX() >= com.breachprotocol.world.SiteTower.RX0 - 6 ? 0 : Lift.storey(o, p.getY());
+    }
+
+    /** Go somewhere, taking the lift if it's on another floor. */
+    public void travel(BlockPos to, boolean sleep) {
+        goal = to;
+        sleepAtGoal = sleep;
+        clearRestriction();
+        Seats.stand(this);
+    }
+
+    private void travelTick() {
+        if (goal == null) return;
+        BlockPos o = tower();
+        BlockPos target = goal;
+        if (o != null) {
+            int here = stop(o, blockPosition()), there = stop(o, goal);
+            if (here != there) {
+                BlockPos car = o.offset(com.breachprotocol.world.SiteTower.liftCar(here));
+                if (distanceToSqr(car.getX() + 0.5, car.getY(), car.getZ() + 0.5) < 2.2) {
+                    if (!Lift.carry(this, o, there)) { goal = null; return; } // not cleared for that floor
+                    return;
+                }
+                target = car;
+            }
+        }
+        double d = distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+        if (target == goal && d < (sleepAtGoal ? 4 : 6)) {
+            BlockPos g = goal;
+            goal = null;
+            if (sleepAtGoal) sleepIn(g);
+            else restrictTo(g, activity.equals("work") ? 12 : 6);
+            return;
+        }
+        if (getNavigation().isDone() || tickCount % 60 == 0) getNavigation().moveTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5, 0.85);
+    }
+
+    private void sleepIn(BlockPos bed) {
+        if (level().getBlockState(bed).getBlock() instanceof net.minecraft.world.level.block.BedBlock && !isSleeping()) {
+            getNavigation().stop();
+            startSleeping(bed);
+        }
+    }
+
+    @Override
+    public boolean isImmobile() { return isSleeping() || super.isImmobile(); }
+
+    /** Their bed in the residence (assigned once, kept). */
+    private BlockPos bed() {
+        BlockPos o = tower();
+        if (o == null) return null;
+        if (getPersistentData().contains("bp_bed")) return BlockPos.of(getPersistentData().getLong("bp_bed"));
+        java.util.Set<Long> taken = new java.util.HashSet<>();
+        for (FoundationStaff f : level().getEntitiesOfClass(FoundationStaff.class, new net.minecraft.world.phys.AABB(o).inflate(120)))
+            if (f.getPersistentData().contains("bp_bed")) taken.add(f.getPersistentData().getLong("bp_bed"));
+        for (BlockPos b : com.breachprotocol.world.SiteTower.beds()) {
+            BlockPos w = o.offset(b);
+            if (taken.contains(w.asLong()) || !(level().getBlockState(w).getBlock() instanceof net.minecraft.world.level.block.BedBlock)) continue;
+            getPersistentData().putLong("bp_bed", w.asLong());
+            return w;
+        }
+        return null;
+    }
+
+    /** Night-shift guards sleep by day. */
+    private boolean nightShift() { return role() == Role.GUARD && gene(50) < 0.4F; }
+
+    /** The hour of the day (0-23). */
+    private int hour() { return (int) ((level().getDayTime() % 24000) / 1000 + 6) % 24; }
+
+    /** What they should be doing now: work, lunch, free time or sleep. */
+    private String scheduled() {
+        int h = hour();
+        if (nightShift()) return h >= 18 || h < 6 ? "work" : h >= 8 && h < 16 ? "sleep" : "free";
+        boolean sec = role() == Role.SECRETARY;
+        if (sec ? h >= 23 || h < 7 : h >= 22 || h < 6) return "sleep";
+        if (h == 12 && !sec) return "lunch";
+        if (sec ? h >= 8 && h < 18 : h >= 7 && h < 17) return "work";
+        return "free";
+    }
+
+    private void schedule() {
+        if (unit != null || post == null || !"post".equals(mode) || !errand.isEmpty() || Dialogue.talkingTo(this) != null) return;
+        if (getPersistentData().contains("bp_cand") || getPersistentData().contains("bp_walkin") || getPersistentData().contains("bp_leaving")) return;
+        // trouble keeps everyone at their post
+        com.breachprotocol.career.Sites.Site site = com.breachprotocol.career.Sites.at(level(), post);
+        if (Talk.anomalyNear(this, 24) != null || site != null && com.breachprotocol.career.Defence.alertAt(site.name) != null) {
+            if (isSleeping()) stopSleeping();
+            activity = "work";
+            return;
+        }
+        String now = scheduled();
+        if (now.equals(activity) && (goal != null || !now.equals("sleep") || isSleeping())) return;
+        if (isSleeping() && !now.equals("sleep")) stopSleeping();
+        activity = now;
+        BlockPos o = tower();
+        switch (now) {
+            case "work" -> travel(post, false);
+            case "lunch" -> { if (o != null) travel(o.offset(14 + random.nextInt(10), 1, 2 + random.nextInt(5)), false); }
+            case "free" -> {
+                if (o == null) break;
+                BlockPos[] spots = {o.offset(16 + random.nextInt(8), 1, 2 + random.nextInt(5)), o.offset(22 + random.nextInt(8), 1, 21 + random.nextInt(3)), o.offset(com.breachprotocol.world.SiteTower.RX0 + 3 + random.nextInt(18), 1, 15 + random.nextInt(3))};
+                travel(spots[random.nextInt(spots.length)], false);
+            }
+            case "sleep" -> { BlockPos b = bed(); if (b != null) travel(b, true); else activity = "work"; }
+            default -> {}
+        }
+    }
+
     /** Greying with age (white when old). 0 = natural colour. */
     public int greyHair() { return elder() ? 0xFFD8D8DC : age() >= 52 && gene(14) < 0.5F ? 0xFFA6A4A2 : 0; }
 
@@ -417,11 +560,11 @@ public class FoundationStaff extends PathfinderMob implements Person {
             public boolean canUse() { return role() != Role.GUARD && super.canUse(); }
         });
         goalSelector.addGoal(2, new FollowGoal(this, () -> "follow".equals(mode) && leader != null && level() instanceof net.minecraft.server.level.ServerLevel sl ? sl.getPlayerByUUID(leader) : null));
-        goalSelector.addGoal(3, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> !"follow".equals(mode) && com.breachprotocol.world.Site01.mayUseChair(this, pos)));
+        goalSelector.addGoal(3, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> !"follow".equals(mode) && goal == null && !isSleeping() && com.breachprotocol.world.Site01.mayUseChair(this, pos)));
         goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8F, 0.6F));
         goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.6, 0.01F) {
             @Override
-            public boolean canUse() { return "post".equals(mode) && super.canUse(); }
+            public boolean canUse() { return "post".equals(mode) && goal == null && !isSleeping() && super.canUse(); }
         });
         goalSelector.addGoal(6, new RandomLookAroundGoal(this));
     }
@@ -677,6 +820,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
             if (w > 0) entityData.set(WAVE, w - 1);
         }
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
+        if (!level().isClientSide && tickCount % 4 == 0) Doors.along(this);
         if (level().isClientSide || tickCount % 20 != 0) return;
         if (tickCount % 200 == 0 && !getTags().contains(com.breachprotocol.career.RiftTeams.CREW_TAG)) {
             setAge(age + 200.0 / YEAR);
@@ -698,7 +842,10 @@ public class FoundationStaff extends PathfinderMob implements Person {
             else if (position().distanceToSqr(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5) < 2.6) { Seats.sit(this, sitTarget); sitTarget = null; }
             else getNavigation().moveTo(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5, 0.9);
         }
-        if (post != null && tickCount % 200 == 0 && "post".equals(mode)) restrictTo(post, 12);
+        if (post != null && tickCount % 200 == 0 && "post".equals(mode) && goal == null && (activity.isEmpty() || activity.equals("work"))) restrictTo(post, 12);
+        if (tickCount % 100 == 0) schedule();
+        if (isSleeping()) return;
+        travelTick();
         if (tickCount % 400 == 7 && random.nextFloat() < 0.15F) Talk.chatter(this);
         Player near = level().getNearestPlayer(this, 6);
         if (!(near instanceof ServerPlayer p) || p.isSpectator() || !hasLineOfSight(p)) return;
@@ -746,6 +893,11 @@ public class FoundationStaff extends PathfinderMob implements Person {
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND || !(player instanceof ServerPlayer p)) return InteractionResult.sidedSuccess(level().isClientSide);
         if (!p.getMainHandItem().isEmpty() && offered(p, p.getMainHandItem())) return InteractionResult.SUCCESS;
+        if (isSleeping()) {
+            stopSleeping();
+            activity = "";
+            p.displayClientMessage(Component.literal(name() + " wakes up with a start.").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC), true);
+        }
         if (!p.isShiftKeyDown()) { Talk.open(p, this); return InteractionResult.SUCCESS; }
         getLookControl().setLookAt(p, 30, 30);
         Rank r = Career.rank(p);

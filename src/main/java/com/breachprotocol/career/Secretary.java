@@ -39,7 +39,12 @@ public final class Secretary {
 
     static BlockPos deskChair(Sites.Site s) { return origin(s).offset(16, SiteTower.y(SiteTower.TOP) + 1, 26); }
 
-    public static BlockPos post(Sites.Site s) { return origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 21); }
+    /** Towers with the new core (lift) and the reception, where her desk is. */
+    static final Set<String> RECEPTION = new HashSet<>();
+
+    public static BlockPos post(Sites.Site s) {
+        return RECEPTION.contains(s.name) ? origin(s).offset(SiteTower.secretaryChair()) : origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 21);
+    }
 
     static boolean isTower(ServerLevel l, Sites.Site s) {
         BlockPos desk = Desk.deskSpot(s).below();
@@ -157,6 +162,21 @@ public final class Secretary {
         Forces.Data d = Forces.data(srv);
         for (Sites.Site s : Sites.get(srv).sites) {
             if (s.name.equals("Site-01") || !s.dim.equals("minecraft:overworld")) continue;
+            // an older tower: refit it (lift, keyed stairs, reception, residence) the first time someone is near
+            BlockPos o = origin(s);
+            if (!RECEPTION.contains(s.name) && ow.isLoaded(o.offset(SiteTower.liftPanel(0))) && isTower(ow, s)) {
+                if (com.breachprotocol.entity.Lift.hasLift(ow, o)) RECEPTION.add(s.name);
+                else if (ow.getNearestPlayer(o.getX() + 16, o.getY(), o.getZ() + 16, 96, false) != null) {
+                    SiteTower.refit(ow, o);
+                    RECEPTION.add(s.name);
+                    BreachProtocol.LOGGER.info("Refitted {}: lift, keyed stairwell, secretary's reception, staff residence", s.name);
+                    for (ServerPlayer q : srv.getPlayerList().getPlayers())
+                        if (q.distanceToSqr(o.getX(), o.getY(), o.getZ()) < 200 * 200) q.sendSystemMessage(Component.literal("Facilities has finished work on " + s.name + ": a lift, keyed stairwell doors, a reception outside the Administrator's office and a staff residence.").withStyle(ChatFormatting.AQUA));
+                    // she moves to her new desk
+                    FoundationStaff sec = find(ow, s);
+                    if (sec != null) sec.hireAs(FoundationStaff.Role.SECRETARY, post(s));
+                }
+            }
             BlockPos at = post(s);
             if (!ow.isLoaded(at) || ow.getNearestPlayer(at.getX(), at.getY(), at.getZ(), 64, false) == null || !isTower(ow, s)) continue;
             if (d.secretaries.containsKey(s.name)) stock(ow, s, d);

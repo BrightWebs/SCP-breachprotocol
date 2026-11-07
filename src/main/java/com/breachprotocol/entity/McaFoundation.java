@@ -2,6 +2,7 @@ package com.breachprotocol.entity;
 
 import com.breachprotocol.BreachProtocol;
 import com.breachprotocol.career.*;
+import com.breachprotocol.career.Secretary;
 import com.breachprotocol.compat.McaCompat;
 import com.breachprotocol.compat.McaHooks;
 import com.breachprotocol.compat.Unleashed;
@@ -152,9 +153,23 @@ public final class McaFoundation {
                 if (!McaCompat.isVillager(e) || !(e instanceof Villager v)) continue;
                 CompoundTag pd = v.getPersistentData();
                 // the working day: to their post, and home again (MCA's own schedule takes them home)
+                if (employee(v)) Doors.nearby(v, l); // our doors open for them, by clearance
                 if (employee(v) && work && now >= pd.getLong("bp_emp_off") && !pd.contains("bp_cand")) {
                     BlockPos post = BlockPos.of(pd.getLong("bp_emp_post"));
-                    if (v.blockPosition().distSqr(post) > 36) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(post, 0.6F, 3));
+                    BlockPos target = post;
+                    // a post on another floor: by lift
+                    Sites.Site t = Lift.towerAt(l, post);
+                    BlockPos o = t == null ? null : Secretary.origin(t);
+                    if (o != null && Lift.hasLift(l, o)) {
+                        boolean outside = v.getX() - o.getX() < -12 || v.getX() - o.getX() > com.breachprotocol.world.SiteTower.T + 6 || v.getZ() - o.getZ() > com.breachprotocol.world.SiteTower.T + 6 || v.getZ() - o.getZ() < -12;
+                        int here = outside ? 0 : Lift.storey(o, v.getBlockY()), there = Lift.storey(o, post.getY());
+                        if (here != there) {
+                            BlockPos car = o.offset(com.breachprotocol.world.SiteTower.liftCar(here));
+                            if (!outside && v.blockPosition().distSqr(car) < 3) { Lift.carry(v, o, there); continue; }
+                            target = outside ? o.offset(16, 1, com.breachprotocol.world.SiteTower.T + 2) : car;
+                        }
+                    }
+                    if (v.blockPosition().distSqr(post) > 36) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.6F, 1));
                 }
                 if (pd.contains("bp_walkin") || pd.contains("bp_cand")) {
                     BlockPos w = BlockPos.of(pd.getLong("bp_wait"));
