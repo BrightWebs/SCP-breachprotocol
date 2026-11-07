@@ -77,6 +77,85 @@ final class Convo {
         info.add("Native of " + (rec != null && rec.note.contains("village") ? "the village" : rec != null && !rec.site.isEmpty() ? rec.site : siteName(s)));
         if (nm.length > 1) info.add("Surname: " + nm[nm.length - 1]);
         Dialogue.info(p, info, t);
+        Dialogue.card(p, card(p, s, t));
+    }
+
+    /** MCA's left side, item for item: name, profession, mood, personality, traits; hearts, marriage, genes, parents, analysis; and ours below. */
+    static net.minecraft.nbt.CompoundTag card(ServerPlayer p, FoundationStaff s, int t) {
+        net.minecraft.nbt.CompoundTag c = new net.minecraft.nbt.CompoundTag();
+        String head = Management.title(s);
+        c.putString("name", s.getName().getString());
+        c.putString("job", (head != null ? head : s.unit() != null ? s.unit().title : s.role().title) + " · age " + s.age());
+        Personality pe = Personality.of(s);
+        c.putString("pers", pe.label);
+        c.putString("persAbout", pe.about);
+        net.minecraft.nbt.ListTag tr = new net.minecraft.nbt.ListTag();
+        for (Traits x : s.traits()) {
+            if (x.about.isEmpty() && x != Traits.BISEXUAL && x != Traits.HOMOSEXUAL) continue;
+            if (x == Traits.INFERTILE && t < 8) continue;
+            net.minecraft.nbt.CompoundTag o = new net.minecraft.nbt.CompoundTag();
+            o.putString("n", x.label);
+            o.putString("d", x.about.isEmpty() ? x.label : x.about);
+            tr.add(o);
+        }
+        c.put("traits", tr);
+        // hearts on MCA's scale (0 to 100); black when they've turned on you, gold at the top
+        c.putInt("hearts", t * 10);
+        c.putBoolean("black", Social.slighted(s, p));
+        // marriage, from the registry
+        Registry.Rec e = Registry.find(s.getServer(), s.getUUID());
+        String ms = "notMarried", sp = "";
+        if (e != null) {
+            Registry.Rec o = Registry.find(s.getServer(), e.spouse != null ? e.spouse : e.partner);
+            sp = o == null ? "" : o.name;
+            if (e.rel.equals("married")) ms = o != null && o.player ? "marriedToPlayer" : "married";
+            else if (e.rel.equals("engaged")) ms = "engaged";
+            else if (e.rel.equals("dating")) ms = "promised";
+            else if (e.rel.equals("widowed")) ms = "widow";
+            Registry.Rec mo = Registry.find(s.getServer(), e.mother), fa = Registry.find(s.getServer(), e.father);
+            if (mo != null || fa != null) { c.putString("father", fa == null ? "Unknown" : fa.name); c.putString("mother", mo == null ? "Unknown" : mo.name); }
+        }
+        if (Social.partner(s, p) && ms.equals("notMarried")) { ms = "promised"; sp = p.getGameProfile().getName(); }
+        c.putString("marriage", ms);
+        c.putString("spouse", sp);
+        // genes, as MCA lists them
+        net.minecraft.nbt.ListTag gs = new net.minecraft.nbt.ListTag();
+        String[] gn = {"Size", "Width", "Breast", "Melanin", "Hemoglobin", "Eumelanin", "Pheomelanin", "Skin", "Face", "Eye brightness"};
+        float[] gv = {s.gene(9), s.gene(10), s.isFemale() ? s.bustSize() : 0, s.melanin(), s.hemoglobin(), s.eumelanin(), s.pheomelanin(), s.gene(1), s.gene(7), s.gene(12)};
+        for (int i = 0; i < gn.length; i++) gs.add(net.minecraft.nbt.StringTag.valueOf(gn[i] + ": " + (int) (gv[i] * 100) + "%"));
+        c.put("genes", gs);
+        // the last social interaction's odds, like MCA's analysis icon
+        String an = Memory.get(s, p, "soc_analysis");
+        if (!an.isEmpty()) {
+            net.minecraft.nbt.ListTag al = new net.minecraft.nbt.ListTag();
+            for (String x : an.split(";")) al.add(net.minecraft.nbt.StringTag.valueOf(x));
+            c.put("analysis", al);
+        }
+        // and what the Foundation adds
+        net.minecraft.nbt.ListTag ex = new net.minecraft.nbt.ListTag();
+        int rs = Social.respect(s, p);
+        ex.add(net.minecraft.nbt.StringTag.valueOf("Respect: " + Social.bar(rs) + " " + Social.respectWord(rs)));
+        List<String> status = new ArrayList<>();
+        int yrs = Math.min(Talk.years(s), Math.max(1, s.age() - 21));
+        if (yrs >= 15) status.add("veteran (" + yrs + " years)");
+        if (!s.illness().isEmpty()) status.add("ill with " + s.illness());
+        if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) status.add("remembers you");
+        if (Social.slighted(s, p)) status.add("insolent");
+        if (Memory.get(s, p, "reprimanded").equals("1")) status.add("reprimanded");
+        int kids = e == null ? 0 : Registry.children(s.getServer(), e.id).size();
+        if (kids > 0) status.add(kids + (kids == 1 ? " child" : " children"));
+        if (!status.isEmpty()) ex.add(net.minecraft.nbt.StringTag.valueOf(Scene.cap(String.join(", ", status))));
+        ex.add(net.minecraft.nbt.StringTag.valueOf(Scene.cap(bond(t)) + " · " + Scene.of(p, s).place.name()));
+        c.put("extra", ex);
+        // MCA's gift icon: people who like you sometimes have something for you
+        long day = s.level().getDayTime() / 24000;
+        if (t >= 6 && !Memory.get(s, p, "gift_claimed").equals(String.valueOf(day)) && Math.floorMod((s.getUUID().hashCode() ^ day * 31), 3) == 0) c.putBoolean("gift", true);
+        net.minecraft.nbt.ListTag foot = new net.minecraft.nbt.ListTag();
+        String[] nm = s.getName().getString().split(" ");
+        foot.add(net.minecraft.nbt.StringTag.valueOf("Native of " + (e != null && e.note.contains("village") ? "the village" : e != null && !e.site.isEmpty() ? e.site : siteName(s))));
+        if (nm.length > 1) foot.add(net.minecraft.nbt.StringTag.valueOf("Surname: " + nm[nm.length - 1]));
+        c.put("foot", foot);
+        return c;
     }
 
     /** Their mood, from what's happening around them and their temperament. */
@@ -248,6 +327,28 @@ final class Convo {
     /** How they address you: sir, ma'am, your title, or your name (per person). */
     static boolean address(ServerPlayer p, FoundationStaff s, String what) {
         switch (what) {
+            case "claim_gift" -> {
+                long day = s.level().getDayTime() / 24000;
+                if (Memory.get(s, p, "gift_claimed").equals(String.valueOf(day)) || trust(s, p) < 6) { menu(p, s); return true; }
+                Memory.put(s, p, "gift_claimed", String.valueOf(day));
+                Random r = new Random();
+                net.minecraft.world.item.Item[] items = {net.minecraft.world.item.Items.COOKIE, net.minecraft.world.item.Items.POPPY, net.minecraft.world.item.Items.BREAD, net.minecraft.world.item.Items.APPLE, net.minecraft.world.item.Items.EMERALD, net.minecraft.world.item.Items.CAKE, net.minecraft.world.item.Items.PAPER};
+                net.minecraft.world.item.Item it = items[r.nextInt(items.length)];
+                net.minecraft.world.item.ItemStack st = new net.minecraft.world.item.ItemStack(it);
+                if (it == net.minecraft.world.item.Items.PAPER) st.set(net.minecraft.core.component.DataComponents.CUSTOM_NAME, net.minecraft.network.chat.Component.literal("A note from " + s.getName().getString()));
+                if (!p.getInventory().add(st)) p.drop(st, false);
+                Talk.you(p, "Is that for me?");
+                Talk.say(p, s, Clearance.RAW + switch (net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(it).getPath()) {
+                    case "cookie" -> "From the canteen. I saved you one. Don't tell anyone.";
+                    case "poppy" -> "I picked it on the way in. It made me think of you. Is that strange?";
+                    case "emerald" -> "Hazard pay came through. I wanted to share it. You've earned it more than me.";
+                    case "cake" -> "It's not anyone's birthday. I just wanted to.";
+                    case "paper" -> "Read it later. Please. Not in front of me.";
+                    default -> "It's not much. I just wanted to say thank you.";
+                });
+                menu(p, s);
+                return true;
+            }
             case "menu_root", "menu_talk", "menu_interact" -> { PAGE.put(p.getUUID(), what.substring(5)); menu(p, s); return true; }
             case "addr_page" -> {
                 Talk.you(p, "About how you address me.");

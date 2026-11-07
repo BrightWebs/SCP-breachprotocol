@@ -282,6 +282,18 @@ public final class Social {
         boolean polite = false;
         if (rs >= 8 && t < 6 && (id.equals("joke") || id.equals("compliment"))) { chance += 20; polite = true; } // they laugh at the boss's jokes
         boolean ok = r.nextInt(100) < chance;
+        // the odds, itemised (shown under MCA's analysis icon)
+        List<String> an = new ArrayList<>();
+        an.add("Base: +55");
+        if (pe.affinity(id) != 0) an.add("Personality: " + (pe.affinity(id) > 0 ? "+" : "") + pe.affinity(id) * 10);
+        if (t != 5) an.add("Hearts bonus: " + (t > 5 ? "+" : "") + (t - 5) * 6);
+        if (tired > 0) an.add("Fatigue: -" + tired * 25);
+        if (sad) an.add("Mood: " + (id.equals("comfort") ? "+25" : id.equals("joke") || id.equals("flirt") ? "-30" : "-10"));
+        if (shy && (id.equals("flirt") || id.equals("compliment") || id.equals("hug"))) an.add("Admires you: +40");
+        if (mine) an.add("Partner: +50");
+        if (polite) an.add("Rank: +20");
+        an.add("Total: " + Math.max(0, Math.min(100, chance)) + "% (" + (ok ? "success" : "failed") + ")");
+        Memory.put(s, p, "soc_analysis", String.join(";", an));
         String line = ok ? good(id, pe, s, p, shy, mine, polite, r) : bad(id, pe, s, p, tired, sad, r);
         Talk.say(p, s, Clearance.RAW + line);
         int dt = ok ? (polite ? 0 : id.equals("hug") || id.equals("flirt") ? 2 : 1) : (id.equals("flirt") || id.equals("hug") ? -2 : -1);

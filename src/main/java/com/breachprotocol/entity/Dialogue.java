@@ -27,6 +27,8 @@ public final class Dialogue {
         int moodC;
         java.util.List<String> info = new java.util.ArrayList<>();
         int hearts = -1;
+        /** MCA's interaction card (name, profession, mood, personality, traits, the icons and their tooltips). */
+        CompoundTag card;
         long touched;
     }
 
@@ -74,6 +76,7 @@ public final class Dialogue {
         s.moodC = 0;
         s.info = new java.util.ArrayList<>();
         s.hearts = -1;
+        s.card = null;
     }
 
     /** How the person you're talking to seems right now (shown under their portrait). */
@@ -118,6 +121,9 @@ public final class Dialogue {
     }
 
     /** The facts shown down the left of the interaction screen (role, personality, traits), and trust in hearts. */
+    /** The left side of the screen laid out exactly as Minecraft Comes Alive does it. */
+    public static void card(ServerPlayer p, CompoundTag card) { st(p).card = card; }
+
     public static void info(ServerPlayer p, java.util.List<String> lines, int hearts) {
         st(p).info = new java.util.ArrayList<>(lines);
         st(p).hearts = hearts;
@@ -159,6 +165,7 @@ public final class Dialogue {
         for (String i : s.info) inf.add(net.minecraft.nbt.StringTag.valueOf(i));
         t.put("info", inf);
         t.putInt("hearts", s.hearts);
+        if (s.card != null) t.put("card", s.card);
         t.putInt("moodC", s.moodC);
         PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
     }
