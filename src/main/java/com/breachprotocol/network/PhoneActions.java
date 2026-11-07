@@ -56,7 +56,8 @@ public final class PhoneActions {
             case "contact_decline" -> com.breachprotocol.career.Contacts.decline(p, arg);
             case "contact_remove" -> com.breachprotocol.career.Contacts.remove(p, arg);
             default -> {
-                if (action.startsWith("dir:")) Directives.run(p, action.substring(4));
+                if (action.startsWith("wf:")) com.breachprotocol.entity.Workforce.action(p, action.substring(3));
+                else if (action.startsWith("dir:")) Directives.run(p, action.substring(4));
                 else if (action.startsWith("orbital_at:")) {
                     String[] xz = action.substring(11).split(":");
                     if (xz.length == 2) Command.orbitalStrikeAt(p, Integer.parseInt(xz[0]), Integer.parseInt(xz[1]));

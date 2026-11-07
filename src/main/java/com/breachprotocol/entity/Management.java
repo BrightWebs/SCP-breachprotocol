@@ -144,6 +144,63 @@ public final class Management {
 
     static boolean mayAppoint(ServerPlayer p) { return Talk.topBrass(p) || Career.rank(p).atLeast(Rank.OVERSEER); }
 
+    static long slot(MinecraftServer s) { return nextSlot(s); }
+
+    /** From the Staff app: a post opened directly, with a shortlist waiting for your choice (no meeting). */
+    static Vacancy direct(ServerPlayer p, String site, FoundationStaff.Role role) {
+        MinecraftServer s = p.server;
+        BlockPos post = null, any = null;
+        String dim = "minecraft:overworld";
+        for (ServerLevel l : s.getAllLevels())
+            for (FoundationStaff f : l.getEntities(ModEntities.STAFF.get(), e -> e.isAlive() && e.post() != null && e.unit() == null)) {
+                if (!site.equals(Registry.of(f).site)) continue;
+                if (any == null) { any = f.post(); dim = l.dimension().location().toString(); }
+                if (f.role() == role && post == null) { post = f.post(); dim = l.dimension().location().toString(); }
+            }
+        if (post == null) post = any;
+        if (post == null) {
+            Sites.Site st = null;
+            for (Sites.Site x : Sites.get(s).sites) if (x.name.equals(site)) st = x;
+            if (st == null) return null;
+            post = new BlockPos(st.x, st.y, st.z);
+            dim = st.dim;
+        }
+        Data d = data(s);
+        Vacancy v = new Vacancy();
+        v.id = d.next++;
+        v.site = site;
+        v.dim = dim;
+        v.pos = post.asLong();
+        v.role = role.ordinal();
+        v.kind = "staff";
+        v.state = "direct";
+        v.attend = 2;
+        v.created = s.overworld().getGameTime();
+        v.at = nextSlot(s);
+        Random r = new Random();
+        Set<UUID> taken = new HashSet<>();
+        for (int i = 0; i < 3; i++) v.cands.add(candidate(s, role, r, taken));
+        sortBest(v);
+        d.vac.add(v);
+        d.setDirty();
+        return v;
+    }
+
+    /** Names someone head of their department directly (Council authority). */
+    static void appoint(MinecraftServer s, String site, Dept dept, FoundationStaff f, String by) {
+        Data d = data(s);
+        String k = key(site, dept);
+        FoundationStaff old = Lifecycle.entity(s, d.heads.get(k));
+        if (old != null && old != f) old.getPersistentData().remove("bp_head");
+        f.getPersistentData().putString("bp_head", dept.name());
+        d.heads.put(k, f.getUUID());
+        d.headNames.put(k, f.getName().getString());
+        d.setDirty();
+        for (Vacancy v : d.vac) if (v.kind.equals("head") && v.site.equals(site) && v.dept.equals(dept.name())) v.state = "done";
+        WorldNews.record(s, WorldNews.Kind.DECISION, "appoint", f.getName().getString() + " was appointed " + dept.title + " at " + site + " by " + by, 2, by);
+        Registry.log(s, f.getName().getString() + " was appointed " + dept.title + " at " + site + " by " + by + ".");
+    }
+
     private static long nextSlot(MinecraftServer s) {
         long now = s.overworld().getDayTime(), day = now / 24000;
         long[] slots = {4000, 8000}; // 10:00, 14:00
@@ -811,7 +868,8 @@ public final class Management {
         List<Vacancy> o = open(s);
         if (o.isEmpty()) return "";
         List<String> parts = new ArrayList<>();
-        for (Vacancy v : o) parts.add(v.kind.equals("head") && v.state.equals("open") ? "the Council has to name a new " + v.what() + (v.site.isEmpty() ? "" : " at " + v.site)
+        for (Vacancy v : o) parts.add(v.state.equals("direct") ? "a shortlist for " + v.what() + " is waiting for your choice in the Staff app"
+                : v.kind.equals("head") && v.state.equals("open") ? "the Council has to name a new " + v.what() + (v.site.isEmpty() ? "" : " at " + v.site)
                 : "interviews for " + v.what() + " " + Calendar.when(v.at) + (v.attend == 1 ? " (you're sitting in)" : ""));
         return "Personnel: " + String.join("; ", parts) + ".";
     }

@@ -433,6 +433,19 @@ final class Converse {
 
         /** Something you told them before. */
         static Thread recall(ServerPlayer p, FoundationStaff s, Random r) {
+            String note = Memory.get(s, p, "wf_note");
+            if (!note.isEmpty()) {
+                Memory.put(s, p, "wf_note", "");
+                String a = Career.address(p);
+                return switch (note) {
+                    case "commend" -> new Thread("note", List.of("I got your commendation, " + a + ". I- I've pinned it above my desk. Nobody's ever done that before."), "Did you mean it?",
+                            List.of(rep("Every word.", Att.CARE, "mem:commend=meant"), rep("You earned it.", Att.DUTY, "mem:commend=earned")));
+                    case "thanks" -> new Thread("note", List.of("Thank you for the note. It's a small thing. It wasn't small to me."), null, List.of());
+                    case "concern" -> new Thread("note", List.of("You wrote to ask if I was alright. I'm... getting there. It helped, knowing someone noticed."), "Do you really want to know how I am?",
+                            List.of(rep("I do. Tell me.", Att.CARE, "mem:concern=listen"), rep("Only if you want to.", Att.CARE, "mem:concern=gentle")));
+                    default -> new Thread("note", List.of("I received your formal warning, " + a + ". Understood. It won't happen again."), null, List.of());
+                };
+            }
             if (Memory.get(s, p, "cv_promise").equals("open") && s.level().getGameTime() - Memory.of(s, p).getLong("t_cv_promise") > 24000) {
                 String what = Memory.get(s, p, "cv_promise_what");
                 return new Thread("promise", List.of("You said you'd see to something for me." + (what.endsWith("?") || what.isEmpty() ? " I haven't forgotten. I don't think you have either." : " When I said \"" + (what.length() > 60 ? what.substring(0, 57) + "..." : what) + "\".")),

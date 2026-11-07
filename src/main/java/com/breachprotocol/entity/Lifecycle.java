@@ -126,6 +126,7 @@ public final class Lifecycle {
         for (ServerLevel l : srv.getAllLevels())
             for (FoundationStaff s : l.getEntities(ModEntities.STAFF.get(), e -> e.isAlive() && !e.getPersistentData().contains("bp_cand"))) {
                 ensure(s);
+                Workforce.deliver(s);
                 Registry.Rec e = Registry.find(srv, s.getUUID());
                 bySite.computeIfAbsent(e.site, k -> new ArrayList<>()).add(s);
             }

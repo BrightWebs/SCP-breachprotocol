@@ -22,7 +22,7 @@ public final class Registry extends SavedData {
 
     public static final class Rec {
         public UUID id;
-        public String name = "", status = "offsite", job = "", site = "", rel = "single", genome = "", traits = "", note = "", cause = "";
+        public String name = "", status = "offsite", job = "", site = "", rel = "single", genome = "", traits = "", note = "", cause = "", notes = "";
         public boolean female, player;
         public long born, died, due, relSince;
         public UUID mother, father, spouse, partner; // partner: dating or engaged, before marriage
@@ -39,7 +39,7 @@ public final class Registry extends SavedData {
             CompoundTag t = new CompoundTag();
             t.putUUID("id", id);
             t.putString("name", name); t.putString("status", status); t.putString("job", job); t.putString("site", site); t.putString("rel", rel);
-            t.putString("genome", genome); t.putString("traits", traits); t.putString("note", note); t.putString("cause", cause);
+            t.putString("genome", genome); t.putString("traits", traits); t.putString("note", note); t.putString("cause", cause); t.putString("notes", notes);
             t.putBoolean("female", female); t.putBoolean("player", player);
             t.putLong("born", born); t.putLong("died", died); t.putLong("due", due); t.putLong("relSince", relSince);
             if (mother != null) t.putUUID("mother", mother);
@@ -53,7 +53,7 @@ public final class Registry extends SavedData {
             Rec r = new Rec();
             r.id = t.getUUID("id");
             r.name = t.getString("name"); r.status = t.getString("status"); r.job = t.getString("job"); r.site = t.getString("site"); r.rel = t.getString("rel");
-            r.genome = t.getString("genome"); r.traits = t.getString("traits"); r.note = t.getString("note"); r.cause = t.getString("cause");
+            r.genome = t.getString("genome"); r.traits = t.getString("traits"); r.note = t.getString("note"); r.cause = t.getString("cause"); r.notes = t.getString("notes");
             r.female = t.getBoolean("female"); r.player = t.getBoolean("player");
             r.born = t.getLong("born"); r.died = t.getLong("died"); r.due = t.getLong("due"); r.relSince = t.getLong("relSince");
             if (t.hasUUID("mother")) r.mother = t.getUUID("mother");

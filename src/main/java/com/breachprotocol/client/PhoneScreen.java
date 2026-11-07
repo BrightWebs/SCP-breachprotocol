@@ -41,7 +41,7 @@ public class PhoneScreen extends Screen {
     private static final ResourceLocation WALLPAPER = tex("wallpaper");
     private static ResourceLocation tex(String n) { return BreachProtocol.id("textures/gui/phone/" + n + ".png"); }
 
-    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE, FORCES, SECURITY, CALENDAR }
+    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE, FORCES, SECURITY, CALENDAR, STAFF }
 
     private record App(String icon, String label, View view, int accent, IntPredicate allowed) {}
 
@@ -53,6 +53,7 @@ public class PhoneScreen extends Screen {
     private static final App ARCHIVE = new App("app_archive", "Archive", View.ARCHIVE, 0xFF8A6A1E, c -> c >= 1);
     private static final App CONTAIN = new App("app_containment", "Containment", View.CONTAINMENT, 0xFF156E8F, c -> c >= 2);
     private static final App PERSONNEL = new App("app_personnel", "Personnel", View.PERSONNEL, 0xFF2E56A6, c -> true);
+    private static final App STAFF_APP = new App("app_staff", "Staff", View.STAFF, 0xFF2E8F6A, c -> c >= 2);
     private static final App COMMAND = new App("app_command", "Command", View.COMMAND, 0xFF9B2730, c -> c >= 4);
     private static final App NETWORK = new App("app_network", "Network", View.NETWORK, 0xFF1A8A80, c -> c >= 5);
     private static final App SITE = new App("app_site01", "Site-01", View.SITE, 0xFF7A35C4, c -> false);
@@ -61,7 +62,7 @@ public class PhoneScreen extends Screen {
     private static final App CALENDAR = new App("app_calendar", "Calendar", View.CALENDAR, 0xFFC0383F, c -> false);
     private static final App FORCES = new App("app_forces", "Recruitment", View.FORCES, 0xFF2E8F4A, c -> false);
     private static final App SECURITY = new App("app_security", "Site Security", View.SECURITY, 0xFFA8323A, c -> false);
-    private static final List<App> GRID = List.of(CALENDAR, FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
+    private static final List<App> GRID = List.of(CALENDAR, STAFF_APP, FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
     private static final List<App> DOCK = List.of(PHONE, MESSAGES, MISSIONS, CAMERA);
 
     private static final Deque<App> RECENT = new ArrayDeque<>();
@@ -104,6 +105,7 @@ public class PhoneScreen extends Screen {
     public void tick() {
         super.tick();
         // the command apps show live numbers
+        if (view == View.STAFF && --refreshIn <= 0) { refreshIn = 40; send("wf:refresh", 0); }
         if ((view == View.FORCES || view == View.SECURITY || view == View.CALENDAR || view == View.CALL && t().getBoolean("callOutgoing")) && --refreshIn <= 0) { refreshIn = 20; send("refresh", 0); }
     }
 
@@ -147,6 +149,7 @@ public class PhoneScreen extends Screen {
     }
 
     private void goBack() {
+        if (view == View.STAFF && (!staffSel.isEmpty() || hireSel >= 0)) { staffSel = ""; hireSel = -1; return; }
         if (back.isEmpty()) {
             if (view == View.HOME) onClose();
             else view = View.HOME;
@@ -352,6 +355,7 @@ public class PhoneScreen extends Screen {
 
     private int badge(App a) {
         if (a == MESSAGES) return unread();
+        if (a == STAFF_APP) return waitingShortlists();
         if (a == MISSIONS) return t().getList("missions", Tag.TAG_COMPOUND).size();
         if (a == PHONE) return t().contains("callText") ? 1 : 0;
         if (a == CALENDAR) {
@@ -377,6 +381,7 @@ public class PhoneScreen extends Screen {
             case ARCHIVE, FILE -> ARCHIVE;
             case CONTAINMENT, ANOMALY -> CONTAIN;
             case PERSONNEL -> PERSONNEL;
+            case STAFF -> STAFF_APP;
             case SETTINGS -> SETTINGS;
             case COMMAND -> COMMAND;
             case NETWORK -> NETWORK;
@@ -632,6 +637,7 @@ public class PhoneScreen extends Screen {
             return;
         }
         if (a == PHONE) send("refresh", 0);
+        if (a == STAFF_APP) { send("wf:refresh", 0); refreshIn = 40; }
         go(a.view());
     }
 
@@ -748,6 +754,7 @@ public class PhoneScreen extends Screen {
             case CONTAINMENT -> drawContainment(g, y0);
             case ANOMALY -> drawAnomaly(g, y0);
             case PERSONNEL -> drawPersonnel(g, y0);
+            case STAFF -> drawStaff(g, y0, top);
             case SETTINGS -> drawSettings(g, y0);
             case COMMAND -> drawCommand(g, y0);
             case NETWORK -> drawNetwork(g, y0);
@@ -1841,7 +1848,7 @@ public class PhoneScreen extends Screen {
     // ---------------------------------------------------------------- Command (Level 4+)
 
     private int drawCommand(GuiGraphics g, int y) {
-        String[] tabs = {"MTF", "Personnel", "Orders"};
+        String[] tabs = {"MTF", "D-Class", "Orders"};
         int tx = SX + 6;
         for (int i = 0; i < tabs.length; i++) {
             int tw = font.width(tabs[i]) + 14;
@@ -1980,6 +1987,7 @@ public class PhoneScreen extends Screen {
         if (button == 0) {
             searchFocused = false;
             composeFocused = false;
+            staffSearch = false;
             for (int i = hits.size() - 1; i >= 0; i--) {
                 Hit h = hits.get(i);
                 if (lx >= h.x() && lx < h.x() + h.w() && ly >= h.y() && ly < h.y() + h.h()) {
@@ -2004,6 +2012,7 @@ public class PhoneScreen extends Screen {
             compose += c;
             return true;
         }
+        if (view == View.STAFF && staffSearch && c >= ' ' && staffQuery.length() < 24) { staffQuery += c; scroll = 0; return true; }
         if (view == View.ARCHIVE && searchFocused && c >= ' ' && query.length() < 32) {
             query += c;
             scroll = 0;
@@ -2020,6 +2029,11 @@ public class PhoneScreen extends Screen {
             if (key == 256) { composeFocused = false; return true; }          // Esc leaves the box
             if (minecraft != null && (minecraft.options.keyInventory.matches(key, scan) || minecraft.options.keyChat.matches(key, scan))) return true;
         }
+        if (view == View.STAFF && staffSearch) {
+            if (key == 259) { if (!staffQuery.isEmpty()) staffQuery = staffQuery.substring(0, staffQuery.length() - 1); return true; }
+            if (key == 256 || key == 257) { staffSearch = false; return true; }
+            if (minecraft != null && minecraft.options.keyInventory.matches(key, scan)) return true;
+        }
         if (view == View.ARCHIVE && searchFocused) {
             if (key == 259) { if (!query.isEmpty()) query = query.substring(0, query.length() - 1); return true; }
             if (key == 256 || key == 257) { searchFocused = false; return true; } // Esc / Enter leave the box
@@ -2032,6 +2046,420 @@ public class PhoneScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // ---------------------------------------------------------------- Staff (the workforce directory, hiring, org chart, registry)
+
+    /** The directory, as last sent by the server (refreshed while the app is open). */
+    public static CompoundTag STAFF = new CompoundTag();
+    private int staffTab;
+    private String staffSel = "", staffQuery = "", staffSite = "", confirm = "";
+    private int hireSel = -1, postSite, postRole;
+    private boolean staffSearch;
+    private long confirmAt;
+    private static final String[] POST_ROLES = {"Researcher", "Security", "Medical", "Technician", "Administration", "Janitorial"};
+    private static final int[] POST_ROLE_ORD = {0, 1, 2, 3, 4, 5};
+
+    /** Text cut to a width; point at it to read the rest. */
+    private void fit(GuiGraphics g, String s, int x, int y, int w, int c) {
+        String shown = ellipsize(s, Math.max(8, w));
+        g.drawString(font, shown, x, y, Terminal.map(c), false);
+        if (!shown.equals(s) && over(x, y - 1, w, 10)) hover = s;
+    }
+
+    /** Small (3/4) left-aligned text, cut to a width. */
+    private void tiny(GuiGraphics g, String s, int x, int y, int w, int c) {
+        String shown = ellipsize(s, (int) (w / 0.75F));
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(0.75F, 0.75F, 1);
+        g.drawString(font, shown, 0, 0, Terminal.map(c), false);
+        g.pose().popPose();
+        if (!shown.equals(s) && over(x, y - 1, w, 8)) hover = s;
+    }
+
+    private void meter(GuiGraphics g, int x, int y, int w, int v, int max, int c) {
+        rect(g, x, y, w, 4, 0xFF10261A);
+        rect(g, x, y, Math.max(1, w * Math.max(0, Math.min(max, v)) / max), 4, c);
+    }
+
+    private void act(String a) { send("wf:" + a, 0); }
+
+    /** A button that needs a second press within three seconds. */
+    private void sure(GuiGraphics g, int x, int y, int w, String label, String key, Runnable r) {
+        boolean armed = confirm.equals(key) && System.currentTimeMillis() - confirmAt < 3000;
+        pill(g, x, y, w, 14, armed ? "Press again to confirm" : label, 0xFFB03030, true, () -> {
+            if (armed) { confirm = ""; r.run(); } else { confirm = key; confirmAt = System.currentTimeMillis(); }
+        });
+    }
+
+    private List<CompoundTag> people() {
+        List<CompoundTag> out = new ArrayList<>();
+        String q = staffQuery.toLowerCase(Locale.ROOT);
+        for (Tag t : STAFF.getList("people", Tag.TAG_COMPOUND)) {
+            CompoundTag c = (CompoundTag) t;
+            if (!staffSite.isEmpty() && !c.getString("site").equals(staffSite)) continue;
+            if (!q.isEmpty() && !(c.getString("name") + " " + c.getString("job") + " " + c.getString("head") + " " + c.getString("site")).toLowerCase(Locale.ROOT).contains(q)) continue;
+            out.add(c);
+        }
+        return out;
+    }
+
+    private CompoundTag person(String id) {
+        for (Tag t : STAFF.getList("people", Tag.TAG_COMPOUND)) if (((CompoundTag) t).getString("id").equals(id)) return (CompoundTag) t;
+        return null;
+    }
+
+    private int drawStaff(GuiGraphics g, int y, int top) {
+        if (!STAFF.contains("people")) { empty(g, y, "Connecting...", "Fetching the personnel directory."); return y + 80; }
+        String[] tabs = {"Staff", "Hire", "Org", "Log"};
+        int x, w;
+        if (desktop) {
+            // a sidebar, like a real terminal program
+            int sx = SX + 6, sw = 80, sy = top + 6;
+            rect(g, sx - 6, top, sw + 10, SY + SH - NAV - top, 0xFF061009);
+            rect(g, sx + sw + 3, top, 1, SY + SH - NAV - top, Terminal.LINE);
+            String[] full = {"Directory", "Hiring", "Org chart", "Registry"};
+            for (int i = 0; i < full.length; i++) {
+                final int idx = i;
+                boolean on = staffTab == i;
+                rbox(g, sx, sy, sw, 16, 2, on ? Terminal.SELECT : over(sx, sy, sw, 16) ? 0xFF0E3A1E : Terminal.PANEL, on ? Terminal.SELECT : Terminal.LINE);
+                g.drawString(font, full[i], sx + 6, sy + 4, on ? Terminal.ON_SELECT : Terminal.BRIGHT, false);
+                int badge = i == 1 ? waitingShortlists() : 0;
+                if (badge > 0) g.drawString(font, String.valueOf(badge), sx + sw - 6 - font.width(String.valueOf(badge)), sy + 4, Terminal.AMBER, false);
+                hit(sx, sy, sw, 16, () -> { staffTab = idx; scroll = 0; staffSel = ""; });
+                sy += 20;
+            }
+            // the pulse, always visible
+            sy += 4;
+            g.drawString(font, "PULSE", sx, sy, Terminal.MID, false);
+            sy += 11;
+            int n = STAFF.getList("people", Tag.TAG_COMPOUND).size();
+            g.drawString(font, n + " on staff", sx, sy, Terminal.BRIGHT, false);
+            sy += 11;
+            g.drawString(font, "Morale " + STAFF.getInt("morale") + "%", sx, sy, Terminal.MID, false);
+            sy += 10;
+            meter(g, sx, sy, sw, STAFF.getInt("morale"), 100, STAFF.getInt("morale") < 35 ? RED : 0xFF5CFF8A);
+            sy += 9;
+            tiny(g, "7 days: " + STAFF.getInt("births") + " births, " + STAFF.getInt("weddings") + " weddings", sx, sy, sw, MUTED);
+            tiny(g, STAFF.getInt("hired") + " hired, " + STAFF.getInt("deaths") + " lost", sx, sy + 8, sw, MUTED);
+            x = SX + 96;
+            w = SW - 102;
+        } else {
+            x = SX + 6;
+            w = SW - 12;
+            int tx = x;
+            for (int i = 0; i < tabs.length; i++) {
+                int tw = (w - 9) / 4;
+                final int idx = i;
+                String lbl = tabs[i] + (i == 1 && waitingShortlists() > 0 ? " " + waitingShortlists() : "");
+                pill(g, tx, y, tw, 14, lbl, staffTab == i ? TEAL : 0xFF1A222C, staffTab == i ? 0xFF0B1118 : 0xFFC8D2DC, true, () -> { staffTab = idx; scroll = 0; staffSel = ""; });
+                tx += tw + 3;
+            }
+            y += 20;
+        }
+        return switch (staffTab) {
+            case 1 -> drawHiring(g, x, y, w);
+            case 2 -> drawOrg(g, x, y, w);
+            case 3 -> drawRegistry(g, x, y, w);
+            default -> drawDirectory(g, x, y, w, top);
+        };
+    }
+
+    private int waitingShortlists() {
+        int n = 0;
+        for (Tag t : STAFF.getList("vac", Tag.TAG_COMPOUND)) if (((CompoundTag) t).getString("state").equals("direct")) n++;
+        return n;
+    }
+
+    private int drawDirectory(GuiGraphics g, int x, int y, int w, int top) {
+        CompoundTag sel = staffSel.isEmpty() ? null : person(staffSel);
+        if (sel == null) staffSel = "";
+        int listW = desktop ? Math.min(176, w / 2) : w;
+        if (!desktop && sel != null) {
+            pill(g, x, y, 70, 14, "< All staff", 0xFF1A222C, true, () -> staffSel = "");
+            return drawPerson(g, sel, x, y + 20, w);
+        }
+        // search and site filter
+        boolean hov = over(x, y, listW, 14);
+        rbox(g, x, y, listW, 14, 2, staffSearch ? 0xFF0E3A1E : Terminal.PANEL, staffSearch || hov ? Terminal.MID : Terminal.LINE);
+        String q = staffQuery.isEmpty() && !staffSearch ? "Search name, job, site..." : staffQuery + (staffSearch && (System.currentTimeMillis() / 500) % 2 == 0 ? "_" : "");
+        fit(g, q, x + 5, y + 3, listW - 10, staffQuery.isEmpty() && !staffSearch ? 0xFF2A7A44 : 0xFFB8FFCC);
+        hit(x, y, listW, 14, () -> staffSearch = true);
+        y += 18;
+        ListTag sites = STAFF.getList("sites", Tag.TAG_STRING);
+        int cx = x;
+        List<String> chips = new ArrayList<>();
+        chips.add("");
+        for (Tag t : sites) chips.add(t.getAsString());
+        for (String site : chips) {
+            String lbl = site.isEmpty() ? "All" : site;
+            int cw = Math.min(font.width(lbl) + 10, listW);
+            if (cx + cw > x + listW) { cx = x; y += 16; }
+            final String f = site;
+            pill(g, cx, y, cw, 12, lbl, staffSite.equals(site) ? TEAL : 0xFF1A222C, staffSite.equals(site) ? 0xFF0B1118 : 0xFFC8D2DC, true, () -> { staffSite = f; scroll = 0; });
+            cx += cw + 3;
+        }
+        y += 18;
+        List<CompoundTag> list = people();
+        if (list.isEmpty()) { fit(g, staffQuery.isEmpty() ? "No staff on record yet." : "Nobody matches.", x, y + 4, listW, MUTED); y += 20; }
+        String lastSite = "";
+        for (CompoundTag c : list) {
+            if (!c.getString("site").equals(lastSite)) {
+                lastSite = c.getString("site");
+                tiny(g, lastSite.toUpperCase(Locale.ROOT), x + 2, y + 2, listW - 4, 0xFF35B860);
+                y += 11;
+            }
+            boolean on = c.getString("id").equals(staffSel), ho = over(x, y, listW, 22);
+            rbox(g, x, y, listW, 22, 2, on ? Terminal.SELECT : ho ? 0xFF0E2A18 : Terminal.PANEL, on ? Terminal.SELECT : Terminal.LINE);
+            int tc = on ? 0xFF04140A : 0xFFB8FFCC, sc = on ? 0xFF0A3018 : 0xFF35B860;
+            boolean head = c.contains("head");
+            int dot = c.getBoolean("here") ? (c.getString("state").startsWith("Ill") || c.getString("state").equals("In danger") ? RED : c.getString("state").equals("Grieving") ? AMBER : 0xFF5CFF8A) : 0xFF2A7A44;
+            rect(g, x + 4, y + 4, 3, 3, on ? 0xFF04140A : dot);
+            fit(g, (head ? "★ " : "") + c.getString("name"), x + 10, y + 3, listW - 16, tc);
+            tiny(g, (head ? c.getString("head") : c.getString("job")) + " · " + c.getInt("age") + (c.getBoolean("spouseOfYou") ? " · your spouse" : c.getBoolean("partner") ? " · ♥" : ""), x + 10, y + 13, listW - 16, sc);
+            final String id = c.getString("id");
+            hit(x, y, listW, 22, () -> { staffSel = id; confirm = ""; });
+            y += 24;
+        }
+        if (desktop) {
+            int dx = x + listW + 8, dw = w - listW - 8;
+            if (sel != null) drawPerson(g, sel, dx, top + 6, dw);
+            else {
+                g.drawString(font, "Select someone", dx, top + 10, Terminal.MID, false);
+                wrap(g, "Their file opens here: job, family, traits, how they feel about you. Write to them, call them over, appoint or dismiss them.", dx, top + 24, dw, 0xFF2A7A44);
+                drawSpotlight(g, dx, top + 70, dw);
+            }
+        } else if (staffQuery.isEmpty() && staffSite.isEmpty()) y = drawSpotlight(g, x, y + 4, w);
+        return y;
+    }
+
+    /** Someone worth noticing today: a long service, a new baby, an illness. One tap to write to them. */
+    private int drawSpotlight(GuiGraphics g, int x, int y, int w) {
+        ListTag ps = STAFF.getList("people", Tag.TAG_COMPOUND);
+        if (ps.isEmpty()) return y;
+        CompoundTag pick = null;
+        String why = "";
+        for (Tag t : ps) { CompoundTag c = (CompoundTag) t; if (c.getBoolean("expecting")) { pick = c; why = "is expecting a baby"; break; } }
+        if (pick == null) for (Tag t : ps) { CompoundTag c = (CompoundTag) t; if (c.getString("state").startsWith("Ill")) { pick = c; why = "is unwell (" + c.getString("state").substring(5) + ")"; break; } }
+        if (pick == null) for (Tag t : ps) { CompoundTag c = (CompoundTag) t; if (c.getString("state").equals("Grieving")) { pick = c; why = "has lost someone"; break; } }
+        if (pick == null) {
+            long day = t().getLong("now") / 24000;
+            pick = ps.getCompound((int) Math.floorMod(day * 7919, ps.size()));
+            why = pick.getInt("years") > 0 ? "has " + pick.getInt("years") + " years with the Foundation" : "keeps " + pick.getString("site") + " running";
+        }
+        int h = 16 + wrapHeight(pick.getString("name") + " " + why + ".", w - 12) + 20;
+        rbox(g, x, y, w, h, 3, Terminal.PANEL, Terminal.MID);
+        g.drawString(font, "SPOTLIGHT", x + 6, y + 4, Terminal.AMBER, false);
+        int hh = wrap(g, pick.getString("name") + " " + why + ".", x + 6, y + 16, w - 12, 0xFFB8FFCC);
+        final String id = pick.getString("id");
+        boolean noted = pick.getBoolean("noted");
+        String kind = why.startsWith("is unwell") || why.startsWith("has lost") ? "concern" : "commend";
+        pill(g, x + 6, y + 18 + hh, w - 12, 14, noted ? "Note sent today" : kind.equals("concern") ? "Send a note of concern" : "Send a commendation", 0xFF2E9E57, !noted, () -> act("note:" + id + ":" + kind));
+        return y + h + 6;
+    }
+
+    private int drawPerson(GuiGraphics g, CompoundTag c, int x, int y, int w) {
+        final String id = c.getString("id");
+        boolean here = c.getBoolean("here"), head = c.contains("head");
+        rbox(g, x, y, w, 40, 3, Terminal.PANEL, head ? Terminal.AMBER : Terminal.MID);
+        fit(g, c.getString("name"), x + 6, y + 5, w - 12, 0xFFFFFFFF);
+        fit(g, head ? c.getString("head") : c.getString("job"), x + 6, y + 16, w - 12, head ? AMBER : 0xFF5CFF8A);
+        tiny(g, c.getString("site") + " · age " + c.getInt("age") + (c.getInt("years") > 0 ? " · " + c.getInt("years") + " yrs service" : ""), x + 6, y + 28, w - 12, 0xFF35B860);
+        y += 44;
+        // status line
+        String st = c.getString("state") + (here && c.getInt("dist") > 0 ? " · " + c.getInt("dist") + " m away" : here ? "" : " (not on a loaded site)");
+        fit(g, "Status: " + st, x, y, w, c.getString("state").startsWith("Ill") || c.getString("state").equals("In danger") ? RED : 0xFFB8FFCC);
+        y += 11;
+        fit(g, "Personality: " + c.getString("pers"), x, y, w, 0xFFB8FFCC);
+        y += 12;
+        if (here) {
+            int hearts = c.getInt("hearts"), resp = c.getInt("respect");
+            g.drawString(font, "Hearts", x, y, Terminal.MID, false);
+            StringBuilder hb = new StringBuilder();
+            for (int i = 0; i < 5; i++) hb.append(hearts >= (i + 1) * 2 ? "♥" : hearts >= i * 2 + 1 ? "♡" : "·");
+            g.drawString(font, hb.toString(), x + 46, y, Terminal.RED, false);
+            y += 11;
+            g.drawString(font, "Respect", x, y, Terminal.MID, false);
+            meter(g, x + 46, y + 2, Math.min(60, w - 50), resp, 10, 0xFF5CFF8A);
+            y += 12;
+        }
+        // family
+        List<String> fam = new ArrayList<>();
+        if (c.contains("spouse")) fam.add((c.getString("rel").equals("widowed") ? "Widowed: " : "Married to ") + c.getString("spouse"));
+        else if (c.getString("rel").equals("dating") || c.getString("rel").equals("engaged")) fam.add(Scene_cap(c.getString("rel")));
+        if (c.getInt("kids") > 0) fam.add(c.getInt("kids") + (c.getInt("kids") == 1 ? " child" : " children"));
+        if (c.getBoolean("expecting")) fam.add("expecting");
+        if (!fam.isEmpty()) { y += wrap(g, "Family: " + String.join(", ", fam), x, y, w, 0xFFB8FFCC) + 1; }
+        if (!c.getString("traits").isEmpty()) { y += wrap(g, "Traits: " + c.getString("traits"), x, y, w, 0xFF35B860) + 1; }
+        y += 4;
+        Terminal.dashes(g, x, y, w, Terminal.LINE);
+        y += 6;
+        // write to them (they read it now, or when they're next on site, and remember it)
+        label(g, "Write to them", x, y);
+        y += 11;
+        boolean noted = c.getBoolean("noted");
+        y = grid(g, x, y, w, desktop ? 4 : 2, new String[]{"Commend", "Thank", desktop ? "Ask after" : "Ask after them", desktop ? "Warn" : "Formal warning"},
+                new boolean[]{!noted, !noted, !noted, !noted}, new int[]{0xFF2E9E57, 0xFF2E9E57, 0xFF2E9E57, 0xFFC08020},
+                new Runnable[]{() -> act("note:" + id + ":commend"), () -> act("note:" + id + ":thanks"), () -> act("note:" + id + ":concern"), () -> act("note:" + id + ":warning")});
+        if (noted) { tiny(g, "Written today. They'll mention it when you meet.", x, y, w, 0xFF2A7A44); y += 10; }
+        y += 3;
+        label(g, "Actions", x, y);
+        y += 11;
+        boolean mk = STAFF.getBoolean("appoints") && !head && here;
+        y = grid(g, x, y, w, desktop ? 3 : 2, new String[]{"Call them over", "Back to work", "Family tree", "Make head"},
+                new boolean[]{here, here, true, mk}, new int[]{0xFF262E38, 0xFF262E38, 0xFF262E38, 0xFFC08020},
+                new Runnable[]{() -> act("summon:" + id), () -> act("release:" + id), () -> act("tree:" + id), () -> act("head:" + id)});
+        if (STAFF.getBoolean("hires") && here) { sure(g, x, y, w, "Dismiss (amnestic exit)", "dismiss:" + id, () -> { act("dismiss:" + id); staffSel = ""; }); y += 17; }
+        return y + 4;
+    }
+
+    /** Buttons in a grid of {@code cols}; returns the y below them. */
+    private int grid(GuiGraphics g, int x, int y, int w, int cols, String[] labels, boolean[] on, int[] colours, Runnable[] actions) {
+        int bw = (w - (cols - 1) * 4) / cols;
+        for (int i = 0; i < labels.length; i++) {
+            int cx = x + (i % cols) * (bw + 4), cy = y + (i / cols) * 17;
+            pill(g, cx, cy, bw, 14, labels[i], colours[i], on[i], actions[i]);
+        }
+        return y + ((labels.length + cols - 1) / cols) * 17;
+    }
+
+    private static String Scene_cap(String s) { return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1); }
+
+    private int drawHiring(GuiGraphics g, int x, int y, int w) {
+        boolean can = STAFF.getBoolean("hires");
+        // open a post yourself
+        ListTag sites = STAFF.getList("sites", Tag.TAG_STRING);
+        if (can) {
+            rbox(g, x, y, w, 62, 3, Terminal.PANEL, Terminal.MID);
+            g.drawString(font, "OPEN A POST", x + 6, y + 5, Terminal.AMBER, false);
+            tiny(g, "Personnel sends a shortlist; you choose. No meeting.", x + 6, y + 15, w - 12, 0xFF35B860);
+            int bw = (w - 16) / 2;
+            String site = sites.isEmpty() ? "No sites" : sites.getString(Math.floorMod(postSite, sites.size()));
+            pill(g, x + 6, y + 25, bw, 14, "Site: " + site, 0xFF1A222C, !sites.isEmpty(), () -> postSite++);
+            pill(g, x + 10 + bw, y + 25, bw, 14, "Role: " + POST_ROLES[Math.floorMod(postRole, POST_ROLES.length)], 0xFF1A222C, true, () -> postRole++);
+            pill(g, x + 6, y + 43, w - 12, 14, "Find applicants", 0xFF2E9E57, !sites.isEmpty(), () -> act("post:" + site + ":" + POST_ROLE_ORD[Math.floorMod(postRole, POST_ROLES.length)]));
+            y += 68;
+        } else { wrap(g, "Hiring decisions are made by Site Directors and above. You can see what's open.", x, y, w, MUTED); y += 24; }
+        ListTag vac = STAFF.getList("vac", Tag.TAG_COMPOUND);
+        if (vac.isEmpty()) { fit(g, "Every post is filled.", x, y + 4, w, MUTED); return y + 20; }
+        label(g, "Open posts", x, y);
+        y += 12;
+        for (Tag tv : vac) {
+            CompoundTag v = (CompoundTag) tv;
+            int id = v.getInt("id");
+            String state = v.getString("state"), kind = v.getString("kind");
+            boolean open = hireSel == id || vac.size() == 1;
+            String status = switch (state) {
+                case "direct" -> "Shortlist ready: your choice";
+                case "running" -> "Interviews under way in your office";
+                case "booked" -> (v.getInt("attend") == 1 ? "You're interviewing " : "Interviews ") + v.getString("when");
+                default -> kind.equals("head") ? "Council to appoint (or you)" : "Interviews " + v.getString("when") + (v.getInt("attend") == 2 ? ", head decides" : "");
+            };
+            boolean ho = over(x, y, w, 26);
+            rbox(g, x, y, w, 26, 3, open ? 0xFF0E2A18 : ho ? 0xFF0A2214 : Terminal.PANEL, state.equals("direct") ? Terminal.AMBER : Terminal.MID);
+            fit(g, Scene_cap(v.getString("what")) + " · " + v.getString("site"), x + 6, y + 4, w - 20, 0xFFFFFFFF);
+            tiny(g, status + (v.getString("left").isEmpty() ? "" : " · replacing " + v.getString("left")), x + 6, y + 15, w - 20, state.equals("direct") ? AMBER : 0xFF35B860);
+            g.drawString(font, open ? "v" : ">", x + w - 10, y + 9, Terminal.MID, false);
+            hit(x, y, w, 26, () -> hireSel = hireSel == id ? -1 : id);
+            y += 29;
+            if (!open) continue;
+            boolean decide = kind.equals("head") ? STAFF.getBoolean("appoints") : can;
+            ListTag cs = v.getList("cands", Tag.TAG_COMPOUND);
+            for (int i = 0; i < cs.size(); i++) {
+                CompoundTag c = cs.getCompound(i);
+                List<String> lines = new ArrayList<>();
+                lines.add(c.getString("bg"));
+                if (c.contains("family")) lines.add(c.getString("family"));
+                if (c.contains("vet")) { lines.add("Vetting: " + c.getString("vet")); lines.add("Medical: " + c.getString("med")); }
+                int bodyH = 0;
+                for (String l : lines) bodyH += wrapHeight(l, w - 18);
+                int h = 26 + bodyH + 20;
+                rbox(g, x + 4, y, w - 4, h, 2, Terminal.PANEL, c.getString("vet").startsWith("FLAG") ? Terminal.RED : Terminal.LINE);
+                fit(g, c.getString("name") + ", " + c.getInt("age"), x + 9, y + 4, w - 60, 0xFFB8FFCC);
+                String stars = "★".repeat(c.getInt("stars")) + "☆".repeat(Math.max(0, 5 - c.getInt("stars")));
+                g.drawString(font, stars, x + w - 6 - font.width(stars), y + 4, Terminal.AMBER, false);
+                tiny(g, c.getString("pers") + (c.getBoolean("internal") ? " · internal candidate" : ""), x + 9, y + 15, w - 18, 0xFF35B860);
+                int ly = y + 24;
+                for (String l : lines) ly += wrap(g, l, x + 9, ly, w - 18, l.startsWith("Vetting: FLAG") ? RED : 0xFF8FD8A8);
+                final int idx = i;
+                int bw = (w - 20) / 2;
+                pill(g, x + 9, ly + 2, bw, 14, c.contains("vet") ? "Vetted" : "Background check", 0xFF262E38, !c.contains("vet"), () -> act("vet:" + id + ":" + idx));
+                if (decide) pill(g, x + 13 + bw, ly + 2, bw, 14, kind.equals("head") ? "Appoint" : "Hire", 0xFF2E9E57, true, () -> { act("pick:" + id + ":" + idx); hireSel = -1; });
+                y += h + 4;
+            }
+            if (can && !state.equals("running")) {
+                int bw = (w - 8) / 3;
+                pill(g, x + 4, y, bw, 14, "Interview", 0xFF262E38, v.getInt("attend") != 1, () -> act("attend:" + id));
+                if (!kind.equals("head")) pill(g, x + 8 + bw, y, bw, 14, "Head decides", 0xFF262E38, v.getInt("attend") != 2 || state.equals("direct"), () -> act("delegate:" + id));
+                if (state.equals("direct")) sure(g, x + 12 + bw * 2, y, bw, "Withdraw", "cancel:" + id, () -> act("cancel:" + id));
+                else pill(g, x + 12 + bw * 2, y, bw, 14, "Now", 0xFF262E38, true, () -> act("now:" + id));
+                y += 18;
+            }
+            y += 4;
+        }
+        return y;
+    }
+
+    private static final String[] DEPTS = {"SECURITY", "RESEARCH", "MEDICAL", "ENGINEERING", "PERSONNEL"};
+    private static final String[] DEPT_TITLES = {"Head of Security", "Director of Research", "Chief Medical Officer", "Chief Engineer", "Head of Personnel"};
+    private static final int[] DEPT_COUNT = {1, 2, 3, 4, 5};
+
+    private int drawOrg(GuiGraphics g, int x, int y, int w) {
+        // the chain of command, top down
+        int bw = Math.min(150, w);
+        rbox(g, x + (w - bw) / 2, y, bw, 16, 2, Terminal.PANEL, Terminal.RED);
+        g.drawString(font, "O5 COUNCIL", x + w / 2 - font.width("O5 COUNCIL") / 2, y + 4, Terminal.RED, false);
+        rect(g, x + w / 2, y + 16, 1, 6, Terminal.LINE);
+        y += 22;
+        rbox(g, x + (w - bw) / 2, y, bw, 16, 2, Terminal.PANEL, Terminal.AMBER);
+        g.drawString(font, "THE ADMINISTRATOR", x + w / 2 - font.width("THE ADMINISTRATOR") / 2, y + 4, Terminal.AMBER, false);
+        rect(g, x + w / 2, y + 16, 1, 6, Terminal.LINE);
+        y += 26;
+        for (Tag t : STAFF.getList("org", Tag.TAG_COMPOUND)) {
+            CompoundTag o = (CompoundTag) t;
+            int[] n = o.getIntArray("n");
+            int total = 0;
+            for (int v : n) total += v;
+            CompoundTag hd = o.getCompound("heads");
+            int h = 16 + DEPTS.length * 20 + 4;
+            rbox(g, x, y, w, h, 3, Terminal.PANEL, Terminal.MID);
+            fit(g, o.getString("site").toUpperCase(Locale.ROOT), x + 6, y + 4, w - 70, 0xFFFFFFFF);
+            String tt = total + " staff";
+            g.drawString(font, tt, x + w - 6 - font.width(tt), y + 4, Terminal.MID, false);
+            int ry = y + 16;
+            for (int i = 0; i < DEPTS.length; i++) {
+                String name = hd.getString(DEPTS[i]), hid = hd.getString(DEPTS[i] + "_id");
+                int count = n.length > DEPT_COUNT[i] ? n[DEPT_COUNT[i]] : 0;
+                boolean ho = !hid.isEmpty() && over(x + 4, ry, w - 8, 18);
+                if (ho) rect(g, x + 4, ry, w - 8, 18, 0xFF0E2A18);
+                tiny(g, DEPT_TITLES[i] + " (" + count + ")", x + 8, ry + 1, w - 16, 0xFF35B860);
+                fit(g, name.isEmpty() ? "vacant" : name, x + 8, ry + 8, w - 16, name.isEmpty() ? AMBER : 0xFFB8FFCC);
+                if (!hid.isEmpty()) hit(x + 4, ry, w - 8, 18, () -> { staffTab = 0; staffSel = hid; staffSite = ""; staffQuery = ""; scroll = 0; });
+                ry += 20;
+            }
+            y += h + 6;
+        }
+        return y;
+    }
+
+    private int drawRegistry(GuiGraphics g, int x, int y, int w) {
+        label(g, "Personnel registry", x, y);
+        y += 12;
+        ListTag log = STAFF.getList("log", Tag.TAG_STRING);
+        if (log.isEmpty()) { fit(g, "Nothing recorded yet.", x, y, w, MUTED); return y + 14; }
+        for (Tag t : log) {
+            String l = t.getAsString();
+            int c = l.contains("died") || l.contains("killed") || l.contains("terminated") || l.contains("defected") ? 0xFFE08080
+                    : l.contains("welcomed") || l.contains("married") || l.contains("engaged") ? 0xFFF0C060 : 0xFFB8FFCC;
+            int colon = l.indexOf(':');
+            if (colon > 0) {
+                tiny(g, l.substring(0, colon).toUpperCase(Locale.ROOT), x, y, w, 0xFF35B860);
+                y += 8;
+                y += wrap(g, l.substring(colon + 1).trim(), x, y, w, c) + 4;
+            } else y += wrap(g, l, x, y, w, c) + 4;
+        }
+        return y;
     }
 
     // ---------------------------------------------------------------- Recruitment (computer only)
