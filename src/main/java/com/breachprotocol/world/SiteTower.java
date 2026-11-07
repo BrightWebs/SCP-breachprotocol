@@ -53,6 +53,8 @@ import java.util.Map;
  *  B2    Heavy Containment: twelve cells, HCZ security
  *  B3    Keter wing: twelve cells, maintenance
  *  B4    Deep containment: twelve cells, hazmat store
+ *  B5    D-Class block: eleven cells, canteen, showers, yard, two test chambers, warden, interrogation
+ *        behind one-way glass with an observation room, intake, riot store
  *        (every containment level has cells on both sides of its corridor)
  * </pre>
  * Every floor is joined by one stairwell in the north-east corner, opening onto a central corridor.
@@ -62,7 +64,7 @@ public final class SiteTower extends FacilityBuilder {
     /** Tower footprint is 0..T on x and z; storeys are 6 blocks (floor, 4 clear, ceiling). */
     public static final int T = 32, STOREY = 6, TOP = 9, ROOF = 10;
     /** Basements reach further: x BX0..BX1. */
-    private static final int BX0 = -8, BX1 = 41, NZ = 10, LOWEST = -4;
+    private static final int BX0 = -8, BX1 = 41, NZ = 10, LOWEST = -5;
 
 
     private static CellSpec c(String e, String n, String cls, String a, String b, int lvl, String extra) { return new CellSpec(e, n, cls, a, b, lvl, extra); }
@@ -142,6 +144,7 @@ public final class SiteTower extends FacilityBuilder {
                 l.getChunk(cx, cz);
         SiteTower b = new SiteTower(l, o);
         b.groundworks();
+        b.dclassBlock();
         b.containmentLevel(-4, HCZP, "DEEP", B4_S, B4_N);
         b.containmentLevel(-3, HCZP, "KETER", B3_S, B3_N);
         b.containmentLevel(-2, HCZP, "HEAVY", B2_S, B2_N);
@@ -219,7 +222,8 @@ public final class SiteTower extends FacilityBuilder {
                 {-1, G, 2, 11}, {-1, G, 30, 11}, {-1, Tc, 36, -2}, {-1, R, 23, 0},
                 {-2, G, 2, 11}, {-2, G, 30, 11}, {-2, G, 23, 0},
                 {-3, G, 2, 11}, {-3, G, 30, 11}, {-3, Tc, 23, 0},
-                {-4, G, 2, 11}, {-4, G, 30, 11}, {-4, R, 23, 0}};
+                {-4, G, 2, 11}, {-4, G, 30, 11}, {-4, R, 23, 0},
+                {-5, G, 4, 11}, {-5, G, 26, 11}, {-5, G, -4, -2}, {-5, G, 9, -4}, {-5, C, 23, -3}, {-5, R, 31, 27}, {-5, R, 16, -2}, {-5, M, 3, 21}};
         for (Object[] e : plan) {
             FoundationStaff st = ModEntities.STAFF.get().create(l);
             if (st == null) continue;
@@ -228,17 +232,123 @@ public final class SiteTower extends FacilityBuilder {
             st.setup((FoundationStaff.Role) e[1], p);
             l.addFreshEntity(st);
         }
-        // D-Class in holding on B1
+        // D-Class: in their cells, the canteen and the yard on B5, and a few in holding on B1
+        List<int[]> dspots = new ArrayList<>();
+        for (int i = 0; i < 11; i++) dspots.add(new int[]{-4 + i * 4 + 2, y(-5) + 1, 17});
+        for (int[] c : new int[][]{{-5, 26}, {1, 29}, {6, 26}, {-4, 31}, {23, 28}, {25, 30}}) dspots.add(new int[]{c[0], y(-5) + 1, c[1]});
+        for (int i = 0; i < 4; i++) dspots.add(new int[]{37 + (i % 2) * 2, y(-1) + 1, 18 + i * 3});
         Unleashed.entity(Unleashed.DCLASS).ifPresent(type -> {
-            for (int i = 0; i < 4; i++) {
+            for (int[] sp : dspots) {
                 net.minecraft.world.entity.Entity d = type.create(l);
                 if (d == null) continue;
-                BlockPos p = at(37 + (i % 2) * 2, y(-1) + 1, 18 + i * 3);
+                BlockPos p = at(sp[0], sp[1], sp[2]);
                 d.moveTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5, l.random.nextFloat() * 360F, 0);
                 if (d instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
                 l.addFreshEntity(d);
             }
         });
+    }
+
+    // ================================================================== B5: the D-Class block
+
+    /**
+     * Where the D-Class live: eleven barred cells along the corridor (keyed from outside, a button
+     * inside for staff), a rear hall to the canteen, showers, exercise yard and two test chambers,
+     * and on the north side the warden's office, an interrogation room behind one-way glass with its
+     * observation room, intake processing and the block's riot store.
+     */
+    private void dclassBlock() {
+        int Y = y(-5);
+        fill(BX0, Y, -NZ, BX1, Y + 5, T, "facility_concrete");
+        corridor(LCZP, BX0, BX1, Y);
+        // the cells
+        for (int i = 0; i < 11; i++) {
+            int x0 = -4 + i * 4, x1 = i == 10 ? BX1 : x0 + 4;
+            room(LCZP, x0, 14, x1, 20, Y, true);
+            gate("lcz_single_door", 1, 2, x0 + 2, 14, Y, N, 2);
+            windows(LCZP, x0 + 3, 14, x0 + 3, 14, Y);
+            put(x0 + 1, Y + 1, 19, "lcz_cell_bunk", Blocks.ORANGE_BED, E);
+            set(x0 + 3, Y + 1, 17, "minecraft:cauldron");
+            plate(x0 + 3, Y + 4, 13, N, "CELL D-" + (101 + i));
+        }
+        // the rear hall and everything behind it
+        room(LCZP, BX0, 20, BX1, 24, Y, true);
+        room(LCZP, BX0, 24, 12, T, Y, true);                                    // canteen
+        room(LCZP.floor("facility_shower_tile"), 12, 24, 20, T, Y, true);       // showers
+        room(LCZP.floor("facility_concrete_cracked"), 20, 24, 28, T, Y, true);  // exercise yard
+        room(CELL, 28, 24, 35, T, Y, true);                                     // test chamber A
+        room(CELL, 35, 24, BX1, T, Y, true);                                    // test chamber B
+        // the passage from the corridor to the rear hall, keyed
+        room(LCZP, BX0, 14, -4, 20, Y, true);
+        gate("lcz_room_door", 2, 2, BX0 + 2, 14, Y, N, 2);
+        buttoned("lcz_room_door", 2, 2, BX0 + 1, 20, Y, S);
+        plate(BX0 + 3, Y + 2, 13, N, "TO CANTEEN", "AND TESTING");
+        // canteen
+        ezDoor(4, 24, Y, N);
+        for (int[] t : new int[][]{{-5, 27}, {0, 27}, {5, 27}, {-5, 30}, {0, 30}, {5, 30}}) table("cafeteria_table", "cafeteria_chair", t[0], t[1], t[0] + 1, t[1], Y, 1);
+        for (int x = 9; x <= 11; x++) set(x, Y + 1, 25, "scp3008_kitchen_base_cabinet[facing=west]");
+        plate(2, Y + 2, 23, N, "CANTEEN");
+        // showers
+        ezDoor(15, 24, Y, N);
+        for (int x = 13; x <= 19; x += 2) set(x, Y + 3, T - 1, "decor_pipe[axis=z]");
+        set(16, Y + 3, 23, "facility_sign_decontamination_small[facing=north]");
+        // exercise yard
+        ezDoor(23, 24, Y, N);
+        for (int x = 21; x <= 27; x++) set(x, Y + 1, T - 1, "ez_waiting_chairs[facing=north]");
+        plate(22, Y + 2, 23, N, "YARD");
+        // test chambers: keyed, with observation windows from the hall
+        gate("containment_room_door", 2, 2, 31, 24, Y, N, 3);
+        windows(CELL, 29, 24, 29, 24, Y);
+        windows(CELL, 34, 24, 34, 24, Y);
+        put(31, Y + 1, 29, "examination_table", Blocks.WHITE_BED, E);
+        chest(29, Y + 1, 31, E, ui("stasis_pod_faint", Items.GLASS_BOTTLE, 4), ui("stasis_pod_wavering", Items.GLASS_BOTTLE, 2), ui("amnestic_canister", Items.MILK_BUCKET, 4));
+        plate(33, Y + 2, 23, N, "TEST", "CHAMBER A");
+        gate("containment_room_door", 2, 2, 37, 24, Y, N, 3);
+        windows(CELL, 39, 24, 39, 24, Y);
+        set(38, Y, 28, "containment_floor_drain");
+        plate(39, Y + 2, 23, N, "TEST", "CHAMBER B");
+
+        // ---- north side
+        // warden's office
+        room(OFFICE, BX0, -NZ, 6, 8, Y, true);
+        gate("glass_room_door", 2, 2, -2, 8, Y, S, 3);
+        desksX("metal_desk", -6, 4, -8, Y, S, "security_monitor[facing=$,lit=true,screen=2]");
+        for (int z = -5; z <= 6; z += 2) set(BX0 + 1, Y + 1, z, "filing_cabinet[facing=east,open=false]");
+        chest(5, Y + 1, 6, W, ui("keycard_level_1", Items.PAPER, 6), ui("keycard_level_2", Items.PAPER, 3), ui("handheld_radio", Items.COMPASS, 2));
+        plate(-4, Y + 2, 9, S, "WARDEN");
+        // interrogation, watched through one-way glass from the observation room
+        room(LCZP.floor("facility_concrete"), 6, -NZ, 13, 8, Y, false);
+        gate("lcz_room_door", 2, 2, 8, 8, Y, S, 3);
+        light(9, Y + 4, -1, true);
+        set(9, Y + 1, -1, "metal_desk[facing=north,left=false,right=true]");
+        set(10, Y + 1, -1, "metal_desk[facing=north,left=true,right=false]");
+        set(9, Y + 2, -1, "desk_lamp[facing=north,lit=true]");
+        set(9, Y + 1, -2, "office_chair[facing=south]");
+        set(10, Y + 1, 0, "cafeteria_chair[facing=north]");
+        for (int z = -6; z <= 2; z++) for (int yy = Y + 2; yy <= Y + 3; yy++) set(13, yy, z, "one_way_glass[facing=east]");
+        plate(7, Y + 2, 9, S, "INTERROGATION");
+        room(OFFICE, 13, -NZ, 20, 8, Y, true);
+        for (int z = -6; z <= 2; z++) set(13, Y + 2, z, "one_way_glass[facing=east]");
+        for (int z = -6; z <= 2; z++) for (int yy = Y + 2; yy <= Y + 3; yy++) set(13, yy, z, "one_way_glass[facing=east]");
+        ezDoor(16, 8, Y, S);
+        desksZ("metal_desk", 14, -5, 1, Y, E, "crt_monitor[facing=$,lit=true,screen=5]");
+        plate(18, Y + 2, 9, S, "OBSERVATION");
+        // intake and processing
+        room(LCZP, 20, -NZ, 26, 8, Y, true);
+        gate("lcz_room_door", 2, 2, 22, 8, Y, S, 2);
+        for (int z = -9; z <= 6; z++) if (z % 3 != 0) tall(25, Y + 1, z, "locker", W);
+        desksZ("reception_desk", 21, -3, 1, Y, E, "computer_terminal[facing=$,lit=true,screen=3]");
+        plate(21, Y + 2, 9, S, "INTAKE");
+        // riot store
+        room(HCZP, 32, -NZ, BX1, 8, Y, true);
+        gate("hcz_room_door", 2, 2, 36, 8, Y, S, 3);
+        for (int x = 33; x <= 40; x++) if (x != 36 && x != 37) tall(x, Y + 1, -NZ + 1, "locker", S);
+        chest(38, Y + 1, 6, W, new ItemStack(Items.SHIELD, 4), new ItemStack(Items.IRON_HELMET, 4), new ItemStack(Items.IRON_CHESTPLATE, 4),
+                ui("flash_grenade", Items.SNOWBALL, 8), ui("gas_grenade", Items.SPLASH_POTION, 4), ui("pistol", Items.CROSSBOW, 2));
+        plate(35, Y + 2, 9, S, "RIOT STORE");
+        // corridor signs
+        plate(BX0 + 1, Y + 2, 12, E, "D-CLASS", "BLOCK", "LEVEL B5");
+        plate(BX1 - 1, Y + 2, 10, W, "D-CLASS", "BLOCK", "LEVEL B5");
     }
 
     // ================================================================== containment levels B1-B4
@@ -934,7 +1044,7 @@ public final class SiteTower extends FacilityBuilder {
             set(28, Y + (s == ROOF ? 4 : 5), 7, "fluorescent_light[face=ceiling,facing=east,lit=true]");
             // the floor's own sign beside the door
             String label = switch (s) {
-                case -4 -> "B4  DEEP CONT."; case -3 -> "B3  KETER WING";
+                case -5 -> "B5  D-CLASS BLOCK"; case -4 -> "B4  DEEP CONT."; case -3 -> "B3  KETER WING";
                 case -2 -> "B2  HEAVY CONT."; case -1 -> "B1  LIGHT CONT."; case 0 -> "G  ENTRANCE";
                 case 1 -> "1  RESEARCH"; case 2 -> "2  MEDICAL"; case 3 -> "3  SECURITY"; case 4 -> "4  ARCHIVE";
                 case 5 -> "5  OFFICES"; case 6 -> "6  SERVERS"; case 7 -> "7  LAUNCH CTRL"; case 8 -> "8  O5 COUNCIL";

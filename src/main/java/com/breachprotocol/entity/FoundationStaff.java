@@ -20,6 +20,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.*;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
 import java.util.HashMap;
@@ -44,6 +45,19 @@ public class FoundationStaff extends PathfinderMob {
 
     private static final EntityDataAccessor<Integer> ROLE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> VARIANT = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> AGE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
+
+    /** One year of a staff member's life passes every Minecraft day. */
+    public static final int YEAR = 24000;
+    private static final net.minecraft.resources.ResourceLocation ELDER = com.breachprotocol.BreachProtocol.id("elder");
+
+    private double age = 30;
+    private int lastYear = -1;
+    /** What they're ill with ("" = healthy). */
+    private String illness = "";
+    private int locketUses;
+    private double fountainAt = -100;
+    private boolean declined;
 
     private static final String[] SURNAMES = {"Mbeki", "Okafor", "Lindqvist", "Tanaka", "Morales", "Kowalski", "Haddad", "Novak", "Reyes", "Ivanova",
             "Clef", "Bright", "Gears", "Glass", "Kondraki", "Light", "Rights", "King", "Crow", "Everwood", "Harrow", "Vance", "Mercer", "Osei"};
@@ -71,6 +85,7 @@ public class FoundationStaff extends PathfinderMob {
         super.defineSynchedData(builder);
         builder.define(ROLE, 0);
         builder.define(VARIANT, 0);
+        builder.define(AGE, 30);
     }
 
     @Override
@@ -91,6 +106,12 @@ public class FoundationStaff extends PathfinderMob {
 
     public int variant() { return entityData.get(VARIANT); }
 
+    public int age() { return entityData.get(AGE); }
+
+    public boolean elder() { return age() >= 65; }
+
+    public String illness() { return illness; }
+
     /** Sets who they are and where they work (they stay within 12 blocks of it). */
     public void setup(Role role, BlockPos post) {
         entityData.set(ROLE, role.ordinal());
@@ -99,6 +120,7 @@ public class FoundationStaff extends PathfinderMob {
         String sur = SURNAMES[random.nextInt(SURNAMES.length)];
         setCustomName(Component.literal((role.prefix.isEmpty() ? "" : role.prefix + " ") + sur).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
         setCustomNameVisible(false);
+        setAge(22 + random.nextInt(36));
         restrictTo(post, 12);
     }
 
@@ -125,6 +147,135 @@ public class FoundationStaff extends PathfinderMob {
         }
     }
 
+    private void setAge(double a) {
+        age = Math.max(18, a);
+        entityData.set(AGE, (int) age);
+        var speed = getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speed != null) {
+            speed.removeModifier(ELDER);
+            if (age >= 70) speed.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(ELDER, -0.3,
+                    net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+        }
+    }
+
+    private void news(com.breachprotocol.career.WorldNews.Kind k, String headline, int mood) {
+        if (level().getServer() != null) com.breachprotocol.career.WorldNews.record(level().getServer(), k, "staff", headline, mood, "");
+    }
+
+    private void tellNearby(String text, ChatFormatting colour) {
+        for (Player p : level().players()) if (p.distanceTo(this) < 32) p.sendSystemMessage(Component.literal(text).withStyle(colour, ChatFormatting.ITALIC));
+    }
+
+    /**
+     * Another year older. Illness comes more often with age; the old may choose a Foundation
+     * remedy without asking anyone's clearance (SCP-006, the Fountain of Youth; SCP-427, the locket
+     * that heals and, worn too long, changes you; SCP-500 for disease), or choose to let nature take
+     * its course. Past seventy, every year might be the last.
+     */
+    private void birthday() {
+        String who = name();
+        int a = (int) age;
+        if (illness.isEmpty()) {
+            float chance = a < 45 ? 0.02F : a < 65 ? 0.06F : 0.14F;
+            if (random.nextFloat() < chance) {
+                String[] kinds = {"a fever", "pneumonia", "a heart condition", "an infection", "a bad cough"};
+                illness = kinds[random.nextInt(kinds.length)];
+                addEffect(new MobEffectInstance(MobEffects.WEAKNESS, YEAR * 3, 0, false, false));
+            }
+        } else {
+            if (random.nextFloat() < 0.35F) {
+                news(com.breachprotocol.career.WorldNews.Kind.TREATMENT, who + " was given SCP-500 for " + illness + " and walked out of Medical cured", 2);
+                illness = "";
+                removeEffect(MobEffects.WEAKNESS);
+            } else if (a >= 70 && random.nextFloat() < 0.25F) { die("of " + illness); return; }
+            else if (random.nextFloat() < 0.4F) { illness = ""; removeEffect(MobEffects.WEAKNESS); }
+        }
+        if (a >= 65 && !declined && random.nextFloat() < 0.5F) {
+            Talk.Temper t = Talk.temper(this);
+            boolean fountain = t == Talk.Temper.CAREFUL || t == Talk.Temper.CYNICAL && random.nextBoolean();
+            if (t == Talk.Temper.EARNEST) {
+                declined = true;
+                news(com.breachprotocol.career.WorldNews.Kind.AGING, who + ", " + a + ", turned down the Fountain of Youth. \"I've had a good run.\"", 0);
+            } else if (fountain && age - fountainAt > 20) {
+                fountainAt = age;
+                setAge(age - 15);
+                news(com.breachprotocol.career.WorldNews.Kind.TREATMENT, who + " drank from SCP-006 and looks fifteen years younger", 1);
+                tellNearby(who + " looks younger than yesterday.", ChatFormatting.AQUA);
+            } else if (t == Talk.Temper.BOLD) {
+                if (wearLocket()) return;
+            }
+        }
+        if (a >= 100 || a >= 72 && random.nextFloat() < (a - 70) * 0.04F) die("peacefully, of old age");
+    }
+
+    /** SCP-427: heals and holds back the years. Every use risks turning the wearer into SCP-427-1. */
+    public boolean wearLocket() {
+        locketUses++;
+        if (locketUses >= 2 && random.nextFloat() < locketUses * 0.22F) {
+            String who = name();
+            news(com.breachprotocol.career.WorldNews.Kind.BREACH, who + " wore SCP-427 too long and became SCP-427-1", -7);
+            tellNearby(who + "'s skin splits. Something else stands up.", ChatFormatting.DARK_RED);
+            com.breachprotocol.compat.Unleashed.entity("scp427_1").ifPresent(type -> {
+                net.minecraft.world.entity.Entity e = type.create(level());
+                if (e != null) { e.moveTo(getX(), getY(), getZ(), getYRot(), 0); level().addFreshEntity(e); }
+            });
+            Seats.stand(this);
+            discard();
+            return true;
+        }
+        setAge(age - 12);
+        illness = "";
+        removeEffect(MobEffects.WEAKNESS);
+        news(com.breachprotocol.career.WorldNews.Kind.TREATMENT, name() + " opened SCP-427 again. Twelve years gone from their face", -1);
+        return false;
+    }
+
+    private void die(String cause) {
+        news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + " (" + role().title + ") died " + cause + " at " + (int) age, -2);
+        tellNearby(name() + " has died " + cause + ", aged " + (int) age + ".", ChatFormatting.GRAY);
+        if (level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL, getX(), getY() + 1, getZ(), 12, 0.3, 0.5, 0.3, 0.02);
+            if (post != null) Hires.schedule(sl, post, role());
+        }
+        Seats.stand(this);
+        discard();
+    }
+
+    /** Someone hands them a remedy. Returns true if the offer was understood. */
+    private boolean offered(ServerPlayer p, ItemStack held) {
+        String id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(held.getItem()).toString();
+        String line;
+        if (id.equals("scp_unleashed:scp500_pill")) {
+            if (illness.isEmpty()) line = "I'm not sick. Save it for someone who is.";
+            else { line = "SCP-500? For me? ...I can breathe again. Thank you."; illness = ""; removeEffect(MobEffects.WEAKNESS); held.shrink(1); }
+        } else if (id.equals("scp_unleashed:scp006_bucket")) {
+            if (age < 35) line = "I'm young enough, thanks. Give it to someone who needs the years.";
+            else {
+                setAge(age - 15);
+                line = "It tastes like nothing. Like cold air. ...Oh. Oh, my hands.";
+                held.shrink(1);
+                p.getInventory().add(new ItemStack(net.minecraft.world.item.Items.BUCKET));
+                news(com.breachprotocol.career.WorldNews.Kind.TREATMENT, name() + " was given SCP-006 by " + p.getGameProfile().getName(), 1);
+            }
+        } else if (id.equals("scp_unleashed:scp427_locket")) {
+            say(p, "The locket... just for a moment.");
+            if (!wearLocket()) say(p, "There. I feel twenty years younger. Take it back before I want to keep it.");
+            return true;
+        } else if (held.is(com.breachprotocol.registry.ModItems.FRUIT_OF_LIFE.get())) {
+            setAge(age - 25);
+            illness = "";
+            removeEffect(MobEffects.WEAKNESS);
+            line = "Where did you get this? ...I feel like I've just woken up.";
+            held.shrink(1);
+        } else if (held.is(net.minecraft.world.item.Items.GOLDEN_APPLE)) {
+            heal(getMaxHealth());
+            line = "For me? That's kind of you.";
+            held.shrink(1);
+        } else return false;
+        say(p, line);
+        return true;
+    }
+
     private String name() { return getCustomName() == null ? role().title : getCustomName().getString(); }
 
     @Override
@@ -132,6 +283,17 @@ public class FoundationStaff extends PathfinderMob {
         super.aiStep();
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
         if (level().isClientSide || tickCount % 20 != 0) return;
+        if (tickCount % 200 == 0 && !getTags().contains(com.breachprotocol.career.RiftTeams.CREW_TAG)) {
+            setAge(age + 200.0 / YEAR);
+            if ((int) age != lastYear) {
+                boolean first = lastYear < 0;
+                lastYear = (int) age;
+                if (!first) birthday();
+                if (isRemoved()) return;
+            }
+            if (!illness.isEmpty() && random.nextInt(6) == 0 && level() instanceof net.minecraft.server.level.ServerLevel sl)
+                sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SNEEZE, getX(), getEyeY(), getZ(), 3, 0.1, 0.1, 0.1, 0.02);
+        }
         if (sitTarget != null) {
             if (++sitTries > 20 || Seats.seated(this)) sitTarget = null;
             else if (position().distanceToSqr(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5) < 2.6) { Seats.sit(this, sitTarget); sitTarget = null; }
@@ -180,6 +342,7 @@ public class FoundationStaff extends PathfinderMob {
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND || !(player instanceof ServerPlayer p)) return InteractionResult.sidedSuccess(level().isClientSide);
+        if (!p.getMainHandItem().isEmpty() && offered(p, p.getMainHandItem())) return InteractionResult.SUCCESS;
         if (!p.isShiftKeyDown()) { Talk.open(p, this); return InteractionResult.SUCCESS; }
         getLookControl().setLookAt(p, 30, 30);
         Rank r = Career.rank(p);
@@ -215,6 +378,12 @@ public class FoundationStaff extends PathfinderMob {
         tag.putInt("Variant", entityData.get(VARIANT));
         if (post != null) { tag.putInt("PostX", post.getX()); tag.putInt("PostY", post.getY()); tag.putInt("PostZ", post.getZ()); }
         tag.putString("Mode", mode);
+        tag.putDouble("Age", age);
+        tag.putInt("LastYear", lastYear);
+        tag.putString("Illness", illness);
+        tag.putInt("Locket", locketUses);
+        tag.putDouble("Fountain", fountainAt);
+        tag.putBoolean("Declined", declined);
         if (leader != null) tag.putUUID("Leader", leader);
         if (stayAt != null) { tag.putInt("StayX", stayAt.getX()); tag.putInt("StayY", stayAt.getY()); tag.putInt("StayZ", stayAt.getZ()); }
     }
@@ -226,6 +395,12 @@ public class FoundationStaff extends PathfinderMob {
         entityData.set(VARIANT, tag.getInt("Variant"));
         if (tag.contains("PostX")) { post = new BlockPos(tag.getInt("PostX"), tag.getInt("PostY"), tag.getInt("PostZ")); restrictTo(post, 12); }
         if (tag.contains("Mode")) mode = tag.getString("Mode");
+        if (tag.contains("Age")) setAge(tag.getDouble("Age"));
+        lastYear = tag.contains("LastYear") ? tag.getInt("LastYear") : (int) age;
+        illness = tag.getString("Illness");
+        locketUses = tag.getInt("Locket");
+        fountainAt = tag.contains("Fountain") ? tag.getDouble("Fountain") : -100;
+        declined = tag.getBoolean("Declined");
         if (tag.hasUUID("Leader")) leader = tag.getUUID("Leader");
         if (tag.contains("StayX")) { stayAt = new BlockPos(tag.getInt("StayX"), tag.getInt("StayY"), tag.getInt("StayZ")); if ("stay".equals(mode)) restrictTo(stayAt, 1); }
         if ("follow".equals(mode)) clearRestriction();

@@ -41,6 +41,15 @@ public class O5MemberEntity extends PathfinderMob {
     private boolean unseated;
     private long holdUntil;
     private java.util.UUID leader;
+    /** Overseers age too: slowly while their SCP-006 treatments continue, normally once they leave the Council. */
+    private double age = -1;
+    private int lastYear = -1;
+
+    public int age() { return (int) Math.max(0, age); }
+
+    private static int startAge(int seat) {
+        return switch (seat) { case 1 -> 148; case 2 -> 94; case 3 -> 117; case 7 -> 112; case 9 -> 131; case 10 -> 160; default -> 70 + seat * 4; };
+    }
 
     /** The Administrator can ask an Overseer to walk with them (null: back to their seat). */
     public void follow(Player p) {
@@ -108,7 +117,26 @@ public class O5MemberEntity extends PathfinderMob {
     @Override
     public void aiStep() {
         super.aiStep();
-        if (!level().isClientSide && tickCount % 200 == 0) restrict();
+        if (!level().isClientSide && tickCount % 200 == 0) {
+            restrict();
+            if (age < 0 && getSeat() != null) age = startAge(getSeat().seat);
+            // on the Council: a year every ten days (the Fountain); off it: a year a day, like anyone
+            age += 200.0 / (unseated ? 24000.0 : 240000.0);
+            if ((int) age != lastYear) {
+                boolean first = lastYear < 0;
+                lastYear = (int) age;
+                if (!first && unseated && age >= 100 && random.nextFloat() < 0.05F + (float) (age - 100) * 0.01F) {
+                    if (level().getServer() != null)
+                        com.breachprotocol.career.WorldNews.record(level().getServer(), com.breachprotocol.career.WorldNews.Kind.DEATH, "o5",
+                                getSeat().sender() + ", without the Council's treatments, died at " + (int) age, -3, "");
+                    for (Player p : level().players()) if (p.distanceTo(this) < 32)
+                        p.sendSystemMessage(Component.literal(getSeat().sender() + " has died. Without the Fountain, the years caught up all at once.").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+                    Seats.stand(this);
+                    discard();
+                    return;
+                }
+            }
+        }
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); }
     }
 
@@ -172,6 +200,8 @@ public class O5MemberEntity extends PathfinderMob {
         tag.putInt("Seat", this.entityData.get(SEAT));
         if (home != null) { tag.putInt("HomeX", home.getX()); tag.putInt("HomeY", home.getY()); tag.putInt("HomeZ", home.getZ()); }
         tag.putBoolean("Unseated", unseated);
+        tag.putDouble("Age", age);
+        tag.putInt("LastYear", lastYear);
     }
 
     @Override
@@ -180,6 +210,8 @@ public class O5MemberEntity extends PathfinderMob {
         if (tag.contains("Seat")) this.entityData.set(SEAT, tag.getInt("Seat"));
         if (tag.contains("HomeX")) home = new BlockPos(tag.getInt("HomeX"), tag.getInt("HomeY"), tag.getInt("HomeZ"));
         unseated = tag.getBoolean("Unseated");
+        age = tag.contains("Age") ? tag.getDouble("Age") : -1;
+        lastYear = tag.contains("LastYear") ? tag.getInt("LastYear") : -1;
         restrict();
     }
 }

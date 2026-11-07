@@ -8,14 +8,18 @@ import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
 import net.minecraft.resources.ResourceLocation;
 
-/** Foundation personnel: a humanoid in their department's uniform (three looks per department). */
+/** Foundation personnel: a humanoid in their department's uniform (three looks per department, grey-haired when old). */
 public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, HumanoidModel<FoundationStaff>> {
     private static final ResourceLocation[][] SKINS = new ResourceLocation[FoundationStaff.Role.values().length][3];
+    private static final ResourceLocation[][] OLD = new ResourceLocation[FoundationStaff.Role.values().length][3];
 
     static {
         for (FoundationStaff.Role r : FoundationStaff.Role.values())
             for (int v = 0; v < 3; v++)
+            {
                 SKINS[r.ordinal()][v] = BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + ".png");
+                OLD[r.ordinal()][v] = BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + "_old.png");
+            }
     }
 
     public StaffRenderer(EntityRendererProvider.Context ctx) {
@@ -24,6 +28,6 @@ public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, Humanoid
 
     @Override
     public ResourceLocation getTextureLocation(FoundationStaff e) {
-        return SKINS[e.role().ordinal()][Math.floorMod(e.variant(), 3)];
+        return (e.elder() ? OLD : SKINS)[e.role().ordinal()][Math.floorMod(e.variant(), 3)];
     }
 }

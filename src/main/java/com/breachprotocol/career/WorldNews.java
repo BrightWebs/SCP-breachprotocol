@@ -17,7 +17,7 @@ import java.util.*;
 public final class WorldNews {
     private WorldNews() {}
 
-    public enum Kind { DECISION, BREACH, RIFT_CLOSED, RIFT_LOST, MTF, SHYGUY_CALMED, SHYGUY_KILLED, BANISHED, KNOWLEDGE, PROMOTION, SEAT_VOTE }
+    public enum Kind { DECISION, BREACH, RIFT_CLOSED, RIFT_LOST, MTF, SHYGUY_CALMED, SHYGUY_KILLED, BANISHED, KNOWLEDGE, PROMOTION, SEAT_VOTE, AGING, TREATMENT, DEATH, HIRE }
 
     /** One event. {@code mood} is how good it was for the Foundation (-10..10), {@code supporters} the Overseer seats that backed it. */
     public record Item(Kind kind, String id, String headline, int mood, long time, String who, Set<Integer> supporters) {}

@@ -175,6 +175,13 @@ public final class Talk {
             };
         }
         if (Career.isAscended(p)) return pick(r, "I'm... fine. I'm fine. Please don't look at me like that.", "Everything is very good. Is that what you want to hear?");
+        if (!s.illness().isEmpty()) return pick(r, "Honestly? I've got " + s.illness() + ". Medical says it'll pass. Medical says a lot of things.",
+                "Not well. " + Character.toUpperCase(s.illness().charAt(0)) + s.illness().substring(1) + ". If you've got any SCP-500 spare...",
+                "I've had " + s.illness() + " for days. Still came in. Somebody has to.");
+        if (s.age() >= 80) return pick(r, "At my age every morning is a small anomaly.", "I'm " + s.age() + ". I've outlived three site directors and a Keter.",
+                "The Fountain? I've thought about it. I'm not sure I want to be young again.");
+        if (s.age() >= 65 && r.nextInt(3) == 0) return pick(r, "My knees know when a breach is coming. They're quiet today.", "Retirement? Nobody retires from the Foundation. We just slow down.",
+                "I remember when this site was a hole in the ground.");
         if (p.getHealth() < 6) return s.role() == FoundationStaff.Role.MEDIC ? "Never mind me, look at you. Hold still." : "You're bleeding. Medical's on the second floor.";
         if (armed(p) && Career.rank(p).ordinal() < Rank.LEVEL_3.ordinal()) return "Why are you armed? Put that away before security sees it.";
         WorldNews.Item last = WorldNews.latest(srv);
@@ -271,7 +278,8 @@ public final class Talk {
 
     public static void open(ServerPlayer p, FoundationStaff s) {
         String name = s.getName().getString();
-        p.sendSystemMessage(Component.literal("— " + name + ", " + s.role().title + ", " + years(s) + " years with the Foundation —").withStyle(ChatFormatting.DARK_AQUA));
+        p.sendSystemMessage(Component.literal("— " + name + ", " + s.role().title + ", age " + s.age() + ", " + Math.min(years(s), Math.max(1, s.age() - 21)) + " years with the Foundation"
+                + (s.illness().isEmpty() ? "" : ", unwell") + " —").withStyle(ChatFormatting.DARK_AQUA));
         say(p, s, howAreThings(s, p));
         String id = " " + s.getId() + " ";
         MutableComponent m = Component.literal("  ")
@@ -284,7 +292,7 @@ public final class Talk {
 
     public static void openO5(ServerPlayer p, O5MemberEntity m) {
         O5 me = m.getSeat();
-        p.sendSystemMessage(Component.literal("— " + me.sender() + " —").withStyle(ChatFormatting.DARK_RED));
+        p.sendSystemMessage(Component.literal("— " + me.sender() + ", age " + m.age() + (m.isUnseated() ? ", no longer on the Council" : "") + " —").withStyle(ChatFormatting.DARK_RED));
         String id = " " + m.getId() + " ";
         MutableComponent c = Component.literal("  ")
                 .append(button("Your vote", "/talk" + id + "vote", "How they voted on the latest decision", ChatFormatting.WHITE)).append(" ")
@@ -324,6 +332,8 @@ public final class Talk {
         WorldNews.Item breach = WorldNews.latest(p.server, WorldNews.Kind.BREACH);
         if (breach != null && p.server.overworld().getGameTime() - breach.time() < 48000) return "The breach. " + breach.headline() + ". One breach is an accident. Two is a pattern.";
         int st = Career.data(p).stability;
+        WorldNews.Item death = WorldNews.latest(p.server, WorldNews.Kind.DEATH);
+        if (death != null && p.server.overworld().getGameTime() - death.time() < 24000) return "We lost someone today: " + death.headline() + ". We don't all have the Fountain.";
         if (st < 40) return "Stability is at " + st + "%. We're one bad night from losing a site.";
         if (st > 85) return "Things are too calm. In my experience, that's when something is building.";
         return pick(r, "The Insurgency has been quiet. They are never quiet for long.", "The Gate. Always the Gate.", "Budget. You'd be amazed how many apocalypses come down to budget.");
