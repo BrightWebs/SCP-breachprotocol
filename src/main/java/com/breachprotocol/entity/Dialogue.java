@@ -22,6 +22,7 @@ public final class Dialogue {
         final Deque<CompoundTag> lines = new ArrayDeque<>();
         final List<CompoundTag> options = new ArrayList<>();
         String input = "";
+        boolean hud;
     }
 
     private static final Map<UUID, State> STATES = new HashMap<>();
@@ -38,7 +39,11 @@ public final class Dialogue {
         s.entity = entityId;
         s.options.clear();
         s.input = "";
+        s.hud = false;
     }
+
+    /** This conversation runs as an overlay; the window opens only for choices. */
+    public static void hud(ServerPlayer p, boolean on) { st(p).hud = on; }
 
     public static void entity(ServerPlayer p, int id) { st(p).entity = id; }
 
@@ -87,6 +92,7 @@ public final class Dialogue {
         t.put("options", o);
         t.putString("input", s.input);
         t.putBoolean("open", open);
+        t.putBoolean("hud", s.hud);
         PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
     }
 

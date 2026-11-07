@@ -40,9 +40,23 @@ public class DialogueScreen extends Screen {
     /** A window update from the server. */
     public static void received(CompoundTag tag) {
         Minecraft mc = Minecraft.getInstance();
+        if (tag.getBoolean("desktop")) { mc.setScreen(new PhoneScreen(true)); return; }
         if (tag.getBoolean("close")) {
+            if (DialogueHud.hud != null && DialogueHud.hud.getString("session").equals(tag.getString("session"))) DialogueHud.hud = null;
             if (mc.screen instanceof DialogueScreen d && d.data.getString("session").equals(tag.getString("session")))
                 d.closeQuietly();
+            return;
+        }
+        if (tag.getBoolean("hud")) {
+            // the overlay carries the session; the window only while there's a choice to make
+            DialogueHud.hud = tag;
+            boolean choice = !tag.getList("options", Tag.TAG_COMPOUND).isEmpty();
+            if (mc.screen instanceof DialogueScreen d) {
+                if (choice) d.update(tag);
+                else d.closeQuietly();
+            } else if (choice && mc.screen == null) {
+                mc.setScreen(new DialogueScreen(tag));
+            }
             return;
         }
         if (mc.screen instanceof DialogueScreen d) {
@@ -60,6 +74,8 @@ public class DialogueScreen extends Screen {
         scroll = 0;
         rebuildWidgets();
     }
+
+    static DialogueScreen open(CompoundTag tag) { return new DialogueScreen(tag); }
 
     @Override
     public boolean isPauseScreen() { return false; }
@@ -140,7 +156,8 @@ public class DialogueScreen extends Screen {
 
     @Override
     public void onClose() {
-        PacketDistributor.sendToServer(new DialogueActionPayload("close", ""));
+        // closing the window during a council session only hides it (the session goes on in the corner)
+        if (!data.getBoolean("hud")) PacketDistributor.sendToServer(new DialogueActionPayload("close", ""));
         super.onClose();
     }
 

@@ -141,7 +141,7 @@ public final class Talk {
 
     // ================================================================== reading the moment
 
-    private static boolean armed(Player p) {
+    static boolean armed(Player p) {
         ItemStack s = p.getMainHandItem();
         if (s.isEmpty()) return false;
         String id = BuiltInRegistries.ITEM.getKey(s.getItem()).getPath();
@@ -149,15 +149,15 @@ public final class Talk {
                 || id.contains("bow") || id.contains("grenade") || id.contains("trident") || id.contains("spear");
     }
 
-    private static Mob anomalyNear(Entity e, double r) {
+    static Mob anomalyNear(Entity e, double r) {
         for (Mob m : e.level().getEntitiesOfClass(Mob.class, e.getBoundingBox().inflate(r), Unleashed::isAnomaly))
             if (!Unleashed.isContained(m)) return m;
         return null;
     }
 
-    private static boolean night(Level l) { long t = l.getDayTime() % 24000; return t > 13000 && t < 23000; }
+    static boolean night(Level l) { long t = l.getDayTime() % 24000; return t > 13000 && t < 23000; }
 
-    private static String pick(Random r, String... s) { return s[r.nextInt(s.length)]; }
+    static String pick(Random r, String... s) { return s[r.nextInt(s.length)]; }
 
     /** How they're doing, given everything. */
     public static String howAreThings(FoundationStaff s, ServerPlayer p) {
@@ -204,7 +204,7 @@ public final class Talk {
         };
     }
 
-    private static boolean topBrass(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
+    static boolean topBrass(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
 
     /** Whether a piece of news is about the person they're talking to (gossip about them stays between staff). */
     static boolean mine(WorldNews.Item i, ServerPlayer p) {
@@ -229,7 +229,7 @@ public final class Talk {
     }
 
     /** Their opinion of a piece of news. */
-    private static String opinion(Temper t, int mood, Random r) {
+    static String opinion(Temper t, int mood, Random r) {
         if (mood > 2) return switch (t) {
             case BOLD -> pick(r, "About time.", "That's how you run a Foundation.");
             case CAREFUL -> pick(r, "Good. I'll sleep better.", "Sensible. Very sensible.");
@@ -296,24 +296,24 @@ public final class Talk {
 
     // ================================================================== the window
 
-    private static final int STAFF_C = 0x66CCFF, O5_C = 0xE05050, YOU_C = 0xB8E07A, ORDER_C = 0xFFC94D;
+    static final int STAFF_C = 0x66CCFF, O5_C = 0xE05050, YOU_C = 0xB8E07A, ORDER_C = 0xFFC94D;
 
     private static String sess(Entity e) { return "npc:" + e.getId(); }
 
-    private static void say(ServerPlayer p, Entity who, String line) {
+    static void say(ServerPlayer p, Entity who, String line) {
         Dialogue.line(p, who.getName().getString(), line, who instanceof O5MemberEntity ? O5_C : STAFF_C);
         if (who instanceof Mob m) m.getLookControl().setLookAt(p, 30, 30);
     }
 
-    private static void you(ServerPlayer p, String line) { Dialogue.line(p, "You", line, YOU_C); }
+    static void you(ServerPlayer p, String line) { Dialogue.line(p, "You", line, YOU_C); }
 
-    private static void note(ServerPlayer p, String line) { Dialogue.line(p, "", line, 0); }
+    static void note(ServerPlayer p, String line) { Dialogue.line(p, "", line, 0); }
 
-    private static void opt(ServerPlayer p, Entity e, String label, String what, String hover, int c) {
+    static void opt(ServerPlayer p, Entity e, String label, String what, String hover, int c) {
         Dialogue.option(p, label, "/talk " + e.getId() + " " + what, hover, c);
     }
 
-    private static String staffSubtitle(FoundationStaff s) {
+    static String staffSubtitle(FoundationStaff s) {
         return s.role().title + " · age " + s.age() + " · " + Math.min(years(s), Math.max(1, s.age() - 21)) + " years with the Foundation"
                 + (s.illness().isEmpty() ? "" : " · unwell");
     }
@@ -328,7 +328,8 @@ public final class Talk {
         else if (e instanceof O5MemberEntity m) Dialogue.begin(p, sess(e), m.getSeat() == null ? m.getName().getString() : m.getSeat().sender(), o5Subtitle(m), e.getId());
     }
 
-    private static void mainMenu(ServerPlayer p, Entity e) {
+    static void mainMenu(ServerPlayer p, Entity e) {
+        if (e instanceof FoundationStaff fs) { Convo.menu(p, fs); return; }
         Dialogue.clearOptions(p);
         if (e instanceof FoundationStaff) {
             opt(p, e, "How are things?", "how", "Ask how they're doing", 0);
@@ -399,7 +400,7 @@ public final class Talk {
 
     // ================================================================== orders
 
-    private static boolean mayCommand(ServerPlayer p, Entity who) {
+    static boolean mayCommand(ServerPlayer p, Entity who) {
         Rank r = Career.rank(p);
         if (Career.isAscended(p) || r.atLeast(Rank.OVERSEER)) return true;
         if (who instanceof O5MemberEntity) return false;
@@ -411,7 +412,7 @@ public final class Talk {
     }
 
     /** Shows the orders choices (or a refusal). Returns false if refused. */
-    private static boolean orders(ServerPlayer p, Entity who) {
+    static boolean orders(ServerPlayer p, Entity who) {
         if (!mayCommand(p, who)) {
             Rank r = Career.rank(p);
             say(p, who, r == Rank.CLASS_D ? "You don't give orders, D-Class. Back to your block." : "With respect, you don't have the clearance to give me orders.");
@@ -441,7 +442,7 @@ public final class Talk {
         return true;
     }
 
-    private static void job(ServerPlayer p, FoundationStaff s) {
+    static void job(ServerPlayer p, FoundationStaff s) {
         switch (s.role()) {
             case MEDIC -> {
                 p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 20 * 12, 1));
@@ -512,6 +513,10 @@ public final class Talk {
 
     private static void handle(ServerPlayer p, Entity e, String what) {
         ensure(p, e);
+        if (e instanceof FoundationStaff fs && Convo.handle(p, fs, what)) {
+            Dialogue.send(p, true);
+            return;
+        }
         String asked = ASKED.get(what);
         if (asked != null) you(p, e instanceof O5MemberEntity && what.equals("post") ? "Return to your seat." : e instanceof O5MemberEntity && what.equals("follow") ? "Walk with me." : asked);
         boolean showOrders = false;

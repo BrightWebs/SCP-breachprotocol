@@ -71,6 +71,8 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Random;
 
@@ -823,12 +825,66 @@ public final class Garden {
         if (!p.isSleeping()) p.startSleeping(head);
     }
 
+    /** Chunks past the edge already checked to be empty this session. */
+    private static final Set<Long> VOID_CHECKED = new HashSet<>();
+
+    /**
+     * Past the edge there is nothing. Chunk loading trims new ground, but anything that slips
+     * through (chunks from older versions, ground generated before the trim could run) is swept
+     * away here, a chunk at a time, around everyone in the Garden.
+     */
+    private static void sweepVoid(ServerLevel g) {
+        int budget = 2;
+        for (ServerPlayer p : g.players()) {
+            int pcx = p.chunkPosition().x, pcz = p.chunkPosition().z;
+            for (int r = 0; r <= 12 && budget > 0; r++) {
+                for (int dx = -r; dx <= r && budget > 0; dx++) for (int dz = -r; dz <= r && budget > 0; dz++) {
+                    if (Math.max(Math.abs(dx), Math.abs(dz)) != r) continue;
+                    int cx = pcx + dx, cz = pcz + dz;
+                    long key = net.minecraft.world.level.ChunkPos.asLong(cx, cz);
+                    if (VOID_CHECKED.contains(key)) continue;
+                    int x0 = cx << 4, z0 = cz << 4;
+                    // only chunks that reach past the edge
+                    if (!beyondEdge(x0, z0) && !beyondEdge(x0 + 15, z0) && !beyondEdge(x0, z0 + 15) && !beyondEdge(x0 + 15, z0 + 15)) { VOID_CHECKED.add(key); continue; }
+                    if (!g.hasChunk(cx, cz)) continue;
+                    net.minecraft.world.level.chunk.LevelChunk c = g.getChunk(cx, cz);
+                    boolean changed = false;
+                    BlockPos.MutableBlockPos m = new BlockPos.MutableBlockPos();
+                    BlockState air = Blocks.AIR.defaultBlockState();
+                    for (int lx = 0; lx < 16; lx++) for (int lz = 0; lz < 16; lz++) {
+                        int x = x0 + lx, z = z0 + lz;
+                        if (!beyondEdge(x, z)) continue;
+                        int top = Math.max(c.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, lx, lz), g.getMinBuildHeight());
+                        for (int y = g.getMinBuildHeight(); y <= top + 1; y++) {
+                            m.set(x, y, z);
+                            if (!c.getBlockState(m).isAir()) { c.setBlockState(m, air, false); changed = true; }
+                        }
+                    }
+                    if (changed) {
+                        c.setUnsaved(true);
+                        // resend the emptied chunk to everyone who can see it
+                        net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket pk =
+                                new net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket(c, g.getLightEngine(), null, null);
+                        for (ServerPlayer q : g.getChunkSource().chunkMap.getPlayers(c.getPos(), false)) q.connection.send(pk);
+                        for (net.minecraft.world.entity.Entity e : g.getEntitiesOfClass(net.minecraft.world.entity.Entity.class,
+                                new net.minecraft.world.phys.AABB(x0, g.getMinBuildHeight(), z0, x0 + 16, g.getMaxBuildHeight(), z0 + 16),
+                                e -> !(e instanceof net.minecraft.world.entity.player.Player) && beyondEdge(e.getBlockX(), e.getBlockZ())))
+                            e.discard();
+                    }
+                    VOID_CHECKED.add(key);
+                    budget--;
+                }
+            }
+        }
+    }
+
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
         MinecraftServer s = event.getServer();
-        if (s.getTickCount() % 10 != 0) return;
         ServerLevel g = s.getLevel(KEY);
         if (g == null) return;
+        if (!g.players().isEmpty()) sweepVoid(g);
+        if (s.getTickCount() % 10 != 0) return;
         int ground = data(g).ground;
         afterTick(g);
         for (ServerPlayer p : g.players()) {

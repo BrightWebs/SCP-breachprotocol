@@ -31,15 +31,17 @@ import java.util.function.IntPredicate;
  * (carried or fused) and your career rank. Drawn immediate-mode in phone-local pixels and scaled.
  */
 public class PhoneScreen extends Screen {
-    private static final int PW = 176, PH = 344, BZ = 7;
-    private static final int SX = BZ, SY = BZ, SW = PW - BZ * 2, SH = PH - BZ * 2;
+    /** The Administrator's computer: the same system on a wide monitor, with the command apps. */
+    private final boolean desktop;
+    private final int PW, PH, BZ;
+    private final int SX, SY, SW, SH;
     private static final int STATUS = 14, NAV = 22, HEADER = 22;
     private static final int TEAL = 0xFF3FD0FF, AMBER = 0xFFF2A93B, RED = 0xFFE5484D, BG = 0xFF0B1118, CARD = 0xFF141B24, MUTED = 0xFF8FA3B5;
 
     private static final ResourceLocation WALLPAPER = tex("wallpaper");
     private static ResourceLocation tex(String n) { return BreachProtocol.id("textures/gui/phone/" + n + ".png"); }
 
-    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE }
+    private enum View { HOME, RECENTS, MAP, ANOMALY, MESSAGES, THREAD, MISSIONS, CALL, CAMERA, GALLERY, PHOTO, ARCHIVE, FILE, CONTAINMENT, PERSONNEL, SETTINGS, COMMAND, NETWORK, SITE, FORCES, SECURITY }
 
     private record App(String icon, String label, View view, int accent, IntPredicate allowed) {}
 
@@ -56,7 +58,9 @@ public class PhoneScreen extends Screen {
     private static final App SITE = new App("app_site01", "Site-01", View.SITE, 0xFF7A35C4, c -> false);
     private static final App SETTINGS = new App("app_settings", "Settings", View.SETTINGS, 0xFF4A525E, c -> true);
     private static final App MAP = new App("app_map", "Map", View.MAP, 0xFF2E8F4A, c -> true);
-    private static final List<App> GRID = List.of(CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
+    private static final App FORCES = new App("app_forces", "Recruitment", View.FORCES, 0xFF2E8F4A, c -> false);
+    private static final App SECURITY = new App("app_security", "Site Security", View.SECURITY, 0xFFA8323A, c -> false);
+    private static final List<App> GRID = List.of(FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
     private static final List<App> DOCK = List.of(PHONE, MESSAGES, MISSIONS, CAMERA);
 
     private static final Deque<App> RECENT = new ArrayDeque<>();
@@ -77,9 +81,28 @@ public class PhoneScreen extends Screen {
     private final List<Hit> hits = new ArrayList<>();
     private int mouseLX, mouseLY;
 
-    public PhoneScreen() {
-        super(Component.literal("Foundation Phone"));
+    public PhoneScreen() { this(false); }
+
+    public PhoneScreen(boolean desktop) {
+        super(Component.literal(desktop ? "Foundation Terminal" : "Foundation Phone"));
+        this.desktop = desktop;
+        PW = desktop ? 480 : 176;
+        PH = desktop ? 300 : 344;
+        BZ = desktop ? 10 : 7;
+        SX = BZ;
+        SY = BZ;
+        SW = PW - BZ * 2;
+        SH = PH - BZ * 2;
         if (t().contains("callText")) view = View.CALL;
+    }
+
+    private int refreshIn;
+
+    @Override
+    public void tick() {
+        super.tick();
+        // the command apps show live numbers
+        if ((view == View.FORCES || view == View.SECURITY) && --refreshIn <= 0) { refreshIn = 40; send("refresh", 0); }
     }
 
     private static CompoundTag t() { return ClientCareerState.tag; }
@@ -88,7 +111,13 @@ public class PhoneScreen extends Screen {
 
     private static boolean allowed(App a) {
         if (a == SITE) return rank() >= 7;
+        if (a == FORCES || a == SECURITY) return false; // checked per screen in allowedHere
         return a.allowed().test(clr());
+    }
+
+    private boolean allowedHere(App a) {
+        if (a == FORCES || a == SECURITY) return desktop && (rank() >= 7 || t().getBoolean("ascended"));
+        return allowed(a);
     }
 
     private static void send(String action, int arg) {
@@ -338,6 +367,8 @@ public class PhoneScreen extends Screen {
             case NETWORK -> NETWORK;
             case SITE -> SITE;
             case MAP -> MAP;
+            case FORCES -> FORCES;
+            case SECURITY -> SECURITY;
             default -> null;
         };
     }
@@ -352,16 +383,16 @@ public class PhoneScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         renderBackground(g, mouseX, mouseY, partialTick);
-        scale = Math.min(1.3F, (height - 12) / (float) PH);
+        scale = desktop ? Math.min(2.0F, Math.min((height - 34) / (float) PH, (width - 16) / (float) PW)) : Math.min(1.3F, (height - 12) / (float) PH);
         ox = (int) ((width - PW * scale) / 2);
-        oy = (int) ((height - PH * scale) / 2);
+        oy = (int) ((height - (desktop ? PH + 22 : PH) * scale) / 2);
         mouseLX = (int) ((mouseX - ox) / scale);
         mouseLY = (int) ((mouseY - oy) / scale);
         hits.clear();
         hover = "";
         // apps you lose clearance for close themselves
         App cur = appFor(view);
-        if (cur != null && !allowed(cur)) goHome();
+        if (cur != null && !allowedHere(cur)) goHome();
 
         g.pose().pushPose();
         g.pose().translate(ox, oy, 0);
@@ -369,11 +400,21 @@ public class PhoneScreen extends Screen {
 
         // the hardware keeps its real look
         RAW = true;
-        rrect(g, -2, -2, PW + 4, PH + 4, 26, 0xFF2A2E37);
-        rrect(g, 0, 0, PW, PH, 24, 0xFF1A1D24);
-        rect(g, -3, 74, 2, 24, 0xFF2A2E37);
-        rect(g, PW + 1, 90, 2, 34, 0xFF2A2E37);
-        rrect(g, SX, SY, SW, SH, 18, Terminal.BG);
+        if (desktop) {
+            // a monitor on a stand
+            rect(g, PW / 2 - 18, PH, 36, 14, 0xFF22262E);
+            rrect(g, PW / 2 - 60, PH + 13, 120, 8, 3, 0xFF2A2E37);
+            rrect(g, -3, -3, PW + 6, PH + 6, 8, 0xFF2A2E37);
+            rrect(g, 0, 0, PW, PH, 6, 0xFF15181E);
+            rect(g, SX, SY, SW, SH, Terminal.BG);
+            circle(g, PW - 14, PH - 5, 2, 0xFF5BE36F);
+        } else {
+            rrect(g, -2, -2, PW + 4, PH + 4, 26, 0xFF2A2E37);
+            rrect(g, 0, 0, PW, PH, 24, 0xFF1A1D24);
+            rect(g, -3, 74, 2, 24, 0xFF2A2E37);
+            rect(g, PW + 1, 90, 2, 34, 0xFF2A2E37);
+            rrect(g, SX, SY, SW, SH, 18, Terminal.BG);
+        }
         RAW = false;
 
         scissor(g, SX, SY, SW, SH);
@@ -473,8 +514,8 @@ public class PhoneScreen extends Screen {
         }
 
         List<App> apps = new ArrayList<>();
-        for (App a : GRID) if (allowed(a) && !DOCK.contains(a)) apps.add(a);
-        int cols = 4, cell = (SW - 8) / cols;
+        for (App a : GRID) if (allowedHere(a) && !DOCK.contains(a)) apps.add(a);
+        int cols = desktop ? 9 : 4, cell = (SW - 8) / cols;
         App hovered = null;
         int hx = 0, hy = 0;
         for (int i = 0; i < apps.size(); i++) {
@@ -544,7 +585,7 @@ public class PhoneScreen extends Screen {
         textC(g, "Recent apps", SX + SW / 2, SY + 22, MUTED);
         int y = SY + 38;
         List<App> list = new ArrayList<>();
-        for (App a : RECENT) if (allowed(a)) list.add(a);
+        for (App a : RECENT) if (allowedHere(a)) list.add(a);
         if (list.isEmpty()) textC(g, "Nothing open yet.", SX + SW / 2, y + 40, 0xFF6F7C88);
         for (App a : list) {
             int x = SX + 10, w = SW - 20, h = 34;
@@ -617,6 +658,8 @@ public class PhoneScreen extends Screen {
             case COMMAND -> drawCommand(g, y0);
             case NETWORK -> drawNetwork(g, y0);
             case MAP -> drawMap(g, y0);
+            case FORCES -> drawForces(g, y0);
+            case SECURITY -> drawSecurity(g, y0);
             default -> drawSite(g, y0);
         };
     }
@@ -1851,5 +1894,138 @@ public class PhoneScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    // ---------------------------------------------------------------- Recruitment (computer only)
+
+    private int forceSite;
+
+    private int drawForces(GuiGraphics g, int y) {
+        ListTag sites = t().getList("forces", Tag.TAG_COMPOUND);
+        int x = SX + 6, w = SW - 12;
+        if (sites.isEmpty()) {
+            empty(g, y, "No sites", "Declare a site (Settings) or build one, then station personnel here.");
+            return y + 90;
+        }
+        forceSite = Mth.clamp(forceSite, 0, sites.size() - 1);
+        // the sites, as tabs
+        int tx = x;
+        for (int i = 0; i < sites.size(); i++) {
+            String n = sites.getCompound(i).getString("n");
+            int tw = Math.min(110, font.width(n) + 16);
+            final int idx = i;
+            boolean alert = sites.getCompound(i).contains("alert");
+            pill(g, tx, y, tw, 14, (i == forceSite ? "> " : "") + n, alert ? 0xFFA8323A : 0xFF2E9E57, true, () -> { forceSite = idx; scroll = 0; });
+            tx += tw + 4;
+            if (tx > x + w - 60) { tx = x; y += 18; }
+        }
+        y += 20;
+        CompoundTag site = sites.getCompound(forceSite);
+        int si = site.getInt("i");
+        ListTag units = site.getList("units", Tag.TAG_COMPOUND);
+        int have = 0, want = 0, coming = 0;
+        for (int u = 0; u < units.size(); u++) { have += units.getCompound(u).getInt("have"); want += units.getCompound(u).getInt("want"); coming += units.getCompound(u).getInt("coming"); }
+
+        card(g, x, y, w, 44);
+        text(g, site.getString("n") + " · armed personnel", x + 8, y + 5, 0xFFE8EEF4);
+        if (site.contains("alert"))
+            text(g, "UNDER ATTACK: " + site.getString("alert") + " · " + site.getInt("hostiles") + " hostiles · " + site.getInt("kills") + " killed", x + 8, y + 16, RED);
+        else
+            text(g, have + " on duty · " + want + " ordered" + (coming > 0 ? " · " + coming + " inbound" : "") + (site.getBoolean("ordered") ? "" : " · Council baseline"), x + 8, y + 16, MUTED);
+        long rev = t().getLong("review") / 20;
+        text(g, "O5 Council review in " + (rev >= 3600 ? rev / 3600 + "h " + rev % 3600 / 60 + "m" : rev / 60 + "m") + ": they bring every site to strength and replace the dead.", x + 8, y + 27, 0xFF7FD6FF);
+        y += 50;
+        int bw = (w - 8) / 2;
+        pill(g, x, y, bw, 16, "Auto-replace losses: " + (site.getBoolean("auto") ? "ON" : "OFF"), site.getBoolean("auto") ? 0xFF2E9E57 : 0xFF4A525E, true, () -> send("force_auto", si * 16));
+        pill(g, x + bw + 8, y, bw, 16, "Bring to full strength", 0xFF2E9E57, true, () -> send("force_fill", si * 16));
+        y += 22;
+
+        int cols = desktop ? 2 : 1, cw = (w - (cols - 1) * 6) / cols, ch = 66;
+        for (int u = 0; u < units.size(); u++) {
+            CompoundTag c = units.getCompound(u);
+            int cx = x + (u % cols) * (cw + 6), cy = y + (u / cols) * (ch + 6);
+            card(g, cx, cy, cw, ch);
+            text(g, c.getString("t"), cx + 7, cy + 5, 0xFFE8EEF4);
+            List<FormattedCharSequence> about = font.split(Component.literal(c.getString("a")), cw - 14);
+            if (!about.isEmpty()) g.drawString(font, about.get(0), cx + 7, cy + 16, Terminal.DIM, false);
+            int h = c.getInt("have"), wn = c.getInt("want"), cm = c.getInt("coming");
+            text(g, "On duty " + h + "  ·  Ordered " + wn + (cm > 0 ? "  ·  " + cm + " inbound" : ""), cx + 7, cy + 28, h < wn ? AMBER : 0xFF5BE36F);
+            final int arg = si * 16 + u;
+            pill(g, cx + 6, cy + 44, 18, 16, "-", 0xFF2E9E57, wn > 0, () -> send("force_dec", arg));
+            pill(g, cx + 28, cy + 44, 18, 16, "+", 0xFF2E9E57, wn < 24, () -> send("force_inc", arg));
+            int rest = cw - 58;
+            pill(g, cx + 50, cy + 44, rest / 2 - 2, 16, "Deploy", 0xFF2E9E57, h + cm < wn, () -> send("force_deploy", arg));
+            pill(g, cx + 50 + rest / 2 + 2, cy + 44, rest / 2 - 2, 16, "Stand down", 0xFFA8323A, h > wn, () -> send("force_dismiss", arg));
+        }
+        y += ((units.size() + cols - 1) / cols) * (ch + 6) + 4;
+
+        ListTag losses = site.getList("losses", Tag.TAG_STRING);
+        label(g, "Recent losses", x + 2, y);
+        y += 12;
+        if (losses.isEmpty()) { text(g, "None. Keep it that way.", x + 4, y, MUTED); y += 12; }
+        for (int i = 0; i < losses.size(); i++) { text(g, "† " + losses.getString(i), x + 4, y, 0xFFC8B0B0); y += 11; }
+        return y + 4;
+    }
+
+    // ---------------------------------------------------------------- Site Security (computer only)
+
+    private int drawSecurity(GuiGraphics g, int y) {
+        CompoundTag t = t();
+        int x = SX + 6, w = SW - 12;
+        ListTag alerts = t.getList("alerts", Tag.TAG_COMPOUND);
+        label(g, "Threat board", x + 2, y);
+        y += 12;
+        if (alerts.isEmpty()) {
+            card(g, x, y, w, 22);
+            text(g, "All sites secure. Guards are engaging hostile mobs on sight.", x + 8, y + 7, 0xFF5BE36F);
+            y += 28;
+        }
+        for (int i = 0; i < alerts.size(); i++) {
+            CompoundTag a = alerts.getCompound(i);
+            rbox(g, x, y, w, 24, 4, 0xFF2E0E0E, 0xFFB84848);
+            text(g, "⚠ " + a.getString("site") + ": " + a.getString("who") + " · " + a.getInt("n") + " hostiles on the grounds · " + a.getInt("k") + " neutralised", x + 8, y + 8, 0xFFFFB3B3);
+            y += 30;
+        }
+
+        label(g, "Organisations", x + 2, y);
+        y += 12;
+        ListTag orgs = t.getList("orgs", Tag.TAG_COMPOUND);
+        for (int i = 0; i < orgs.size(); i++) {
+            CompoundTag o = orgs.getCompound(i);
+            boolean inv = o.getBoolean("inv");
+            card(g, x, y, w, 22);
+            text(g, o.getString("n"), x + 8, y + 7, 0xFFE8EEF4);
+            text(g, inv ? "INVITED · guards hold fire" : "HOSTILE · shot on sight", x + 150, y + 7, inv ? 0xFF5BE36F : RED);
+            final int idx = i;
+            pill(g, x + w - 110, y + 3, 104, 16, inv ? "Declare hostile" : "Invite", inv ? 0xFFA8323A : 0xFF2E9E57, true, () -> send("def_invite", idx));
+            y += 26;
+        }
+        text(g, "Any other organisation that sets foot on a site is treated as hostile.", x + 4, y, MUTED);
+        y += 16;
+
+        label(g, "Personnel and visitors", x + 2, y);
+        y += 12;
+        ListTag ppl = t.getList("people", Tag.TAG_COMPOUND);
+        if (ppl.isEmpty()) { text(g, "No one else is online.", x + 4, y, MUTED); y += 14; }
+        for (int i = 0; i < ppl.size(); i++) {
+            CompoundTag o = ppl.getCompound(i);
+            boolean kos = o.getBoolean("kos");
+            card(g, x, y, w, 22);
+            text(g, o.getString("n"), x + 8, y + 7, 0xFFE8EEF4);
+            text(g, kos ? "KILL ON SIGHT" : "Cleared", x + 150, y + 7, kos ? RED : 0xFF5BE36F);
+            final int idx = i;
+            pill(g, x + w - 110, y + 3, 104, 16, kos ? "Clear them" : "Kill on sight", kos ? 0xFF2E9E57 : 0xFFA8323A, true, () -> send("def_kos", idx));
+            y += 26;
+        }
+        y += 4;
+        label(g, "Standing orders", x + 2, y);
+        y += 12;
+        for (String line : new String[]{"Creepers are engaged first, from range. Guards back off before they can blow.",
+                "Hostile mobs near any guard are shot. Neutral animals are left alone.",
+                "Anyone who shoots at our people is shot back. Never the Administrator.",
+                "SCP-096 is never looked at or fired on."}) {
+            y += wrap(g, "• " + line, x + 4, y, w - 8, 0xFFB8C8D0) + 2;
+        }
+        return y + 4;
     }
 }

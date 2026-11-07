@@ -66,7 +66,7 @@ public class O5MemberEntity extends PathfinderMob {
     public static AttributeSupplier.Builder createAttributes() {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 100)
-                .add(Attributes.MOVEMENT_SPEED, 0.22);
+                .add(Attributes.MOVEMENT_SPEED, 0.27);
     }
 
     @Override
@@ -207,6 +207,8 @@ public class O5MemberEntity extends PathfinderMob {
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
+        var spd = getAttribute(Attributes.MOVEMENT_SPEED);
+        if (spd != null && spd.getBaseValue() < 0.27) spd.setBaseValue(0.27);
         if (tag.contains("Seat")) this.entityData.set(SEAT, tag.getInt("Seat"));
         if (tag.contains("HomeX")) home = new BlockPos(tag.getInt("HomeX"), tag.getInt("HomeY"), tag.getInt("HomeZ"));
         unseated = tag.getBoolean("Unseated");

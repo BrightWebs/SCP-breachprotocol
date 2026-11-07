@@ -34,5 +34,7 @@
   "block.breachprotocol.fruit_date": "Dates",
   "block.breachprotocol.fruit_grapes": "Grapes",
   "block.breachprotocol.fruit_life": "Fruit of Life",
-  "block.breachprotocol.fruit_knowledge": "Fruit of Knowledge"
+  "block.breachprotocol.fruit_knowledge": "Fruit of Knowledge",
+  "key.breachprotocol.answer": "Answer the Council",
+  "key.categories.breachprotocol": "Breach Protocol"
 }

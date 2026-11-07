@@ -12,7 +12,8 @@ public final class PhoneActions {
 
     public static void handle(ServerPlayer p, String action, int arg) {
         // (Inventory.contains(ItemStack) compares components, so it missed phones with a fused card.)
-        if (!com.breachprotocol.career.Clearance.hasPhone(p)) return;
+        boolean desk = com.breachprotocol.career.Career.rank(p) == com.breachprotocol.career.Rank.ADMINISTRATOR || com.breachprotocol.career.Career.isAscended(p);
+        if (!desk && !com.breachprotocol.career.Clearance.hasPhone(p)) return;
         try {
             run(p, action, arg);
         } catch (Throwable t) {
@@ -30,6 +31,9 @@ public final class PhoneActions {
                 d.dirty = true;
             }
             case "answer" -> Calls.answer(p, arg);
+            case "force_inc", "force_dec", "force_deploy", "force_fill", "force_auto", "force_dismiss" -> com.breachprotocol.career.Forces.action(p, action, arg);
+            case "def_invite" -> com.breachprotocol.career.Defence.toggleInvite(p, arg);
+            case "def_kos" -> com.breachprotocol.career.Defence.toggleHostile(p, arg);
             case "submit" -> Career.submitSupply(p, arg);
             case "abandon" -> Career.abandon(p, arg);
             case "fuse" -> com.breachprotocol.career.Clearance.fuse(p);

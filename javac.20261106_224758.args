@@ -1,3 +1,5 @@
+-Xmaxerrs
+100000
 -proc:none
 -d
 /tmp/jc
@@ -10,10 +12,13 @@ src/main/java/com/breachprotocol/world/SiteTower.java
 src/main/java/com/breachprotocol/career/Calls.java
 src/main/java/com/breachprotocol/career/Directives.java
 src/main/java/com/breachprotocol/career/Contacts.java
+src/main/java/com/breachprotocol/career/Forces.java
 src/main/java/com/breachprotocol/career/BpCommands.java
 src/main/java/com/breachprotocol/career/SiteGuard.java
 src/main/java/com/breachprotocol/career/GatePass.java
 src/main/java/com/breachprotocol/career/PhotoStore.java
+src/main/java/com/breachprotocol/career/Defence.java
+src/main/java/com/breachprotocol/career/Desk.java
 src/main/java/com/breachprotocol/career/RiftTeams.java
 src/main/java/com/breachprotocol/career/Mission.java
 src/main/java/com/breachprotocol/career/O5.java
@@ -43,6 +48,7 @@ src/main/java/com/breachprotocol/entity/Talk.java
 src/main/java/com/breachprotocol/entity/Dialogue.java
 src/main/java/com/breachprotocol/entity/O5MemberEntity.java
 src/main/java/com/breachprotocol/entity/FollowGoal.java
+src/main/java/com/breachprotocol/entity/GuardGoal.java
 src/main/java/com/breachprotocol/entity/SitGoal.java
 src/main/java/com/breachprotocol/entity/Seats.java
 src/main/java/com/breachprotocol/entity/Names.java

@@ -186,14 +186,7 @@ public final class Council {
 
         void close() {
             for (O5MemberEntity m : members.values()) m.holdSeated(0);
-            if (Dialogue.active(p, "council")) {
-                if (Council.seatOf(l, p) < 0 && mustSit()) Dialogue.close(p);
-                else {
-                    Dialogue.clearOptions(p);
-                    Dialogue.option(p, "Leave the table", "close", "Close the window", 0x9AA4B2);
-                    Dialogue.send(p, false);
-                }
-            }
+            if (Dialogue.active(p, "council")) Dialogue.close(p);
             COOLDOWN.put(p.getUUID(), l.getGameTime() + 20 * 20);
         }
 
@@ -301,12 +294,19 @@ public final class Council {
         /** Opens the council window for the player at the table. */
         void window(String subtitle) {
             Dialogue.begin(p, "council", "The O5 Council · Site-01", subtitle, -1);
+            Dialogue.hud(p, true);
             Dialogue.send(p, true);
+        }
+
+        /** Turns the player in their chair to look down the table. */
+        void faceTable() {
+            net.minecraft.world.phys.Vec3 c = net.minecraft.world.phys.Vec3.atCenterOf(o.offset(29, 1, 9));
+            p.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, c);
         }
 
         /** Ready for a choice: reopens the window if the player closed it. */
         void reopen() {
-            if (!Dialogue.active(p, "council")) Dialogue.begin(p, "council", "The O5 Council · Site-01", "In session", -1);
+            if (!Dialogue.active(p, "council")) { Dialogue.begin(p, "council", "The O5 Council · Site-01", "In session", -1); Dialogue.hud(p, true); }
             Dialogue.clearOptions(p);
         }
 
@@ -344,6 +344,7 @@ public final class Council {
             gather();
             title("THE COUNCIL IS IN SESSION", admin ? "The Administrator presides" : "O5-13 takes their seat");
             window(admin ? "In session · the Administrator presides" : "In session · O5-13 is seated");
+            faceTable();
             p.playNotifySound(SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 0.8F, 0.6F);
             List<Integer> s = seated();
             int chair = s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0);

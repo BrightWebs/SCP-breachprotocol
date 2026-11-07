@@ -12,6 +12,7 @@ public class FollowGoal extends Goal {
     private final PathfinderMob mob;
     private final Supplier<Entity> leader;
     private int repath;
+    private double lastSpeed;
 
     public FollowGoal(PathfinderMob mob, Supplier<Entity> leader) {
         this.mob = mob;
@@ -42,17 +43,26 @@ public class FollowGoal extends Goal {
         Entity l = leader.get();
         if (l == null) return;
         mob.getLookControl().setLookAt(l, 30, 30);
-        if (mob.distanceToSqr(l) > 24 * 24) {
+        if (mob.distanceToSqr(l) > 20 * 20) {
             mob.teleportTo(l.getX(), l.getY(), l.getZ());
             mob.getNavigation().stop();
             return;
         }
-        if (--repath <= 0) {
-            repath = 10;
-            mob.getNavigation().moveTo(l, 1.1);
+        // keep pace with the leader: walk when they walk, run when they run
+        double leaderSpeed = l.getDeltaMovement().horizontalDistance() * 20; // blocks per second
+        double d = Math.sqrt(mob.distanceToSqr(l));
+        double base = mob.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED) * 20 * 2.15; // their walking pace, roughly
+        double want = Math.max(4.3, leaderSpeed * 1.15) + Math.max(0, d - 4) * 0.6;
+        double speed = Math.max(1.0, Math.min(2.6, want / Math.max(0.1, base)));
+        if (l instanceof net.minecraft.world.entity.player.Player p && p.isSprinting()) speed = Math.max(speed, 1.9);
+        mob.setSprinting(speed > 1.5);
+        if (--repath <= 0 || Math.abs(speed - lastSpeed) > 0.25) {
+            repath = 6;
+            lastSpeed = speed;
+            mob.getNavigation().moveTo(l, speed);
         }
     }
 
     @Override
-    public void stop() { mob.getNavigation().stop(); }
+    public void stop() { mob.getNavigation().stop(); mob.setSprinting(false); }
 }

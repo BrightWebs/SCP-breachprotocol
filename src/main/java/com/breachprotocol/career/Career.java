@@ -953,6 +953,7 @@ public final class Career {
         com.breachprotocol.network.Command.addToSync(p, t);
         Contacts.addToSync(p, t);
         Sites.addToSync(p, t);
+        if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) Forces.addToSync(p, t);
         RiftTeams.addToSync(p, t);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));
     }

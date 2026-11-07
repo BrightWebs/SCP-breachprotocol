@@ -210,3 +210,22 @@ def mapglyph(d, s):
     d.ellipse([15.5 * s, 11.5 * s, 18.5 * s, 14.5 * s], fill=W)
 icon("app_map", (0, 0, 0), (0, 0, 0), mapglyph)
 print("map icon generated")
+
+def forces(d, s):
+    # three helmeted figures: a squad
+    for cx, k in ((10, 0.8), (22, 0.8), (16, 1.0)):
+        r = 3.6 * k
+        cy = 12 if k == 1.0 else 14
+        d.ellipse([(cx - r) * s, (cy - r) * s, (cx + r) * s, (cy + r) * s], fill=W)
+        d.rectangle([(cx - r - 0.6) * s, (cy - 0.6) * s, (cx + r + 0.6) * s, (cy + 0.4) * s], fill=W)
+        d.rounded_rectangle([(cx - 5 * k) * s, (cy + r + 1) * s, (cx + 5 * k) * s, 27 * s], radius=2 * s, fill=W)
+def security(d, s):
+    # a shield with a crosshair
+    pts = [(16, 4), (26, 8), (25, 17), (16, 28), (7, 17), (6, 8)]
+    d.polygon([(x * s, y * s) for x, y in pts], fill=W)
+    d.ellipse([11 * s, 11 * s, 21 * s, 21 * s], outline=(30, 30, 30, 255), width=2 * s)
+    d.line([(16 * s, 8 * s), (16 * s, 24 * s)], fill=(30, 30, 30, 255), width=s + 1)
+    d.line([(8 * s, 16 * s), (24 * s, 16 * s)], fill=(30, 30, 30, 255), width=s + 1)
+icon("app_forces", (0, 0, 0), (0, 0, 0), forces)
+icon("app_security", (0, 0, 0), (0, 0, 0), security)
+print("desktop icons generated")

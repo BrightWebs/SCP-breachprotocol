@@ -61,6 +61,44 @@ public class FoundationStaff extends PathfinderMob {
 
     /** Whether they've been given their own (world-unique) name. */
     private boolean named;
+    /** The armed unit they belong to (null = ordinary staff). */
+    private com.breachprotocol.career.Forces.Unit unit;
+    private long lastShout;
+
+    public com.breachprotocol.career.Forces.Unit unit() { return unit; }
+
+    /** Makes them a member of an armed unit, posted at {@code post}. */
+    public void setupUnit(com.breachprotocol.career.Forces.Unit u, BlockPos post) {
+        this.unit = u;
+        setup(Role.GUARD, post);
+        setAge(22 + random.nextInt(22));
+        var hp = getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH);
+        if (hp != null) hp.setBaseValue(u.health);
+        setHealth(u.health);
+        arm();
+    }
+
+    /** Puts the right gun in their hand (SCP Unleashed's own). */
+    public void arm() {
+        if (role() != Role.GUARD) return;
+        String gun = unit != null ? unit.gun : "pistol";
+        var item = net.minecraft.core.registries.BuiltInRegistries.ITEM.getOptional(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("scp_unleashed", gun));
+        if (item.isPresent()) setItemSlot(net.minecraft.world.entity.EquipmentSlot.MAINHAND, new ItemStack(item.get()));
+        setDropChance(net.minecraft.world.entity.EquipmentSlot.MAINHAND, 0F);
+    }
+
+    /** A call-out when they open fire. */
+    void shout(net.minecraft.world.entity.LivingEntity t) {
+        long now = level().getGameTime();
+        if (now - lastShout < 200) return;
+        lastShout = now;
+        String line = t instanceof net.minecraft.world.entity.monster.Creeper ? pick("Creeper! Drop it before it gets close!", "Creeper on the perimeter! Light it up!", "Creeper! Keep your distance!")
+                : t instanceof Player ? pick("Hostile on site! Weapons free!", "Intruder! Drop your weapon!", "Contact! Hostile combatant!")
+                : com.breachprotocol.career.Defence.intruder(getServer(), t) ? pick("Hostiles on the grounds! Engaging!", "Insurgents! Push them back!", "Contact! They're not on the list!")
+                : pick("Contact!", "Hostile, engaging!", "Got one!", "Movement, engaging!");
+        for (Player q : level().players()) if (q.distanceTo(this) < 24)
+            q.displayClientMessage(Component.literal(name() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(line).withStyle(ChatFormatting.RED)), true);
+    }
 
     private final Map<UUID, Long> greeted = new HashMap<>();
     private BlockPos post;
@@ -77,7 +115,7 @@ public class FoundationStaff extends PathfinderMob {
     }
 
     public static AttributeSupplier.Builder createAttributes() {
-        return PathfinderMob.createMobAttributes().add(Attributes.MAX_HEALTH, 24).add(Attributes.MOVEMENT_SPEED, 0.24).add(Attributes.FOLLOW_RANGE, 24);
+        return PathfinderMob.createMobAttributes().add(Attributes.MAX_HEALTH, 24).add(Attributes.MOVEMENT_SPEED, 0.28).add(Attributes.ATTACK_DAMAGE, 4).add(Attributes.FOLLOW_RANGE, 24);
     }
 
     @Override
@@ -91,7 +129,11 @@ public class FoundationStaff extends PathfinderMob {
     @Override
     protected void registerGoals() {
         goalSelector.addGoal(0, new FloatGoal(this));
-        goalSelector.addGoal(1, new PanicGoal(this, 1.3));
+        goalSelector.addGoal(1, new GuardGoal(this));
+        goalSelector.addGoal(1, new PanicGoal(this, 1.4) {
+            @Override
+            public boolean canUse() { return role() != Role.GUARD && super.canUse(); }
+        });
         goalSelector.addGoal(2, new FollowGoal(this, () -> "follow".equals(mode) && leader != null && level() instanceof net.minecraft.server.level.ServerLevel sl ? sl.getPlayerByUUID(leader) : null));
         goalSelector.addGoal(3, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> !"follow".equals(mode) && com.breachprotocol.world.Site01.mayUseChair(this, pos)));
         goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8F, 0.6F));
@@ -233,10 +275,25 @@ public class FoundationStaff extends PathfinderMob {
         tellNearby(name() + " has died " + cause + ", aged " + (int) age + ".", ChatFormatting.GRAY);
         if (level() instanceof net.minecraft.server.level.ServerLevel sl) {
             sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL, getX(), getY() + 1, getZ(), 12, 0.3, 0.5, 0.3, 0.02);
-            if (post != null) Hires.schedule(sl, post, role());
+            if (unit != null) com.breachprotocol.career.Forces.died(this, cause);
+            else if (post != null) Hires.schedule(sl, post, role());
         }
         Seats.stand(this);
         discard();
+    }
+
+    @Override
+    public void die(net.minecraft.world.damagesource.DamageSource src) {
+        super.die(src);
+        if (!(level() instanceof net.minecraft.server.level.ServerLevel sl) || isRemoved() && !isDeadOrDying()) return;
+        net.minecraft.world.entity.Entity k = src.getEntity();
+        String by = k == null ? "in an incident" : "by " + (k instanceof Player pl ? pl.getGameProfile().getName() : k.getName().getString());
+        if (unit != null) {
+            com.breachprotocol.career.Forces.died(this, "killed " + by);
+        } else {
+            news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + " (" + role().title + ") was killed " + by, -3);
+            if (post != null) Hires.schedule(sl, post, role());
+        }
     }
 
     /** Someone hands them a remedy. Returns true if the offer was understood. */
@@ -280,7 +337,8 @@ public class FoundationStaff extends PathfinderMob {
     private void name(Role role) {
         if (!(level() instanceof net.minecraft.server.level.ServerLevel sl)) return;
         String n = Names.person(sl.getServer(), random);
-        setCustomName(Component.literal((role.prefix.isEmpty() ? "" : role.prefix + " ") + n).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
+        String prefix = unit != null ? unit.prefix : role.prefix;
+        setCustomName(Component.literal((prefix.isEmpty() ? "" : prefix + " ") + n).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
         setCustomNameVisible(false);
         named = true;
     }
@@ -289,6 +347,7 @@ public class FoundationStaff extends PathfinderMob {
     public void aiStep() {
         super.aiStep();
         if (!named && !level().isClientSide) name(role());
+        if (!level().isClientSide && tickCount % 40 == 3 && role() == Role.GUARD && getMainHandItem().isEmpty()) arm();
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
         if (level().isClientSide || tickCount % 20 != 0) return;
         if (tickCount % 200 == 0 && !getTags().contains(com.breachprotocol.career.RiftTeams.CREW_TAG)) {
@@ -393,6 +452,7 @@ public class FoundationStaff extends PathfinderMob {
         tag.putDouble("Fountain", fountainAt);
         tag.putBoolean("Declined", declined);
         tag.putBoolean("Named", named);
+        if (unit != null) tag.putString("Unit", unit.name());
         if (leader != null) tag.putUUID("Leader", leader);
         if (stayAt != null) { tag.putInt("StayX", stayAt.getX()); tag.putInt("StayY", stayAt.getY()); tag.putInt("StayZ", stayAt.getZ()); }
     }
@@ -411,6 +471,9 @@ public class FoundationStaff extends PathfinderMob {
         fountainAt = tag.contains("Fountain") ? tag.getDouble("Fountain") : -100;
         declined = tag.getBoolean("Declined");
         named = tag.getBoolean("Named");
+        unit = com.breachprotocol.career.Forces.Unit.of(tag.getString("Unit"));
+        var spd = getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MOVEMENT_SPEED);
+        if (spd != null && spd.getBaseValue() < 0.28) spd.setBaseValue(0.28);
         if (tag.hasUUID("Leader")) leader = tag.getUUID("Leader");
         if (tag.contains("StayX")) { stayAt = new BlockPos(tag.getInt("StayX"), tag.getInt("StayY"), tag.getInt("StayZ")); if ("stay".equals(mode)) restrictTo(stayAt, 1); }
         if ("follow".equals(mode)) clearRestriction();
