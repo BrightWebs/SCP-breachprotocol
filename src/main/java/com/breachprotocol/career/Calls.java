@@ -253,7 +253,11 @@ public final class Calls {
         d.call = null;
         d.dirty = true;
         if (t == null || option < 0 || option >= t.options().size()) return;
+        int before = d.stability;
         String reply = t.options().get(option).effect().apply(p, d);
+        if (!t.id().equals("o5_offer"))
+            WorldNews.record(p.server, WorldNews.Kind.DECISION, t.id() + "|" + t.options().get(option).label(), WorldNews.headline(t.id(), t.options().get(option).label()),
+                    d.stability - before, p.getGameProfile().getName(), java.util.Set.of(t.caller()));
         Career.message(p, O5.seat(call.caller), reply);
         if (d.getRank().atLeast(Rank.OVERSEER) && !t.id().equals("o5_offer")) Career.addXp(p, 25, "decision made");
         Career.sync(p);

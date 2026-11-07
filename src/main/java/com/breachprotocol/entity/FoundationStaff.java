@@ -50,6 +50,11 @@ public class FoundationStaff extends PathfinderMob {
 
     private final Map<UUID, Long> greeted = new HashMap<>();
     private BlockPos post;
+    /** What they've been told to do: work at their post, follow someone, or wait somewhere. */
+    private String mode = "post";
+    private UUID leader;
+    private BlockPos stayAt, sitTarget;
+    private int sitTries;
     private long healReady;
 
     public FoundationStaff(EntityType<? extends PathfinderMob> type, Level level) {
@@ -72,10 +77,14 @@ public class FoundationStaff extends PathfinderMob {
     protected void registerGoals() {
         goalSelector.addGoal(0, new FloatGoal(this));
         goalSelector.addGoal(1, new PanicGoal(this, 1.3));
-        goalSelector.addGoal(2, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> com.breachprotocol.world.Site01.mayUseChair(this, pos)));
-        goalSelector.addGoal(3, new LookAtPlayerGoal(this, Player.class, 8F, 0.6F));
-        goalSelector.addGoal(4, new WaterAvoidingRandomStrollGoal(this, 0.6, 0.01F));
-        goalSelector.addGoal(5, new RandomLookAroundGoal(this));
+        goalSelector.addGoal(2, new FollowGoal(this, () -> "follow".equals(mode) && leader != null && level() instanceof net.minecraft.server.level.ServerLevel sl ? sl.getPlayerByUUID(leader) : null));
+        goalSelector.addGoal(3, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> !"follow".equals(mode) && com.breachprotocol.world.Site01.mayUseChair(this, pos)));
+        goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8F, 0.6F));
+        goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.6, 0.01F) {
+            @Override
+            public boolean canUse() { return "post".equals(mode) && super.canUse(); }
+        });
+        goalSelector.addGoal(6, new RandomLookAroundGoal(this));
     }
 
     public Role role() { return Role.values()[Math.floorMod(entityData.get(ROLE), Role.values().length)]; }
@@ -93,6 +102,29 @@ public class FoundationStaff extends PathfinderMob {
         restrictTo(post, 12);
     }
 
+    /** An order from a player: follow, stay, post (back to work) or sit. */
+    public void order(String what, ServerPlayer p) {
+        switch (what) {
+            case "follow" -> { mode = "follow"; leader = p.getUUID(); clearRestriction(); Seats.stand(this); }
+            case "stay" -> { mode = "stay"; stayAt = blockPosition(); restrictTo(stayAt, 1); getNavigation().stop(); }
+            case "post" -> { mode = "post"; leader = null; if (post != null) { restrictTo(post, 12); getNavigation().moveTo(post.getX() + 0.5, post.getY(), post.getZ() + 0.5, 0.9); } }
+            case "sit" -> {
+                mode = "stay";
+                BlockPos c = blockPosition(), best = null;
+                double bd = Double.MAX_VALUE;
+                for (BlockPos q : BlockPos.betweenClosed(c.offset(-8, -2, -8), c.offset(8, 2, 8))) {
+                    if (!Seats.isSeat(level().getBlockState(q)) || Seats.occupied(level(), q) || !com.breachprotocol.world.Site01.mayUseChair(this, q)) continue;
+                    double d = q.distSqr(c);
+                    if (d < bd) { bd = d; best = q.immutable(); }
+                }
+                sitTarget = best;
+                sitTries = 0;
+                clearRestriction();
+            }
+            default -> {}
+        }
+    }
+
     private String name() { return getCustomName() == null ? role().title : getCustomName().getString(); }
 
     @Override
@@ -100,7 +132,13 @@ public class FoundationStaff extends PathfinderMob {
         super.aiStep();
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
         if (level().isClientSide || tickCount % 20 != 0) return;
-        if (post != null && tickCount % 200 == 0) restrictTo(post, 12);
+        if (sitTarget != null) {
+            if (++sitTries > 20 || Seats.seated(this)) sitTarget = null;
+            else if (position().distanceToSqr(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5) < 2.6) { Seats.sit(this, sitTarget); sitTarget = null; }
+            else getNavigation().moveTo(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5, 0.9);
+        }
+        if (post != null && tickCount % 200 == 0 && "post".equals(mode)) restrictTo(post, 12);
+        if (tickCount % 400 == 7 && random.nextFloat() < 0.15F) Talk.chatter(this);
         Player near = level().getNearestPlayer(this, 6);
         if (!(near instanceof ServerPlayer p) || p.isSpectator() || !hasLineOfSight(p)) return;
         long now = level().getGameTime();
@@ -111,7 +149,7 @@ public class FoundationStaff extends PathfinderMob {
         Rank r = Career.rank(p);
         // the top brass gets everyone on their feet
         if ((r.atLeast(Rank.OVERSEER) || Career.isAscended(p)) && Seats.seated(this)) Seats.stand(this);
-        say(p, greeting(p, r));
+        say(p, Talk.greeting(this, p, greeting(p, r)));
     }
 
     private String greeting(ServerPlayer p, Rank r) {
@@ -142,6 +180,7 @@ public class FoundationStaff extends PathfinderMob {
     @Override
     protected InteractionResult mobInteract(Player player, InteractionHand hand) {
         if (hand != InteractionHand.MAIN_HAND || !(player instanceof ServerPlayer p)) return InteractionResult.sidedSuccess(level().isClientSide);
+        if (!p.isShiftKeyDown()) { Talk.open(p, this); return InteractionResult.SUCCESS; }
         getLookControl().setLookAt(p, 30, 30);
         Rank r = Career.rank(p);
         String line = switch (role()) {
@@ -175,6 +214,9 @@ public class FoundationStaff extends PathfinderMob {
         tag.putInt("Role", entityData.get(ROLE));
         tag.putInt("Variant", entityData.get(VARIANT));
         if (post != null) { tag.putInt("PostX", post.getX()); tag.putInt("PostY", post.getY()); tag.putInt("PostZ", post.getZ()); }
+        tag.putString("Mode", mode);
+        if (leader != null) tag.putUUID("Leader", leader);
+        if (stayAt != null) { tag.putInt("StayX", stayAt.getX()); tag.putInt("StayY", stayAt.getY()); tag.putInt("StayZ", stayAt.getZ()); }
     }
 
     @Override
@@ -183,5 +225,9 @@ public class FoundationStaff extends PathfinderMob {
         entityData.set(ROLE, tag.getInt("Role"));
         entityData.set(VARIANT, tag.getInt("Variant"));
         if (tag.contains("PostX")) { post = new BlockPos(tag.getInt("PostX"), tag.getInt("PostY"), tag.getInt("PostZ")); restrictTo(post, 12); }
+        if (tag.contains("Mode")) mode = tag.getString("Mode");
+        if (tag.hasUUID("Leader")) leader = tag.getUUID("Leader");
+        if (tag.contains("StayX")) { stayAt = new BlockPos(tag.getInt("StayX"), tag.getInt("StayY"), tag.getInt("StayZ")); if ("stay".equals(mode)) restrictTo(stayAt, 1); }
+        if ("follow".equals(mode)) clearRestriction();
     }
 }

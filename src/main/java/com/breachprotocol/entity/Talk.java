@@ -1,0 +1,517 @@
+package com.breachprotocol.entity;
+
+import com.breachprotocol.BreachProtocol;
+import com.breachprotocol.career.*;
+import com.breachprotocol.compat.Unleashed;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.ChatFormatting;
+import net.minecraft.commands.Commands;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+
+import java.util.*;
+
+/**
+ * Talking to the people of the Foundation.
+ *
+ * <p>Every staff member is a person: a name, a department, years of service, a temperament (bold,
+ * careful, cynical or earnest) and a life story told a piece at a time. What they say depends on who
+ * you are (your rank, whether you're armed, hurt, or something more than human), where they are and
+ * what is happening around them (an anomaly loose nearby, night, rain), and on the world's news: every
+ * decision of the Council and on the phone, breaches, rifts, the Garden, promotions. They remember the
+ * news and have opinions about it. The Overseers remember how they voted.
+ *
+ * <p>Right-click a staff member or an Overseer to talk. You can also give orders, if your rank allows:
+ * follow me, wait here, back to your post, take a seat, and each department's own work.
+ */
+@EventBusSubscriber(modid = BreachProtocol.MODID)
+public final class Talk {
+    private Talk() {}
+
+    // ================================================================== who they are
+
+    public enum Temper { BOLD, CAREFUL, CYNICAL, EARNEST }
+
+    public static Temper temper(Entity e) { return Temper.values()[Math.floorMod(e.getUUID().getLeastSignificantBits(), 4)]; }
+
+    public static int years(Entity e) { return 2 + (int) Math.floorMod(e.getUUID().getMostSignificantBits(), 19L); }
+
+    private static int storyIndex(Entity e, int n) { return (int) Math.floorMod(e.getUUID().getMostSignificantBits() >>> 7, (long) n); }
+
+    /** Life stories, three chapters each, told one at a time to each person who asks. */
+    private static final Map<FoundationStaff.Role, String[][]> STORIES = new EnumMap<>(FoundationStaff.Role.class);
+
+    static {
+        STORIES.put(FoundationStaff.Role.RESEARCHER, new String[][]{
+                {"I was a marine biologist. Then a fishing trawler pulled up something that sang, and two men in suits offered me a job.",
+                        "My first assignment was SCP-999. Everyone's first assignment is 999. They want you to like it here before they show you the rest.",
+                        "I write up every test as if someone will read it in a hundred years. Someone might. I'd like them to know we were careful."},
+                {"Physics. I was going to win a Nobel. Instead I signed a non-disclosure agreement that would make a lawyer cry.",
+                        "The worst day was when the numbers stopped making sense. Not wrong. Just... a different kind of right.",
+                        "I keep a photo of my sister in my coat. She thinks I work for a pharmaceutical company. In a way I do."},
+                {"I came in as a D-Class. Clerical error. By the time they found it I'd written three papers on SCP-173's movement patterns.",
+                        "They gave me a lab coat instead of a jumpsuit. Same people, different side of the glass.",
+                        "I still blink twice before I open any door. Old habits keep you alive."},
+                {"Linguistics. The Foundation needed someone to translate a book that rewrites itself when you look away.",
+                        "I'm on chapter forty. It's been on chapter forty for six years.",
+                        "Some nights I think the book is translating me. Don't put that in my file."}});
+        STORIES.put(FoundationStaff.Role.GUARD, new String[][]{
+                {"Twelve years in the army. Thought I'd seen everything. First night here I saw a man walk through a wall. Backwards.",
+                        "You learn the rules fast. Never look at 096. Never turn your back on 173. Never ask what's behind the blue door.",
+                        "I've got a daughter. She thinks I guard a bank. I tell her the vault is very, very important."},
+                {"I applied to be a mall cop. Wrong building. They kept me anyway.",
+                        "Turns out I'm good under pressure. Turns out pressure is a lot of what we do.",
+                        "When the alarms go, everyone runs one way. We run the other. Somebody has to."},
+                {"Ex-police. Got too close to a case with a smiling man who didn't cast a shadow. The Foundation found me before he did.",
+                        "I've done four breaches. Lost friends in two. You don't forget the names. You shouldn't.",
+                        "I volunteer for the night shift. Quieter. Mostly."},
+                {"My father was security here too. He never talked about it. Now I understand why.",
+                        "I found his badge number on a memorial wall on B3. Nobody told me there was a wall.",
+                        "I touch it every time I go down there. For luck. His and mine."}});
+        STORIES.put(FoundationStaff.Role.MEDIC, new String[][]{
+                {"Trauma surgeon. A hospital I worked at got a patient whose blood ran backwards. The Foundation took him. And me.",
+                        "Most of what I treat here is ordinary. Broken bones, burns, shock. It's what causes them that isn't.",
+                        "I keep SCP-500 counted down to the pill. Every one I hand out is a life I don't get to save later."},
+                {"Field medic, three tours. I don't flinch. That's why they hired me.",
+                        "I flinched once. SCP-049 called me 'colleague'. I still don't know what he meant.",
+                        "Wash your hands. I'm serious. Some of what's down here spreads."},
+                {"I was a vet. Animals. The Foundation needed someone for the things that are almost animals.",
+                        "SCP-529 lets me check her heartbeat. She has one. Just the one half of her does.",
+                        "I talk to every patient like they can hear me. Some of them can hear a great deal more."},
+                {"Nursing school, then a hospice. I'm good with endings. That's not a joke.",
+                        "Here, endings aren't always endings. That took some getting used to.",
+                        "If you ever come through my door, I'll do everything I can. Everything."}});
+        STORIES.put(FoundationStaff.Role.TECHNICIAN, new String[][]{
+                {"Power engineer. I keep the lights on. Down here, the lights are containment.",
+                        "SCP-106 doesn't like strong light, and 173 doesn't like being watched. Power cuts are how sites die.",
+                        "The creative supply in the plant? Don't ask me how it works. I just know it doesn't stop."},
+                {"I fixed elevators. One day an elevator took me somewhere it shouldn't. The Foundation was waiting at the bottom.",
+                        "Now I fix everything. Doors, scanners, the satellite terminal. I've rewired a door that screamed.",
+                        "Tip: if a scanner won't take your card, check which side of the jamb it's on. The jamb carries the signal."},
+                {"Network admin. Ever met code that writes back? I have.",
+                        "The server room is where I'm happiest. Cold, quiet, and nothing in there is alive. I check.",
+                        "If the network ever asks you a question, don't answer. Call me."},
+                {"Rocket engineer, believe it or not. The launch deck on the roof is mine.",
+                        "We put a weapon in orbit. I helped. Some nights I watch the satellite go over and wonder who it's for.",
+                        "Keep the pads fuelled. The day you need them, you'll need them now."}});
+        STORIES.put(FoundationStaff.Role.CLERK, new String[][]{
+                {"I process paperwork. Termination orders, transfer orders, requisitions for a thousand litres of hydrochloric acid.",
+                        "I've signed for things that don't have names. I just write 'item' and the number.",
+                        "Everything here has a file. Even you. Especially you."},
+                {"I used to be an accountant. The Foundation's books are... creative. Things go in and don't come out.",
+                        "Did you know we pay rent on a building that doesn't exist? Every month. On time.",
+                        "If the numbers ever balance, the Accountant gets nervous. So do I."},
+                {"Records. I read everything before it's sealed. You learn what not to remember.",
+                        "Amnestics are in the drawer under mine. I've never needed one. I think.",
+                        "If I ever start forgetting your name, tell someone."},
+                {"Reception. I'm the first face you see and the last one you'd suspect.",
+                        "I've turned away two Insurgency agents and a man who was mostly bees.",
+                        "Smile, sign the visitor log, and never let anyone hold the door for you."}});
+        STORIES.put(FoundationStaff.Role.JANITOR, new String[][]{
+                {"Twenty-two years cleaning this place. Nobody notices the janitor. That's the point.",
+                        "I've mopped up things that moved. I've mopped up things that mopped back.",
+                        "Best advice I can give you: if a stain looks like a face, don't scrub it."},
+                {"I was D-Class. Did my month. They offered me this or the other option. I like this better.",
+                        "I know every vent in this building. I know which ones hum.",
+                        "Leave the B3 bathrooms alone. Just trust me."},
+                {"My grandmother cleaned the first site the Foundation ever built. She told me stories I thought were stories.",
+                        "They weren't. I've met two of them.",
+                        "I keep her keyring. It opens doors that aren't on any plan."},
+                {"I'm saving up for a little place by the sea. No anomalies. Just water.",
+                        "Then again, the sea is where half of them come from.",
+                        "Maybe a little place by a lake."}});
+    }
+
+    // ================================================================== reading the moment
+
+    private static boolean armed(Player p) {
+        ItemStack s = p.getMainHandItem();
+        if (s.isEmpty()) return false;
+        String id = BuiltInRegistries.ITEM.getKey(s.getItem()).getPath();
+        return id.contains("sword") || id.contains("axe") || id.contains("rifle") || id.contains("pistol") || id.contains("shotgun") || id.contains("gun")
+                || id.contains("bow") || id.contains("grenade") || id.contains("trident") || id.contains("spear");
+    }
+
+    private static Mob anomalyNear(Entity e, double r) {
+        for (Mob m : e.level().getEntitiesOfClass(Mob.class, e.getBoundingBox().inflate(r), Unleashed::isAnomaly))
+            if (!Unleashed.isContained(m)) return m;
+        return null;
+    }
+
+    private static boolean night(Level l) { long t = l.getDayTime() % 24000; return t > 13000 && t < 23000; }
+
+    private static String pick(Random r, String... s) { return s[r.nextInt(s.length)]; }
+
+    /** How they're doing, given everything. */
+    public static String howAreThings(FoundationStaff s, ServerPlayer p) {
+        Random r = new Random();
+        Mob loose = anomalyNear(s, 24);
+        MinecraftServer srv = p.server;
+        int morale = WorldNews.morale(srv) + Career.data(p).stability / 20 - 2;
+        Temper t = temper(s);
+        if (loose != null) {
+            String what = Unleashed.designation(loose);
+            return switch (s.role()) {
+                case GUARD -> pick(r, what + " is out. Stay behind me.", "We've got " + what + " loose on this floor. Weapons free.", "Eyes on " + what + ". Nobody moves until it's contained.");
+                case MEDIC -> pick(r, "Is that " + what + "? Get everyone behind the doors. I'll handle the wounded.", "I need you to keep " + what + " away from my patients.");
+                default -> pick(r, "Is that " + what + "?! Why is it out?", "I'm not paid enough to be this close to " + what + ".", "Please tell me someone's coming for " + what + ".");
+            };
+        }
+        if (Career.isAscended(p)) return pick(r, "I'm... fine. I'm fine. Please don't look at me like that.", "Everything is very good. Is that what you want to hear?");
+        if (p.getHealth() < 6) return s.role() == FoundationStaff.Role.MEDIC ? "Never mind me, look at you. Hold still." : "You're bleeding. Medical's on the second floor.";
+        if (armed(p) && Career.rank(p).ordinal() < Rank.LEVEL_3.ordinal()) return "Why are you armed? Put that away before security sees it.";
+        WorldNews.Item last = WorldNews.latest(srv);
+        String news = last != null && srv.overworld().getGameTime() - last.time() < 24000 ? last.headline() : null;
+        if (news != null && r.nextBoolean()) {
+            return (morale >= 0 ? pick(r, "Better, honestly. ", "Not bad. ") : pick(r, "Tense. ", "Honestly? Rattled. "))
+                    + "Everyone's talking about how " + news + ".";
+        }
+        if (night(s.level())) return pick(r, "Long shift. They always feel longer at night.", "Tired. Nights are when things move.");
+        if (s.level().isRaining()) return pick(r, "Rain on the roof. I like it. It's normal.", "Weather's grim. Good day to stay inside.");
+        return switch (t) {
+            case BOLD -> morale >= 0 ? pick(r, "Never better. Site's holding.", "Good. We've got this.") : pick(r, "We'll get through it. We always do.", "Bad week. Doesn't matter. Back to work.");
+            case CAREFUL -> morale >= 0 ? pick(r, "Quiet. I don't trust quiet, but I'll take it.", "Fine, as long as nothing changes.") : pick(r, "I've checked my exits twice today.", "Not great. I keep watching the doors.");
+            case CYNICAL -> morale >= 0 ? pick(r, "Nothing's on fire. Give it an hour.", "Same as always. Which is to say, nobody's dead yet.") : pick(r, "Oh, wonderful. Can't you tell?", "Ask me again after the next breach.");
+            case EARNEST -> morale >= 0 ? pick(r, "Good! We did something right this week.", "Hopeful, actually. It feels like we're winning.") : pick(r, "Worried. I just want everyone to go home safe.", "Hard week. But I believe in what we're doing.");
+        };
+    }
+
+    /** Their opinion of a piece of news. */
+    private static String opinion(Temper t, int mood, Random r) {
+        if (mood > 2) return switch (t) {
+            case BOLD -> pick(r, "About time.", "That's how you run a Foundation.");
+            case CAREFUL -> pick(r, "Good. I'll sleep better.", "Sensible. Very sensible.");
+            case CYNICAL -> pick(r, "Something went right. Mark the calendar.", "Fine. I'm sure there's a catch.");
+            case EARNEST -> pick(r, "That's the right call. I'm glad.", "That gives me hope.");
+        };
+        if (mood < -2) return switch (t) {
+            case BOLD -> pick(r, "We'll deal with what comes.", "Bad call. We'll make it work anyway.");
+            case CAREFUL -> pick(r, "I don't like it. I don't like it at all.", "Someone should have thought that through.");
+            case CYNICAL -> pick(r, "Of course they did.", "Brilliant. Who's cleaning that up? Us.");
+            case EARNEST -> pick(r, "I hope they know what they're doing.", "People are going to get hurt.");
+        };
+        return switch (t) {
+            case BOLD -> "We'll see.";
+            case CAREFUL -> "Time will tell.";
+            case CYNICAL -> "Doesn't change my shift.";
+            case EARNEST -> "I trust the Council. Mostly.";
+        };
+    }
+
+    public static String rumour(Entity s, ServerPlayer p) {
+        Random r = new Random();
+        List<WorldNews.Item> recent = WorldNews.recent(p.server, 5);
+        if (recent.isEmpty()) return pick(r, "Nothing worth repeating. Which around here is good news.", "Quiet week. Don't jinx it.");
+        WorldNews.Item i = recent.get(r.nextInt(Math.min(3, recent.size())));
+        String when = WorldNews.ago(p.server, i);
+        String lead = pick(r, "Did you hear? ", "Word is ", "Between us: ", "You didn't hear it from me, but ");
+        return lead + i.headline() + " (" + when + "). " + opinion(temper(s), i.mood(), r);
+    }
+
+    public static String councilView(Entity s, ServerPlayer p) {
+        Random r = new Random();
+        WorldNews.Item d = WorldNews.latest(p.server, WorldNews.Kind.DECISION);
+        if (d == null) return "The Council hasn't decided anything we've heard about lately. Which means they've decided plenty we haven't.";
+        boolean overruled = d.who().contains("over the Council");
+        String a = "Last I heard, " + d.headline() + ". ";
+        if (overruled) a += "And the Administrator overruled the lot of them. ";
+        return a + opinion(temper(s), d.mood(), r);
+    }
+
+    public static String story(Entity s, FoundationStaff.Role role, ServerPlayer p) {
+        String[][] pool = STORIES.get(role);
+        String[] st = pool[storyIndex(s, pool.length)];
+        String key = "bp_story_" + p.getUUID();
+        int ch = s.getPersistentData().getInt(key);
+        String line = st[Math.min(ch, st.length - 1)];
+        if (ch < st.length) s.getPersistentData().putInt(key, ch + 1);
+        if (ch >= st.length) line = "That's about all there is to me. Ask me again in a few years. If there's anything left to tell.";
+        return line;
+    }
+
+    /** A greeting that knows who you are, what's happening, and what you just did. */
+    public static String greeting(FoundationStaff s, ServerPlayer p, String base) {
+        WorldNews.Item last = WorldNews.latest(p.server);
+        if (last != null && p.server.overworld().getGameTime() - last.time() < 6000 && last.who().equals(p.getGameProfile().getName()) && new Random().nextBoolean()) {
+            return base + " " + (last.mood() >= 0 ? "And thank you, for " : "We heard about ") + last.headline().replace(p.getGameProfile().getName() + " ", "") + ".";
+        }
+        return base;
+    }
+
+    // ================================================================== the menu
+
+    private static MutableComponent button(String label, String cmd, String hover, ChatFormatting colour) {
+        return Component.literal("[" + label + "]").withStyle(st -> st.withColor(colour)
+                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, cmd))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
+    }
+
+    private static void say(ServerPlayer p, Entity who, String line) {
+        ChatFormatting c = who instanceof O5MemberEntity ? ChatFormatting.DARK_RED : ChatFormatting.AQUA;
+        p.sendSystemMessage(Component.literal(who.getName().getString() + ": ").withStyle(c).append(Component.literal(line).withStyle(ChatFormatting.GRAY)));
+        if (who instanceof Mob m) m.getLookControl().setLookAt(p, 30, 30);
+    }
+
+    public static void open(ServerPlayer p, FoundationStaff s) {
+        String name = s.getName().getString();
+        p.sendSystemMessage(Component.literal("— " + name + ", " + s.role().title + ", " + years(s) + " years with the Foundation —").withStyle(ChatFormatting.DARK_AQUA));
+        say(p, s, howAreThings(s, p));
+        String id = " " + s.getId() + " ";
+        MutableComponent m = Component.literal("  ")
+                .append(button("About you", "/talk" + id + "story", "Ask about their life", ChatFormatting.WHITE)).append(" ")
+                .append(button("Heard anything?", "/talk" + id + "rumour", "What people are saying", ChatFormatting.WHITE)).append(" ")
+                .append(button("The Council?", "/talk" + id + "council", "Their view of the latest decision", ChatFormatting.WHITE)).append(" ")
+                .append(button("Orders", "/talk" + id + "orders", "Tell them what to do", ChatFormatting.GOLD));
+        p.sendSystemMessage(m);
+    }
+
+    public static void openO5(ServerPlayer p, O5MemberEntity m) {
+        O5 me = m.getSeat();
+        p.sendSystemMessage(Component.literal("— " + me.sender() + " —").withStyle(ChatFormatting.DARK_RED));
+        String id = " " + m.getId() + " ";
+        MutableComponent c = Component.literal("  ")
+                .append(button("Your vote", "/talk" + id + "vote", "How they voted on the latest decision", ChatFormatting.WHITE)).append(" ")
+                .append(button("About you", "/talk" + id + "story", "Their role on the Council", ChatFormatting.WHITE)).append(" ")
+                .append(button("What worries you?", "/talk" + id + "worry", "The Council's concerns", ChatFormatting.WHITE));
+        if (Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p)) c.append(" ").append(button("Orders", "/talk" + id + "orders", "Tell them what to do", ChatFormatting.GOLD));
+        p.sendSystemMessage(c);
+    }
+
+    private static final String[][] O5_STORY = {
+            {}, {"I founded this. Not alone, and not proudly. Somebody had to.", "I watch the Gate because I am the only one who remembers why it was built."},
+            {"I tend the gentle ones. 999, 131, the ones that only want to be loved.", "People forget we contain the kind things too. To keep them safe from us."},
+            {"> I KEEP THE RECORDS.", "> I HAVE NOT LEFT THE TERMINAL IN ELEVEN YEARS. DO NOT ASK WHY."},
+            {"I talk to everyone who isn't us. The Coalition, the Hand, the Insurgency when I must.", "Diplomacy is containment by other means."},
+            {"I watch the groups that watch us.", "Someone is always outside the window. Usually it's mine."},
+            {"I ran site security for twenty years before they gave me a chair.", "I still carry a sidearm in here. Old habits."},
+            {"They call me the leader. I'm not. I'm the one who counts the votes before they're cast.", "Tactics is just knowing what everyone will do one move before they do."},
+            {"Every Mobile Task Force answers to me.", "I've sent a lot of good people into a lot of bad rooms."},
+            {"I see things before they happen. Not always clearly.", "I've seen you before, you know. Before you got here."},
+            {"I keep the timeline. All the versions of it.", "In most of them, this site is still standing. Most."},
+            {"I sign the termination orders, and I write the cover stories.", "There is always a gas leak. Always."},
+            {"I make the numbers add up.", "Containment is expensive. Failure is more expensive."}};
+
+    private static String o5Vote(O5MemberEntity m, ServerPlayer p) {
+        WorldNews.Item d = WorldNews.latest(p.server, WorldNews.Kind.DECISION);
+        if (d == null) return "We haven't voted on anything worth discussing since you last asked.";
+        int seat = m.getSeat().seat;
+        boolean forIt = d.supporters().contains(seat);
+        String reason = forIt ? (d.mood() >= 0 ? "And it was the right call." : "I'd make the same call again, whatever it cost.")
+                : (d.mood() >= 0 ? "I was wrong, as it turns out. Don't tell anyone." : "I said so at the time.");
+        return "On whether " + d.headline() + ": I " + (forIt ? "argued for it. " : "voted against it. ") + reason
+                + (d.who().contains("over the Council") ? " In the end it was the Administrator's call, as it should be." : "");
+    }
+
+    private static String o5Worry(ServerPlayer p) {
+        Random r = new Random();
+        WorldNews.Item breach = WorldNews.latest(p.server, WorldNews.Kind.BREACH);
+        if (breach != null && p.server.overworld().getGameTime() - breach.time() < 48000) return "The breach. " + breach.headline() + ". One breach is an accident. Two is a pattern.";
+        int st = Career.data(p).stability;
+        if (st < 40) return "Stability is at " + st + "%. We're one bad night from losing a site.";
+        if (st > 85) return "Things are too calm. In my experience, that's when something is building.";
+        return pick(r, "The Insurgency has been quiet. They are never quiet for long.", "The Gate. Always the Gate.", "Budget. You'd be amazed how many apocalypses come down to budget.");
+    }
+
+    // ================================================================== orders
+
+    private static boolean mayCommand(ServerPlayer p, Entity who) {
+        Rank r = Career.rank(p);
+        if (Career.isAscended(p) || r.atLeast(Rank.OVERSEER)) return true;
+        if (who instanceof O5MemberEntity) return false;
+        FoundationStaff.Role role = ((FoundationStaff) who).role();
+        return switch (role) {
+            case GUARD, JANITOR, CLERK -> r.atLeast(Rank.LEVEL_3);
+            default -> r.atLeast(Rank.LEVEL_4);
+        };
+    }
+
+    private static void orders(ServerPlayer p, Entity who) {
+        if (!mayCommand(p, who)) {
+            Rank r = Career.rank(p);
+            say(p, who, r == Rank.CLASS_D ? "You don't give orders, D-Class. Back to your block." : "With respect, you don't have the clearance to give me orders.");
+            return;
+        }
+        String id = " " + who.getId() + " ";
+        MutableComponent m = Component.literal("  ")
+                .append(button("Follow me", "/talk" + id + "follow", "They come with you", ChatFormatting.AQUA)).append(" ")
+                .append(button("Wait here", "/talk" + id + "stay", "They stay where they are", ChatFormatting.AQUA)).append(" ")
+                .append(button("Back to your post", "/talk" + id + "post", "They return to their work", ChatFormatting.AQUA)).append(" ")
+                .append(button("Take a seat", "/talk" + id + "sit", "They sit on the nearest free chair", ChatFormatting.AQUA));
+        if (who instanceof FoundationStaff s) {
+            String[] job = switch (s.role()) {
+                case MEDIC -> new String[]{"Patch me up", "job", "Heal your wounds"};
+                case CLERK -> new String[]{"Any assignments?", "job", "Your open assignments"};
+                case RESEARCHER -> new String[]{"Look at this", "job", "Ask about what you're holding"};
+                case TECHNICIAN -> new String[]{"Check the power", "job", "A report on the site's power"};
+                case GUARD -> new String[]{"Stand guard here", "stay", "They hold this spot"};
+                case JANITOR -> new String[]{"Clean this up", "job", "Sweeps up dropped items nearby"};
+            };
+            m.append(" ").append(button(job[0], "/talk" + id + job[1], job[2], ChatFormatting.GOLD));
+        }
+        p.sendSystemMessage(m);
+    }
+
+    private static void job(ServerPlayer p, FoundationStaff s) {
+        switch (s.role()) {
+            case MEDIC -> {
+                p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 20 * 12, 1));
+                p.removeEffect(MobEffects.POISON);
+                p.removeEffect(MobEffects.WITHER);
+                say(p, s, "Hold still. There. Poison's out, and you'll knit up in a minute.");
+            }
+            case CLERK -> {
+                CareerData d = Career.data(p);
+                if (d.missions.isEmpty()) say(p, s, "Nothing open on your file. Enjoy it while it lasts.");
+                else {
+                    say(p, s, "You have " + d.missions.size() + " open assignment" + (d.missions.size() == 1 ? "" : "s") + ":");
+                    for (int i = 0; i < Math.min(4, d.missions.size()); i++)
+                        p.sendSystemMessage(Component.literal("   • " + d.missions.get(i).description).withStyle(ChatFormatting.GRAY));
+                }
+            }
+            case RESEARCHER -> {
+                ItemStack h = p.getMainHandItem();
+                if (h.isEmpty()) { say(p, s, "Look at what? Your hands are empty."); return; }
+                String id = BuiltInRegistries.ITEM.getKey(h.getItem()).toString();
+                String n = h.getHoverName().getString();
+                String line;
+                if (id.contains("fruit_of_life")) line = "Is that... from the Garden? Don't let anyone else see that. Eat it, and death forgets you for three days.";
+                else if (id.contains("fruit_of_knowledge")) line = "Put that down. Below the Council, that fruit gets you thrown out of the Garden for good. Above it... it changes you.";
+                else if (id.contains("stasis_pod")) line = "A stasis pod. Check its rating against what you're catching. Overload it and the pod just... stops being a pod.";
+                else if (id.contains("keycard")) line = "A keycard. Swipe it on the scanner beside the door, not the door itself.";
+                else if (id.contains("scp500")) line = "SCP-500. Cures anything. Count them, and don't waste them on a headache.";
+                else if (id.contains("rift")) line = "Rift equipment. Rifts don't close themselves. Draw them out slowly, and never alone.";
+                else if (id.startsWith("scp_unleashed:")) line = "That's Foundation equipment: " + n + ". There'll be a file on it in the Archive.";
+                else line = n + "? Perfectly ordinary. I checked twice.";
+                say(p, s, line);
+            }
+            case TECHNICIAN -> {
+                int outlets = 0;
+                net.minecraft.core.BlockPos c = s.blockPosition();
+                for (net.minecraft.core.BlockPos q : net.minecraft.core.BlockPos.betweenClosed(c.offset(-24, -8, -24), c.offset(24, 8, 24)))
+                    if (BuiltInRegistries.BLOCK.getKey(s.level().getBlockState(q).getBlock()).getPath().equals("creative_outlet")) outlets++;
+                say(p, s, outlets > 0 ? "Power's good. " + outlets + " creative outlet" + (outlets == 1 ? "" : "s") + " feeding this area, all live." : "No supply in reach of here. Whatever's on this floor is running on borrowed time.");
+            }
+            case JANITOR -> {
+                int n = 0;
+                for (ItemEntity it : s.level().getEntitiesOfClass(ItemEntity.class, s.getBoundingBox().inflate(8))) { it.discard(); n++; }
+                say(p, s, n == 0 ? "Already spotless. You're welcome." : "Swept up " + n + " pile" + (n == 1 ? "" : "s") + " of junk. People leave the strangest things.");
+            }
+            default -> {}
+        }
+    }
+
+    // ================================================================== the command behind the buttons
+
+    @SubscribeEvent
+    public static void commands(RegisterCommandsEvent event) {
+        event.getDispatcher().register(Commands.literal("talk")
+                .then(Commands.argument("id", IntegerArgumentType.integer()).then(Commands.argument("what", StringArgumentType.word()).executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    Entity e = p.serverLevel().getEntity(IntegerArgumentType.getInteger(c, "id"));
+                    if (e == null || e.distanceTo(p) > 10) return 0;
+                    handle(p, e, StringArgumentType.getString(c, "what"));
+                    return 1;
+                }))));
+    }
+
+    private static void handle(ServerPlayer p, Entity e, String what) {
+        if (e instanceof FoundationStaff s) {
+            switch (what) {
+                case "story" -> say(p, s, story(s, s.role(), p));
+                case "rumour" -> say(p, s, rumour(s, p));
+                case "council" -> say(p, s, councilView(s, p));
+                case "orders" -> orders(p, s);
+                case "follow", "stay", "post", "sit" -> {
+                    if (!mayCommand(p, s)) { orders(p, s); return; }
+                    s.order(what, p);
+                    say(p, s, switch (what) {
+                        case "follow" -> pick(new Random(), "Right behind you.", "Lead the way.", "On you.");
+                        case "stay" -> s.role() == FoundationStaff.Role.GUARD ? "Holding this position." : "I'll wait here.";
+                        case "post" -> "Back to work, then.";
+                        default -> "Don't mind if I do.";
+                    });
+                }
+                case "job" -> {
+                    if (!mayCommand(p, s) && !(s.role() == FoundationStaff.Role.MEDIC && Career.rank(p) != Rank.CLASS_D)) { orders(p, s); return; }
+                    job(p, s);
+                }
+                default -> {}
+            }
+        } else if (e instanceof O5MemberEntity m && m.getSeat() != null) {
+            int seat = m.getSeat().seat;
+            switch (what) {
+                case "vote" -> say(p, m, o5Vote(m, p));
+                case "story" -> {
+                    String key = "bp_story_" + p.getUUID();
+                    int ch = m.getPersistentData().getInt(key);
+                    String[] st = O5_STORY[Math.max(1, Math.min(12, seat))];
+                    say(p, m, st[ch % st.length]);
+                    m.getPersistentData().putInt(key, ch + 1);
+                }
+                case "worry" -> say(p, m, o5Worry(p));
+                case "orders" -> {
+                    if (!mayCommand(p, m)) return;
+                    String id = " " + m.getId() + " ";
+                    p.sendSystemMessage(Component.literal("  ").append(button("Walk with me", "/talk" + id + "follow", "They come with you", ChatFormatting.AQUA)).append(" ")
+                            .append(button("Return to your seat", "/talk" + id + "post", "Back to the council table", ChatFormatting.AQUA)));
+                }
+                case "follow" -> { if (mayCommand(p, m)) { m.follow(p); say(p, m, "As you wish, Administrator."); } }
+                case "post" -> { if (mayCommand(p, m)) { m.follow(null); say(p, m, "I'll be at the table."); } }
+                default -> {}
+            }
+        }
+    }
+
+    // ================================================================== overheard
+
+    /** Two staff near each other sometimes talk about the news, and you can overhear them. */
+    public static void chatter(FoundationStaff a) {
+        if (!(a.level() instanceof net.minecraft.server.level.ServerLevel sl)) return;
+        FoundationStaff b = null;
+        for (FoundationStaff o : sl.getEntitiesOfClass(FoundationStaff.class, a.getBoundingBox().inflate(5))) if (o != a && !o.getTags().contains(RiftTeams.CREW_TAG)) b = o;
+        if (b == null) return;
+        List<ServerPlayer> ears = new ArrayList<>();
+        for (ServerPlayer q : sl.players()) if (q.distanceTo(a) < 12) ears.add(q);
+        if (ears.isEmpty()) return;
+        Random r = new Random();
+        List<WorldNews.Item> news = WorldNews.recent(sl.getServer(), 4);
+        String l1, l2;
+        if (!news.isEmpty() && r.nextInt(3) > 0) {
+            WorldNews.Item i = news.get(r.nextInt(Math.min(3, news.size())));
+            l1 = pick(r, "Did you hear " + i.headline() + "?", "So apparently " + i.headline() + ".", "They're saying " + i.headline() + ".");
+            l2 = opinion(temper(b), i.mood(), r);
+        } else {
+            String[][] small = {{"Coffee machine's broken again.", "Someone said it's anomalous now. It makes tea."},
+                    {"You on nights this week?", "Nights. Always nights."},
+                    {"Did you finish the incident report?", "Which one? There were three."},
+                    {"I swear the hallway on B2 was longer yesterday.", "Don't measure it. Last guy who measured it got transferred."},
+                    {"Lunch?", "If 999 is in the cafeteria again, I'm in."}};
+            String[] s = small[r.nextInt(small.length)];
+            l1 = s[0];
+            l2 = s[1];
+        }
+        a.getLookControl().setLookAt(b, 30, 30);
+        b.getLookControl().setLookAt(a, 30, 30);
+        for (ServerPlayer q : ears) {
+            q.sendSystemMessage(Component.literal(a.getName().getString() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(l1).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC)));
+            q.sendSystemMessage(Component.literal(b.getName().getString() + ": ").withStyle(ChatFormatting.DARK_AQUA).append(Component.literal(l2).withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC)));
+        }
+    }
+}

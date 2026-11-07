@@ -195,6 +195,7 @@ public final class RiftTeams {
             }
             l.playSound(null, rift.blockPosition(), SoundEvents.ENDERMAN_TELEPORT, SoundSource.NEUTRAL, 1F, 0.5F);
             j.crew.clear();
+            WorldNews.record(l.getServer(), WorldNews.Kind.RIFT_LOST, "rift", "a D-Class crew was pulled into a rift near " + j.x + ", " + j.z, -4, "");
             if (p != null) {
                 Career.message(p, O5.O5_5, "We lost the D-Class team at the rift near " + j.x + ", " + j.z + ". It pulled them in. It's still open. Send another, or go yourself.");
                 Career.changeStability(p, -1);
@@ -202,6 +203,7 @@ public final class RiftTeams {
             return;
         }
         ItemStack frag = UnleashedApi.extractRift(rift);
+        WorldNews.record(l.getServer(), WorldNews.Kind.RIFT_CLOSED, "rift", (j.mtf ? "an MTF team" : "a D-Class crew") + " closed a rift near " + j.x + ", " + j.z, 3, "");
         l.sendParticles(ParticleTypes.FLASH, c.x, c.y + 0.6, c.z, 1, 0, 0, 0, 0);
         l.sendParticles(ParticleTypes.END_ROD, c.x, c.y + 0.6, c.z, 40, 0.5, 0.5, 0.5, 0.15);
         l.playSound(null, BlockPos.containing(c), SoundEvents.BEACON_DEACTIVATE, SoundSource.NEUTRAL, 1F, 1.2F);

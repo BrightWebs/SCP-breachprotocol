@@ -92,6 +92,7 @@ public final class ShyGuyTalk {
                     if (!allowed(p) || e == null || !UnleashedApi.isShyGuy(e) || e.distanceTo(p) > 24 || DYING.containsKey(e.getId())) return 0;
                     p.sendSystemMessage(Component.literal("You: ").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal("Die.").withStyle(ChatFormatting.WHITE)));
                     DYING.put(e.getId(), 60);
+                    WorldNews.record(p.server, WorldNews.Kind.SHYGUY_KILLED, "096", "the Administrator spoke one word to SCP-096 and it rotted where it stood", 2, p.getGameProfile().getName());
                     if (e instanceof LivingEntity le) le.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 80, 9, false, false));
                     calm(null, e);
                     return 1;
@@ -112,6 +113,7 @@ public final class ShyGuyTalk {
         if (!calmFor(e).contains(p.getUUID().toString())) list.add(StringTag.valueOf(p.getUUID().toString()));
         e.getPersistentData().put(KEY, list);
         p.sendSystemMessage(Component.literal("You: ").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal("Calm down, buddy. It's just me.").withStyle(ChatFormatting.WHITE)));
+        WorldNews.record(p.server, WorldNews.Kind.SHYGUY_CALMED, "096", "SCP-096 let the Administrator look at its face, and stayed calm", 4, p.getGameProfile().getName());
         p.sendSystemMessage(Component.literal("SCP-096 stops shaking. It lowers its hands. It will not fear your face again.").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
         l.sendParticles(ParticleTypes.HEART, e.getX(), e.getY() + e.getBbHeight() + 0.3, e.getZ(), 4, 0.3, 0.2, 0.3, 0);
         shield(e);

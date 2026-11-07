@@ -743,6 +743,8 @@ public final class Garden {
             for (Entity e : p.level().getEntities(p, p.getBoundingBox().inflate(160), e -> e instanceof LivingEntity))
                 ((LivingEntity) e).addEffect(new MobEffectInstance(MobEffects.GLOWING, 20 * 60, 0));
             for (int i = 0; i < 3; i++) Career.commend(p);
+            com.breachprotocol.career.WorldNews.record(p.server, com.breachprotocol.career.WorldNews.Kind.KNOWLEDGE, "garden",
+                    p.getGameProfile().getName() + " ate from the Tree of Knowledge, and came back different", 0, p.getGameProfile().getName());
             p.playNotifySound(SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 1F, 0.6F);
             title(p, "YOUR EYES ARE OPENED", "You know good and evil", ChatFormatting.DARK_RED);
             Career.message(p, O5.O5_1, "So you've eaten it. Now you see what we see, and you can never stop seeing it. Use it well.");
@@ -750,6 +752,8 @@ public final class Garden {
         }
         // below the Council: cast out
         GatePass.banish(p, System.currentTimeMillis() + REAL_DAY_MS);
+        com.breachprotocol.career.WorldNews.record(p.server, com.breachprotocol.career.WorldNews.Kind.BANISHED, "garden",
+                p.getGameProfile().getName() + " ate from the Tree of Knowledge and was cast out of the Garden", -3, p.getGameProfile().getName());
         title(p, "CAST OUT", "The Guardian will not let you return for a day", ChatFormatting.RED);
         p.playNotifySound(SoundEvents.WITHER_SPAWN, SoundSource.PLAYERS, 0.5F, 1.6F);
         p.sendSystemMessage(Component.literal("You took what was not yours. The Gate is closed to you for one full day.").withStyle(ChatFormatting.RED));

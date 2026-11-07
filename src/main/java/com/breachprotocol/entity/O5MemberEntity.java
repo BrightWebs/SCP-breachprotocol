@@ -40,6 +40,13 @@ public class O5MemberEntity extends PathfinderMob {
     private BlockPos home;
     private boolean unseated;
     private long holdUntil;
+    private java.util.UUID leader;
+
+    /** The Administrator can ask an Overseer to walk with them (null: back to their seat). */
+    public void follow(Player p) {
+        leader = p == null ? null : p.getUUID();
+        if (p != null) { Seats.stand(this); clearRestriction(); } else restrict();
+    }
 
     public O5MemberEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -62,8 +69,9 @@ public class O5MemberEntity extends PathfinderMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new FollowGoal(this, () -> leader != null && level() instanceof net.minecraft.server.level.ServerLevel sl ? sl.getPlayerByUUID(leader) : null));
         // seated most of the time: back to their chair quickly, minutes at a time
-        this.goalSelector.addGoal(1, new SitGoal(this, () -> unseated ? null : home, 0.04F, 20 * 120, 20 * 360, 10,
+        this.goalSelector.addGoal(2, new SitGoal(this, () -> unseated || leader != null ? null : home, 0.04F, 20 * 120, 20 * 360, 10,
                 pos -> com.breachprotocol.world.Site01.mayUseChair(this, pos)));
         this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 12F, 1.0F));
         this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.6, 0.004F));
@@ -93,6 +101,7 @@ public class O5MemberEntity extends PathfinderMob {
     public boolean holdSeat() { return level().getGameTime() < holdUntil; }
 
     private void restrict() {
+        if (leader != null) return;
         if (home != null) restrictTo(home, unseated ? 40 : 9);
     }
 
@@ -142,6 +151,7 @@ public class O5MemberEntity extends PathfinderMob {
             }
             player.sendSystemMessage(Component.literal(me.sender() + ": ").withStyle(ChatFormatting.DARK_RED)
                     .append(Component.literal(line).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+            if (player instanceof net.minecraft.server.level.ServerPlayer sp && (Career.rank(player).atLeast(Rank.LEVEL_5) || Career.isAscended(player))) Talk.openO5(sp, this);
         }
         return InteractionResult.sidedSuccess(level().isClientSide);
     }

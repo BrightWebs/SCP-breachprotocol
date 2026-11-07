@@ -181,11 +181,13 @@ public final class Career {
             case LEVEL_3 -> message(p, O5.O5_6, "You've got a steady hand. Security is yours now. Keep the doors shut and the lights on.");
             case LEVEL_5 -> message(p, O5.O5_7, "Site Director. Your site, your responsibility. The Council will be watching. Lockdown authority has been added to your phone.");
             case OVERSEER -> {
+                WorldNews.record(p.server, WorldNews.Kind.PROMOTION, "o5", p.getGameProfile().getName() + " was made O5-13", 2, p.getGameProfile().getName());
                 message(p, O5.O5_7, "Welcome to the Council, Thirteen. When we are divided, you decide. Expect calls.");
                 broadcast(p.server, Component.literal("[O5 COMMAND] ").withStyle(ChatFormatting.DARK_RED, ChatFormatting.BOLD)
                         .append(Component.literal(p.getName().getString() + " has taken the seat of O5-13.").withStyle(ChatFormatting.RED)));
             }
             case ADMINISTRATOR -> {
+                WorldNews.record(p.server, WorldNews.Kind.PROMOTION, "admin", p.getGameProfile().getName() + " became the Administrator", 5, p.getGameProfile().getName());
                 ServerLevel overworld = p.server.overworld();
                 p.sendSystemMessage(Component.literal("Site-01 is being prepared...").withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.ITALIC));
                 BlockPos site = Site01.ensureBuilt(overworld);
@@ -673,6 +675,7 @@ public final class Career {
 
     /** Spawns an uncontained SCP near the player and sounds the alarm. */
     public static void breachNear(ServerPlayer p, String entityId) {
+        WorldNews.record(p.server, WorldNews.Kind.BREACH, entityId, Unleashed.designation(entityId) + " breached containment near " + p.getGameProfile().getName(), -6, p.getGameProfile().getName());
         ServerLevel level = p.serverLevel();
         var type = Unleashed.entity(entityId);
         Vec3 spot = surfaceSpot(level, p.blockPosition(), 25, 45, p.getRandom());

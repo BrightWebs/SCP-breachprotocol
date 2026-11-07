@@ -412,12 +412,18 @@ public final class Council {
             }
             then(50, () -> {
                 String reply;
+                int before = Career.data(p).stability;
                 try {
                     reply = chosen.effect().apply(p, Career.data(p));
                 } catch (Throwable t) {
                     reply = "It's done.";
                 }
                 speak(caller, reply);
+                Set<Integer> sup = new HashSet<>();
+                for (Map.Entry<Integer, Integer> en : stance.entrySet()) if (en.getValue() == option) sup.add(en.getKey());
+                if (sup.isEmpty() && !overruled) sup.add(caller);
+                WorldNews.record(p.server, WorldNews.Kind.DECISION, item.id() + "|" + chosen.label(), WorldNews.headline(item.id(), chosen.label()),
+                        Career.data(p).stability - before, overruled ? "the Administrator, over the Council" : admin ? "the Council" : "the Council, with O5-13", sup);
                 Career.sync(p);
             });
             then(80, () -> {});
@@ -567,6 +573,7 @@ public final class Council {
             final int gone = out;
             then(60, () -> {
                 tell(Component.literal("O5-" + gone + " \"" + O5.seat(gone).nickname + "\" gives up their seat.").withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+                WorldNews.record(p.server, WorldNews.Kind.SEAT_VOTE, "seat" + gone, "O5-" + gone + " was voted off the Council to make room for " + p.getGameProfile().getName(), 0, p.getGameProfile().getName(), Set.of(gone));
                 speak(gone, rnd.nextBoolean() ? "So be it. I'll be around. The Foundation doesn't let anyone truly leave." : "The vote is the vote. Take good care of my chair, Thirteen.");
             });
             then(40, () -> {
