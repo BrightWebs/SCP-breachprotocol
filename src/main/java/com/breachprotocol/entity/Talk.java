@@ -186,6 +186,10 @@ public final class Talk {
         if (armed(p) && Career.rank(p).ordinal() < Rank.LEVEL_3.ordinal()) return "Why are you armed? Put that away before security sees it.";
         WorldNews.Item last = WorldNews.latest(srv);
         String news = last != null && srv.overworld().getGameTime() - last.time() < 24000 ? last.headline() : null;
+        if (news != null && mine(last, p)) {
+            if (r.nextBoolean()) return toYou(last, p, t, r);
+            news = null;
+        }
         if (news != null && r.nextBoolean()) {
             return (morale >= 0 ? pick(r, "Better, honestly. ", "Not bad. ") : pick(r, "Tense. ", "Honestly? Rattled. "))
                     + "Everyone's talking about how " + news + ".";
@@ -197,6 +201,30 @@ public final class Talk {
             case CAREFUL -> morale >= 0 ? pick(r, "Quiet. I don't trust quiet, but I'll take it.", "Fine, as long as nothing changes.") : pick(r, "I've checked my exits twice today.", "Not great. I keep watching the doors.");
             case CYNICAL -> morale >= 0 ? pick(r, "Nothing's on fire. Give it an hour.", "Same as always. Which is to say, nobody's dead yet.") : pick(r, "Oh, wonderful. Can't you tell?", "Ask me again after the next breach.");
             case EARNEST -> morale >= 0 ? pick(r, "Good! We did something right this week.", "Hopeful, actually. It feels like we're winning.") : pick(r, "Worried. I just want everyone to go home safe.", "Hard week. But I believe in what we're doing.");
+        };
+    }
+
+    private static boolean topBrass(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
+
+    /** Whether a piece of news is about the person they're talking to (gossip about them stays between staff). */
+    static boolean mine(WorldNews.Item i, ServerPlayer p) {
+        return i.who().equals(p.getGameProfile().getName()) || topBrass(p) && i.who().contains("Administrator");
+    }
+
+    /** What they say to your face about something you did. */
+    static String toYou(WorldNews.Item i, ServerPlayer p, Temper t, Random r) {
+        String a = topBrass(p) ? "Administrator" : Career.address(p);
+        return switch (i.kind()) {
+            case SHYGUY_KILLED -> pick(r, "The containment team for 096 asked me to pass on their thanks, " + a + ".", "096's cell is empty for the first time in decades. Thank you, " + a + ".");
+            case SHYGUY_CALMED -> pick(r, "096's handlers say it's never been this calm. Whatever you did, " + a + ", it worked.", "Containment on 096 reports no incidents since your visit, " + a + ".");
+            case PROMOTION -> pick(r, "Congratulations on the appointment, " + a + ".", "It's an honour to serve under you, " + a + ".");
+            case SEAT_VOTE -> "Welcome to the Council, " + a + ".";
+            case KNOWLEDGE -> pick(r, "You've been to the Garden, " + a + ". I won't ask.", "Whatever you learned in the Garden, " + a + ", we're glad you're back.");
+            case BANISHED -> "I heard the Gate turned you away. I'm sorry, " + a + ".";
+            case TREATMENT -> "Thank you for looking after our people, " + a + ".";
+            case DECISION -> i.mood() >= 0 ? pick(r, "Your ruling is already paying off, " + a + ".", "The site's steadier since your decision, " + a + ".")
+                    : pick(r, "We're carrying out your ruling, " + a + ". It's been a hard few days, but we'll manage.", "Your orders are being followed, " + a + ".");
+            default -> i.mood() >= 0 ? "Thank you, " + a + ". People have noticed." : "It's been a difficult stretch, " + a + ". We're with you.";
         };
     }
 
@@ -226,7 +254,9 @@ public final class Talk {
         Random r = new Random();
         List<WorldNews.Item> recent = WorldNews.recent(p.server, 5);
         if (recent.isEmpty()) return pick(r, "Nothing worth repeating. Which around here is good news.", "Quiet week. Don't jinx it.");
-        WorldNews.Item i = recent.get(r.nextInt(Math.min(3, recent.size())));
+        List<WorldNews.Item> others = recent.stream().filter(x -> !mine(x, p)).toList();
+        if (others.isEmpty()) return toYou(recent.get(0), p, temper(s), r) + " Other than that, it's been quiet.";
+        WorldNews.Item i = others.get(r.nextInt(Math.min(3, others.size())));
         String when = WorldNews.ago(p.server, i);
         String lead = pick(r, "Did you hear? ", "Word is ", "Between us: ", "You didn't hear it from me, but ");
         return lead + i.headline() + " (" + when + "). " + opinion(temper(s), i.mood(), r);
@@ -237,6 +267,8 @@ public final class Talk {
         WorldNews.Item d = WorldNews.latest(p.server, WorldNews.Kind.DECISION);
         if (d == null) return "The Council hasn't decided anything we've heard about lately. Which means they've decided plenty we haven't.";
         boolean overruled = d.who().contains("over the Council");
+        if (topBrass(p) && d.who().contains("Administrator"))
+            return "Your decision: " + d.headline() + ". " + (d.mood() >= 0 ? "From where I stand, it was the right one." : "It's been hard on the site, but we'll see it through.");
         String a = "Last I heard, " + d.headline() + ". ";
         if (overruled) a += "And the Administrator overruled the lot of them. ";
         return a + opinion(temper(s), d.mood(), r);
@@ -257,7 +289,7 @@ public final class Talk {
     public static String greeting(FoundationStaff s, ServerPlayer p, String base) {
         WorldNews.Item last = WorldNews.latest(p.server);
         if (last != null && p.server.overworld().getGameTime() - last.time() < 6000 && last.who().equals(p.getGameProfile().getName()) && new Random().nextBoolean()) {
-            return base + " " + (last.mood() >= 0 ? "And thank you, for " : "We heard about ") + last.headline().replace(p.getGameProfile().getName() + " ", "") + ".";
+            return base + " " + toYou(last, p, temper(s), new Random());
         }
         return base;
     }
@@ -552,7 +584,18 @@ public final class Talk {
         Random r = new Random();
         List<WorldNews.Item> news = WorldNews.recent(sl.getServer(), 4);
         String l1, l2;
-        if (!news.isEmpty() && r.nextInt(3) > 0) {
+        ServerPlayer boss = null;
+        for (ServerPlayer q : ears) if (topBrass(q)) boss = q;
+        if (boss != null && r.nextInt(3) == 0) {
+            String[][] hush = {{"Is that the Administrator?", "Don't look. Don't look at it."},
+                    {"The Administrator's on this floor.", "...I have a family. Just keep working."},
+                    {"Did the Administrator just walk past?", "Eyes on your clipboard. Look busy."},
+                    {"I heard what the Administrator did to 096.", "Keep your voice down. They can hear everything."},
+                    {"Do you think the Administrator sleeps?", "I think the Administrator doesn't need to."}};
+            String[] h = hush[r.nextInt(hush.length)];
+            l1 = h[0];
+            l2 = h[1];
+        } else if (!news.isEmpty() && r.nextInt(3) > 0) {
             WorldNews.Item i = news.get(r.nextInt(Math.min(3, news.size())));
             l1 = pick(r, "Did you hear " + i.headline() + "?", "So apparently " + i.headline() + ".", "They're saying " + i.headline() + ".");
             l2 = opinion(temper(b), i.mood(), r);

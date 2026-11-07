@@ -324,7 +324,7 @@ public class FoundationStaff extends PathfinderMob {
 
     private String greeting(ServerPlayer p, Rank r) {
         String a = Career.address(p);
-        if (Career.isAscended(p)) return pick("...You. Please. I have a family.", "Don't look at it. Don't look at it.", "S-sir. Whatever you need.");
+        if (Career.isAscended(p)) return pick("Administrator. Welcome back.", "Administrator. Whatever you need.", "Administrator. The site is ready for you.", "Good to see you, Administrator.");
         return switch (r) {
             case CLASS_D -> switch (role()) {
                 case GUARD -> pick("Eyes down, " + a + ". Keep moving.", "Hands where I can see them, " + a + ".", "You're out of your block, " + a + ". Back. Now.");
