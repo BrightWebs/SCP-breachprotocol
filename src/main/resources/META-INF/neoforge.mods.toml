@@ -8,7 +8,7 @@ version = "${mod_version}"
 displayName = "${mod_name}"
 authors = "${mod_authors}"
 logoFile = "breachprotocol.png"
-credits = "SCP concepts are from the SCP Foundation wiki (scp-wiki.wikidot.com), licensed CC BY-SA 3.0. All models, textures and sounds in this mod are original."
+credits = "SCP concepts are from the SCP Foundation wiki (scp-wiki.wikidot.com), licensed CC BY-SA 3.0. Staff models, skins, faces, hair and colour maps are from Minecraft Comes Alive Reborn by Conczin and the MCA Reborn contributors (GPL-3.0, github.com/Luke100000/minecraft-comes-alive). All other models, textures and sounds in this mod are original."
 description = '''Addon for SCP Unleashed by Raikin. ${mod_description}
 
 Original Breach Protocol mechanics:

@@ -50,6 +50,7 @@ public class FoundationStaff extends PathfinderMob {
     private static final EntityDataAccessor<Boolean> FEMALE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Boolean> TALKING = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> WAVE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Boolean> FRIGHT = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
 
     /** One year of a staff member's life passes every Minecraft day. */
     public static final int YEAR = 24000;
@@ -81,7 +82,42 @@ public class FoundationStaff extends PathfinderMob {
     private long look(int shift, long mod) { return Math.floorMod(getUUID().getLeastSignificantBits() >>> shift ^ getUUID().getMostSignificantBits() >>> (shift + 7), mod); }
 
     /** Her figure, 0 (slight) to 1 (full). */
-    public float bustSize() { return look(3, 1000) / 1000F; }
+    public float bustSize() { return gene(8); }
+
+    // ================================================================== genetics (MCA-style genes, fixed per person, 0..1)
+
+    /** A stable pseudo-random gene from who they are. */
+    public float gene(int salt) {
+        long x = getUUID().getMostSignificantBits() * 31 + getUUID().getLeastSignificantBits() * (salt * 2654435761L + 1);
+        x ^= x >>> 33; x *= 0xff51afd7ed558ccdL; x ^= x >>> 33; x *= 0xc4ceb9fe1a85ec53L; x ^= x >>> 33;
+        return ((x >>> 11) & 0xFFFFFF) / (float) 0xFFFFFF;
+    }
+
+    /** Where their family came from: the Foundation hires from everywhere. */
+    private float heritage() { return gene(3) * 1.5F - 0.25F; }
+
+    private static float clamp01(float f) { return Math.max(0, Math.min(1, f)); }
+
+    public float melanin() { return clamp01((gene(2) - 0.5F) * 0.35F + heritage() * 0.4F + 0.1F); }
+
+    public float hemoglobin() { return clamp01(((gene(4) - 0.5F) * 0.35F + heritage() * 0.4F + 0.1F) * 0.5F); }
+
+    public float eumelanin() { return gene(5); }
+
+    public float pheomelanin() { return gene(6); }
+
+    public float faceGene() { return gene(7); }
+
+    public float eyeBrightness() { return gene(12); }
+
+    public int skinIndex() { return Math.min(4, (int) (gene(1) * 5)); }
+
+    public int hairIndex(int count) { return Math.min(count - 1, (int) (gene(11) * count)); }
+
+    /** Greying with age (white when old). 0 = natural colour. */
+    public int greyHair() { return elder() ? 0xFFD8D8DC : age() >= 52 && gene(14) < 0.5F ? 0xFFA6A4A2 : 0; }
+
+    public float widthScale() { return (isFemale() ? 0.95F : 1.0F) * (0.94F + gene(10) * 0.12F); }
 
     private static final String[] MEN = {"short", "short", "buzz", "sidepart", "sidepart", "curly", "bun"};
     private static final String[] WOMEN = {"long", "long", "bob", "ponytail", "bun", "curly", "bob"};
@@ -101,11 +137,14 @@ public class FoundationStaff extends PathfinderMob {
     public boolean glasses() { return role() != Role.RESEARCHER && look(25, 6) == 0; }
 
     /** A little taller or shorter than average. */
-    public float heightScale() { return (isFemale() ? 0.94F : 0.97F) + look(29, 100) / 100F * 0.09F; }
+    public float heightScale() { return (isFemale() ? 0.94F : 0.97F) + gene(9) * 0.09F; }
 
     public boolean isTalking() { return entityData.get(TALKING); }
 
     public boolean isWaving() { return entityData.get(WAVE) > 0; }
+
+    /** An anomaly is loose near them (and they aren't armed to deal with it). */
+    public boolean isFrightened() { return entityData.get(FRIGHT); }
 
     /** Women and men by their (first) name; the secretary is always a woman. */
     private void gender() {
@@ -266,6 +305,7 @@ public class FoundationStaff extends PathfinderMob {
         builder.define(FEMALE, false);
         builder.define(TALKING, false);
         builder.define(WAVE, 0);
+        builder.define(FRIGHT, false);
     }
 
     @Override
@@ -518,6 +558,7 @@ public class FoundationStaff extends PathfinderMob {
         if (!level().isClientSide && tickCount % 5 == 0) errandTick();
         if (!level().isClientSide) {
             if (tickCount % 10 == 0) entityData.set(TALKING, Dialogue.talkingTo(this) != null);
+            if (tickCount % 20 == 5) entityData.set(FRIGHT, role() != Role.GUARD && Talk.anomalyNear(this, 14) != null);
             int w = entityData.get(WAVE);
             if (w > 0) entityData.set(WAVE, w - 1);
         }

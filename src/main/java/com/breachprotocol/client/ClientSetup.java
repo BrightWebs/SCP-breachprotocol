@@ -15,8 +15,10 @@ public final class ClientSetup {
     public static final class ModBus {
         @SubscribeEvent
         public static void layers(EntityRenderersEvent.RegisterLayerDefinitions event) {
-            event.registerLayerDefinition(com.breachprotocol.client.render.StaffModel.LAYER, com.breachprotocol.client.render.StaffModel::createLayer);
-            event.registerLayerDefinition(com.breachprotocol.client.render.StaffModel.OUTER, com.breachprotocol.client.render.StaffModel::createOuter);
+            event.registerLayerDefinition(com.breachprotocol.client.mca.McaStaffModel.BODY, com.breachprotocol.client.mca.McaStaffModel::body);
+            event.registerLayerDefinition(com.breachprotocol.client.mca.McaStaffModel.FACE, com.breachprotocol.client.mca.McaStaffModel::face);
+            event.registerLayerDefinition(com.breachprotocol.client.mca.McaStaffModel.CLOTHES, com.breachprotocol.client.mca.McaStaffModel::clothes);
+            event.registerLayerDefinition(com.breachprotocol.client.mca.McaStaffModel.HAIR, com.breachprotocol.client.mca.McaStaffModel::hair);
         }
 
         @SubscribeEvent

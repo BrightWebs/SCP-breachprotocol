@@ -44,3 +44,16 @@ Checked against SCP Unleashed **0.0.5.2**.
 ./gradlew build     # build/libs/breachprotocol-<version>.jar
 ```
 Requires JDK 21. CI builds every push and publishes the jar as the `latest` release.
+
+
+## License and credits
+
+Breach Protocol is licensed under the GNU General Public License v3.0 (see `LICENSE`).
+
+Foundation staff are built on **Minecraft Comes Alive Reborn** by Conczin and the MCA Reborn contributors
+(GPL-3.0, https://github.com/Luke100000/minecraft-comes-alive): the staff body model (adapted in
+`client/mca/McaStaffModel.java`), the layered look system (adapted in `client/mca/McaLooks.java`), and the
+skin, face, hair and colour-map textures in `assets/breachprotocol/textures/entity/mca/`.
+
+SCP concepts are from the SCP Foundation wiki, CC BY-SA 3.0. SCP Unleashed is a separate mod and none of its
+code or assets are included.
