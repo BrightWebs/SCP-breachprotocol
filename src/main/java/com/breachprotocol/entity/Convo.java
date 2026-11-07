@@ -122,6 +122,22 @@ final class Convo {
         return n.isEmpty() ? "someone in the canteen" : n.get(new Random().nextInt(n.size()));
     }
 
+    // ================================================================== the opening exchange
+
+    private static final Map<UUID, List<Memory.Reply>> OPENING = new HashMap<>();
+
+    /** They speak first; you answer from the replies that fit what they said. */
+    static void open(ServerPlayer p, FoundationStaff s) {
+        Openers.Opener op = Openers.of(p, s);
+        Talk.say(p, s, op.text());
+        OPENING.put(p.getUUID(), op.replies());
+        Dialogue.clearOptions(p);
+        subtitle(p, s);
+        for (int i = 0; i < op.replies().size(); i++) Talk.opt(p, s, op.replies().get(i).label(), "op_" + i, "", 0xFFFFFF);
+        Talk.opt(p, s, "Something else...", "menu", "Other things to talk about", BACK);
+        Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+    }
+
     // ================================================================== the pages
 
     static void menu(ServerPlayer p, FoundationStaff s) {
@@ -490,6 +506,30 @@ final class Convo {
                 return true;
             }
             default -> {
+                if (what.startsWith("op_")) {
+                    List<Memory.Reply> rs = OPENING.remove(p.getUUID());
+                    int n;
+                    try { n = Integer.parseInt(what.substring(3)); } catch (NumberFormatException e) { n = -1; }
+                    if (rs == null || n < 0 || n >= rs.size()) { menu(p, s); return true; }
+                    Memory.Reply rp = rs.get(n);
+                    s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, trust + rp.trust())));
+                    if (rp.remember().startsWith("→")) {
+                        // the reply leads into a topic (which says your line itself)
+                        return handle(p, s, rp.remember().substring(1));
+                    }
+                    Talk.you(p, rp.label());
+                    if (!rp.reaction().isEmpty()) Talk.say(p, s, rp.reaction());
+                    switch (rp.remember()) {
+                        case "!heal" -> {
+                            p.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.REGENERATION, 20 * 12, 1));
+                            p.removeEffect(net.minecraft.world.effect.MobEffects.POISON);
+                        }
+                        case "" -> {}
+                        default -> Memory.put(s, p, "op_" + rp.remember(), "1");
+                    }
+                    menu(p, s);
+                    return true;
+                }
                 if (!what.startsWith("sr_")) return false;
                 int us = what.lastIndexOf('_');
                 String id = what.substring(3, us);

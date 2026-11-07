@@ -180,9 +180,12 @@ public class O5MemberEntity extends PathfinderMob {
             } else {
                 line = LINES_STAFF[random.nextInt(LINES_STAFF.length)];
             }
-            player.sendSystemMessage(Component.literal(me.sender() + ": ").withStyle(ChatFormatting.DARK_RED)
-                    .append(Component.literal(line).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
-            if (player instanceof net.minecraft.server.level.ServerPlayer sp && (Career.rank(player).atLeast(Rank.LEVEL_5) || Career.isAscended(player))) Talk.openO5(sp, this);
+            if (player instanceof net.minecraft.server.level.ServerPlayer sp && (Career.rank(player).atLeast(Rank.LEVEL_5) || Career.isAscended(player))) {
+                Talk.openO5(sp, this, line);
+            } else {
+                player.sendSystemMessage(Component.literal(me.sender() + ": ").withStyle(ChatFormatting.DARK_RED)
+                        .append(Component.literal(line).withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+            }
         }
         return InteractionResult.sidedSuccess(level().isClientSide);
     }

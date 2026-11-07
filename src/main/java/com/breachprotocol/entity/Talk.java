@@ -358,18 +358,24 @@ public final class Talk {
 
     public static void open(ServerPlayer p, FoundationStaff s) {
         Dialogue.begin(p, sess(s), s.getName().getString(), staffSubtitle(s), s.getId());
-        String remembered = Memory.recall(s, p, new Random());
-        say(p, s, !remembered.isEmpty() && new Random().nextInt(3) > 0 ? remembered : howAreThings(s, p));
-        mainMenu(p, s);
+        Convo.open(p, s);
         Dialogue.send(p, true);
     }
 
-    public static void openO5(ServerPlayer p, O5MemberEntity m) {
+    public static void openO5(ServerPlayer p, O5MemberEntity m) { openO5(p, m, Career.rank(p) == Rank.ADMINISTRATOR ? "Administrator." : "Yes?"); }
+
+    /** They speak first (their greeting), and you answer. */
+    public static void openO5(ServerPlayer p, O5MemberEntity m, String line) {
         O5 me = m.getSeat();
         Dialogue.begin(p, sess(m), me.sender(), o5Subtitle(m), m.getId());
         Dialogue.mood(p, m.isUnseated() ? "Retired" : WorldNews.morale(p.server) < 0 ? "Grave" : "Composed", m.isUnseated() ? 0xB0B8C4 : WorldNews.morale(p.server) < 0 ? 0xE0B060 : 0xE05050);
-        say(p, m, Career.rank(p) == Rank.ADMINISTRATOR ? "Administrator." : "Yes?");
-        mainMenu(p, m);
+        say(p, m, line);
+        Dialogue.clearOptions(p);
+        opt(p, m, topBrass(p) ? "Carry on." : "Of course.", "o5_carry", "", 0xFFFFFF);
+        opt(p, m, "What's on your mind?", "worry", "Their concerns", 0xFFFFFF);
+        if (mayCommand(p, m)) opt(p, m, "Walk with me.", "follow", "They come with you", 0xFFFFFF);
+        opt(p, m, "Something else...", "menu", "Other things to talk about", 0xC8D0DA);
+        opt(p, m, "Goodbye", "bye", "End the conversation", 0xC8D0DA);
         Dialogue.send(p, true);
     }
 
@@ -607,6 +613,10 @@ public final class Talk {
                     return;
                 }
                 case "worry" -> { say(p, m, o5Worry(p)); o5Page(p, m, new String[][]{{"What should I do about it?", "o5_advice"}, {"Is the Council divided?", "o5_divided"}}); return; }
+                case "o5_carry" -> {
+                    you(p, topBrass(p) ? "Carry on." : "Of course.");
+                    say(p, m, topBrass(p) ? pick(new Random(), "Administrator.", "As you were, then.", "We'll be ready on Tuesday.") : "Good.");
+                }
                 case "o5_why", "o5_again", "o5_peers", "o5_regret", "o5_advice", "o5_divided" -> {
                     you(p, switch (what) {
                         case "o5_why" -> "Why?";
