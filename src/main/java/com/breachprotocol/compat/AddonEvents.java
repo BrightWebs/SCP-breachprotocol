@@ -39,7 +39,8 @@ public final class AddonEvents {
         // SCP-001-1 knows its master: the Gate Guardian holds its blades for the Ascendant.
         if (p.tickCount % 40 == 0 && Career.isAscended(p)) {
             for (Entity e : p.level().getEntities(p, p.getBoundingBox().inflate(96), UnleashedApi::isGateGuardian)) {
-                UnleashedApi.calmGuardian(e, 200);
+                UnleashedApi.calmGuardian(e, 400);
+                if (p.distanceTo(e) <= 48) praise(p, e);
             }
         }
     }
@@ -60,6 +61,38 @@ public final class AddonEvents {
         Career.changeStability(best, 3);
         Career.commend(best);
         Career.sync(best);
+    }
+
+    private static final String[] PRAISE = {
+            "The blades are lowered. Pass, Master.",
+            "SCP-001-1 bows its head as you approach.",
+            "The Guardian kneels. The Garden has waited for you.",
+            "\"You were always meant to walk this way.\"",
+            "The light around the Gate turns gold at your step.",
+            "It speaks without words: welcome home.",
+            "Nothing here will raise a hand to you."};
+
+    /** SCP-001-1 greets SCP-Omega: a title when you arrive, praise while you're near, light at its feet. */
+    private static void praise(ServerPlayer p, Entity guardian) {
+        long now = p.level().getGameTime();
+        var pd = p.getPersistentData();
+        if (now - pd.getLong("bp_gate_greeted") > 20 * 120) {
+            pd.putLong("bp_gate_greeted", now);
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket(10, 60, 20));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket(net.minecraft.network.chat.Component.literal("SCP-001-1 bows").withStyle(net.minecraft.ChatFormatting.GOLD)));
+            p.connection.send(new net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket(net.minecraft.network.chat.Component.literal("The Gate opens for its master").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE)));
+            p.level().playSound(null, guardian.blockPosition(), net.minecraft.sounds.SoundEvents.BELL_RESONATE, net.minecraft.sounds.SoundSource.HOSTILE, 3.0F, 0.6F);
+            p.level().playSound(null, p.blockPosition(), net.minecraft.sounds.SoundEvents.BEACON_POWER_SELECT, net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 0.8F);
+        }
+        if (now - pd.getLong("bp_gate_praise") >= 20 * 7) {
+            pd.putLong("bp_gate_praise", now);
+            int i = (int) ((now / (20 * 7)) % PRAISE.length);
+            p.displayClientMessage(net.minecraft.network.chat.Component.literal(PRAISE[i]).withStyle(net.minecraft.ChatFormatting.GOLD, net.minecraft.ChatFormatting.ITALIC), true);
+        }
+        if (p.level() instanceof net.minecraft.server.level.ServerLevel sl) {
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD, guardian.getX(), guardian.getY() + 1, guardian.getZ(), 20, 2.0, 0.5, 2.0, 0.02);
+            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.GLOW, p.getX(), p.getY() + 1, p.getZ(), 6, 0.4, 0.6, 0.4, 0.01);
+        }
     }
 
     /** Swipe an SCP Unleashed keycard scanner with your phone: it presents the fused keycard. */
