@@ -1286,6 +1286,16 @@ public final class SiteTower extends FacilityBuilder {
 
     /** Revision 3: the lounge couch in the Administrator's office turns round to face the coffee table. */
     private void touchUp3() {
+        // the lift's floor buttons: on keyed floors the stair door's exit button had replaced the block
+        // behind them, so they dropped off; with that wall solid again they go back on every floor
+        for (int s = LOWEST; s <= ROOF; s++) {
+            BlockPos panel = liftPanel(s);
+            int fy = y(s);
+            if (!is(29, fy + 2, 7, "concrete")) set(29, fy + 2, 7, "facility_painted_concrete");
+            if (!is(panel.getX(), panel.getY(), panel.getZ(), "door_button")) set(panel.getX(), panel.getY(), panel.getZ(), "door_button[facing=east,powered=false]");
+            // and the stair door's exit button, above the door
+            if (s < ROOF && floorClearance(s) >= 1 && !is(27, fy + 3, 7, "door_button")) set(27, fy + 3, 7, "door_button[facing=north,powered=false]");
+        }
         int Y = y(9);
         if (is(22, Y + 1, 18, "couch_leather") && BuiltInRegistries.BLOCK.getKey(l.getBlockState(at(26, Y + 1, 18)).getBlock()).getPath().equals("couch_leather"))
             couch("couch_leather", 22, 18, Y, 5, true, S);
