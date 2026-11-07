@@ -859,6 +859,25 @@ public final class SiteTower extends FacilityBuilder {
 
     // ================================================================== 8: O5 Council
 
+    private static final int[] PAPERS = {0, 1, 0, 2, 1, 0, 3, 1, 0, 2, 1, 0, 1};
+
+    /** Older towers: the screens on the council table become papers, in place. */
+    public static void tidyCouncil(ServerLevel l, BlockPos origin) {
+        int Y = y(8);
+        for (int x = 10; x <= 22; x += 2)
+            for (int[] zf : new int[][]{{17, 0}, {23, 1}}) {
+                BlockPos p = origin.offset(x, Y + 2, zf[0]);
+                if (!l.isLoaded(p) || !BuiltInRegistries.BLOCK.getKey(l.getBlockState(p).getBlock()).getPath().equals("crt_monitor")) continue;
+                var paper = BuiltInRegistries.BLOCK.getOptional(ResourceLocation.fromNamespaceAndPath("scp_unleashed", "paper_stack"));
+                if (paper.isEmpty()) return;
+                var st = paper.get().defaultBlockState();
+                for (var prop : st.getProperties()) {
+                    if (prop.getName().equals("facing") && prop instanceof net.minecraft.world.level.block.state.properties.DirectionProperty dp) st = st.setValue(dp, zf[1] == 0 ? Direction.NORTH : Direction.SOUTH);
+                }
+                l.setBlock(p, st, 3);
+            }
+    }
+
     private void council() {
         int Y = y(8);
         air(1, Y + 1, 1, T - 1, Y + 4, T - 1);
@@ -867,7 +886,7 @@ public final class SiteTower extends FacilityBuilder {
         room(OFFICE, 13, 0, 26, 8, Y, true);
         room(chamber, 0, 8, T, T, Y, true);
 
-        // the council table: a hollow ring with thirteen seats, a monitor at each
+        // the council table: a hollow ring with thirteen seats, briefing papers at each (no screens)
         int x0 = 9, x1 = 23, z0 = 17, z1 = 23;
         for (int x = x0; x <= x1; x++) for (int z = z0; z <= z1; z++) {
             boolean ring = x == x0 || x == x1 || z == z0 || z == z1;
@@ -879,12 +898,12 @@ public final class SiteTower extends FacilityBuilder {
         int seat = 0;
         for (int x = x0 + 1; x <= x1 - 1 && seat < 13; x += 2) {
             set(x, Y + 1, z0 - 1, "office_chair[facing=south]");
-            set(x, Y + 2, z0, "crt_monitor[facing=north,lit=true,screen=" + (seat % 10) + "]");
+            set(x, Y + 2, z0, "paper_stack[facing=north,variant=" + PAPERS[seat % PAPERS.length] + "]");
             seat++;
         }
         for (int x = x0 + 1; x <= x1 - 1 && seat < 13; x += 2) {
             set(x, Y + 1, z1 + 1, "office_chair[facing=north]");
-            set(x, Y + 2, z1, "crt_monitor[facing=south,lit=true,screen=" + (seat % 10) + "]");
+            set(x, Y + 2, z1, "paper_stack[facing=south,variant=" + PAPERS[seat % PAPERS.length] + "]");
             seat++;
         }
         set(x1 + 1, Y + 1, (z0 + z1) / 2, "office_chair[facing=west]");

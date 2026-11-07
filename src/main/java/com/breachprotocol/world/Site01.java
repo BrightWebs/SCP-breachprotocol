@@ -66,6 +66,8 @@ public final class Site01 {
         public String admin = "";
         /** Bumped on every (re)build: Overseers and staff from an older build are removed when they load. */
         public int gen;
+        /** The council table has papers, not screens (fixed in place on older sites). */
+        public boolean tidyTable;
         /** Overseer seats (1-12) given up to players, and which player holds each. */
         public final java.util.Map<Integer, String> holders = new java.util.HashMap<>();
 
@@ -77,6 +79,7 @@ public final class Site01 {
             d.version = tag.getInt("version");
             d.admin = tag.getString("admin");
             d.gen = tag.getInt("gen");
+            d.tidyTable = tag.getBoolean("tidyTable");
             CompoundTag h = tag.getCompound("holders");
             for (String k : h.getAllKeys()) d.holders.put(Integer.parseInt(k), h.getString(k));
             return d;
@@ -88,6 +91,7 @@ public final class Site01 {
             tag.putInt("version", version);
             tag.putString("admin", admin);
             tag.putInt("gen", gen);
+            tag.putBoolean("tidyTable", tidyTable);
             CompoundTag h = new CompoundTag();
             holders.forEach((k, v) -> h.putString(String.valueOf(k), v));
             tag.put("holders", h);
@@ -211,6 +215,11 @@ public final class Site01 {
             new Builder(overworld, o).build();
             data.built = true;
             data.version = VERSION;
+            data.tidyTable = true;
+            data.setDirty();
+        } else if (!data.tidyTable && overworld.isLoaded(o.offset(seatChair(1)))) {
+            new Builder(overworld, o).tidyTable();
+            data.tidyTable = true;
             data.setDirty();
         }
         registerSite(overworld, o);
@@ -375,6 +384,22 @@ public final class Site01 {
                     ui("scp096_bag", Items.LEATHER, 1), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2));
         }
 
+        /** What sits on the table in front of each Overseer: briefing folders and papers (no screens). */
+        private static String paperwork(int seat, Direction f) {
+            return "paper_stack[facing=" + f(f.getOpposite()) + ",variant=" + new int[]{0, 1, 0, 2, 1, 0, 1, 3, 0, 1, 2, 0}[(seat - 1) % 12] + "]";
+        }
+
+        /** Older sites: the screens on the council table become papers, in place (nothing else is touched). */
+        void tidyTable() {
+            for (int n = 1; n <= 12; n++) {
+                BlockPos c = seatChair(n);
+                Direction f = seatFacing(n);
+                BlockPos mon = c.relative(f);
+                net.minecraft.world.level.block.state.BlockState st = l.getBlockState(at(mon.getX(), Y + 2, mon.getZ()));
+                if (net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(st.getBlock()).getPath().contains("monitor")) set(mon.getX(), Y + 2, mon.getZ(), paperwork(n, f));
+            }
+        }
+
         /** The twelve Overseers around a ring table; the Administrator's seat at its head. */
         private void council() {
             room(OFFICE.floor("facility_carpet_blue"), 16, 0, 38, 18, Y, true);
@@ -392,7 +417,7 @@ public final class Site01 {
                 Direction f = seatFacing(n);
                 set(c.getX(), Y + 1, c.getZ(), "office_chair[facing=" + f(f) + "]");
                 BlockPos mon = c.relative(f);
-                set(mon.getX(), Y + 2, mon.getZ(), "crt_monitor[facing=" + f(f.getOpposite()) + ",lit=true,screen=" + (n % 10) + "]");
+                set(mon.getX(), Y + 2, mon.getZ(), paperwork(n, f));
                 O5MemberEntity m = ModEntities.O5_MEMBER.get().create(l);
                 if (m == null) continue;
                 m.setSeat(O5.seat(n));

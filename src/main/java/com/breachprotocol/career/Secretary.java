@@ -160,6 +160,7 @@ public final class Secretary {
             BlockPos at = post(s);
             if (!ow.isLoaded(at) || ow.getNearestPlayer(at.getX(), at.getY(), at.getZ(), 64, false) == null || !isTower(ow, s)) continue;
             if (d.secretaries.containsKey(s.name)) stock(ow, s, d);
+            if (srv.getTickCount() % 600 == 9) SiteTower.tidyCouncil(ow, origin(s)); // papers, not screens, on the council table
             Long due = d.secretaryDue.get(s.name);
             if (!d.secretaries.containsKey(s.name) && (due == null || now >= due)) {
                 FoundationStaff f = hire(ow, s);
