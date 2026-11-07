@@ -1,0 +1,40 @@
+{
+  "answers": [
+    {
+      "name": "only",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "informant.only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "careful",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "informant.careful",
+            "positive": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

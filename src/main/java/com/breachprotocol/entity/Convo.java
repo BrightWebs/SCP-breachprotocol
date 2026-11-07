@@ -72,6 +72,10 @@ final class Convo {
         if (Memory.get(s, p, "reprimanded").equals("1")) traits.add("reprimanded");
         if (!traits.isEmpty()) info.add("Traits: " + String.join(", ", traits));
         info.add(Scene.cap(bond(t)) + " · " + Scene.of(p, s).place.name());
+        Registry.Rec rec = Registry.find(s.getServer(), s.getUUID());
+        String[] nm = s.getName().getString().split(" ");
+        info.add("Native of " + (rec != null && rec.note.contains("village") ? "the village" : rec != null && !rec.site.isEmpty() ? rec.site : siteName(s)));
+        if (nm.length > 1) info.add("Surname: " + nm[nm.length - 1]);
         Dialogue.info(p, info, t);
     }
 
@@ -85,6 +89,7 @@ final class Convo {
         int c;
         if (x != null && Defence.alertAt(x.name) != null) { m = "Alarmed"; c = 0xFF6060; }
         else if (Talk.anomalyNear(s, 20) != null) { m = "Frightened"; c = 0xFF9060; }
+        else if (Talk.joyNear(s, 16) != null) { m = "Delighted (SCP-999)"; c = 0x80E0A0; }
         else if (!s.illness().isEmpty()) { m = "Unwell"; c = 0xB0C890; }
         else if (death != null && p.server.overworld().getGameTime() - death.time() < 24000) { m = "Grieving"; c = 0x90A8C8; }
         else if (morale < 0) {
@@ -168,6 +173,7 @@ final class Convo {
         if (Management.candidate(s)) { Dialogue.clearOptions(p); Management.openInterview(p, s); return; }
         if (Recruiting.walkIn(s)) { Dialogue.clearOptions(p); Recruiting.openWalkIn(p, s); return; }
         Social.seed(s, p);
+        PAGE.put(p.getUUID(), "root");
         Openers.Opener op = Social.opener(p, s);
         if (op == null) op = Openers.of(p, s);
         Talk.say(p, s, op.text());
@@ -192,36 +198,88 @@ final class Convo {
         subtitle(p, s);
         if (!Dialogue.hasAnswers(p)) Converse.replies(p, s); // there is always something to say back
         Scene.Tier tier = Scene.tier(p);
+        String page = PAGE.getOrDefault(p.getUUID(), "root");
+        boolean d = tier == Scene.Tier.DCLASS;
         if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) Talk.opt(p, s, "You wanted to tell me something?", "recall", "They remember your last conversation", SECRET);
-        if (tier == Scene.Tier.DCLASS) {
-            // a D-Class gets what a D-Class gets
-            Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
-            Talk.opt(p, s, "What happens to me next?", "dtest", "Your next test, if there is one", TOPIC);
-            Talk.opt(p, s, "Can I get something to eat?", "dfood", "Some staff will slip you food", TOPIC);
-            Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
-            Talk.opt(p, s, "Socialise", "socialise", "Chat, joke, comfort", Social.SOCIAL_C);
-            Talk.opt(p, s, "Tell me about yourself", "story", "Not everyone will tell a D-Class", TOPIC);
-            if (trust(s, p) >= 6) Talk.opt(p, s, "Off the record...", "secret", "They trust you, D-Class or not", SECRET);
-            Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
-            return;
+        switch (page) {
+            case "talk" -> {
+                // MCA's Talk: the things to talk about
+                Talk.opt(p, s, "<", "menu_root", "Back", BACK);
+                if (!d && s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)) Talk.opt(p, s, "Brief me", "brief", "Messages, calendar and site status", Talk.ORDER_C);
+                if (tier.ordinal() >= Scene.Tier.STAFF.ordinal()) Talk.opt(p, s, tier.ordinal() >= Scene.Tier.DIRECTOR.ordinal() ? "Report" : "Status?", "report", "What's happening where they are, in numbers", Talk.ORDER_C);
+                Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
+                Talk.opt(p, s, "About yourself", "story", d ? "Not everyone will tell a D-Class" : "Their life, one chapter at a time", TOPIC);
+                if (d) {
+                    Talk.opt(p, s, "What happens next?", "dtest", "Your next test, if there is one", TOPIC);
+                    Talk.opt(p, s, "Something to eat?", "dfood", "Some staff will slip you food", TOPIC);
+                } else {
+                    Talk.opt(p, s, "The news", "news", "What people are talking about", TOPIC);
+                    Talk.opt(p, s, "Your work", "work", "What they're doing and what they need", TOPIC);
+                    Talk.opt(p, s, "The Council", "council", "Their view of the O5 and their decisions", TOPIC);
+                    Talk.opt(p, s, "Site security", "safe", "Guards, attacks and threats at " + siteName(s), TOPIC);
+                }
+                if (trust(s, p) >= (tier.ordinal() >= Scene.Tier.COUNCIL.ordinal() ? 7 : 6)) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
+            }
+            case "interact" -> {
+                // MCA's Interact: doing things with them
+                Talk.opt(p, s, "<", "menu_root", "Back", BACK);
+                Talk.opt(p, s, "Socialise", "socialise", "Chat, jokes, compliments" + (trust(s, p) >= 5 ? ", flirting" : "") + (trust(s, p) >= 6 ? ", hugs" : ""), Social.SOCIAL_C);
+                Dialogue.option(p, "Gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
+                if (!d) Talk.opt(p, s, "Orders", "orders", "Follow, wait, back to work, sit", Talk.ORDER_C);
+                Talk.opt(p, s, "Address me as...", "addr_page", "How they should address you", TOPIC);
+                if (Social.slighted(s, p)) Talk.opt(p, s, "Discipline", "discipline", "They disrespected you. Deal with it", Social.DISCIPLINE_C);
+            }
+            default -> {
+                Talk.opt(p, s, "Talk", "menu_talk", "News, work, their life, the Council", TOPIC);
+                Talk.opt(p, s, "Interact", "menu_interact", "Socialise, gifts, orders", TOPIC);
+                if (!d && s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)) Talk.opt(p, s, "Brief me", "brief", "Messages, calendar and site status", Talk.ORDER_C);
+                if (Management.mayAttend(p) && (Management.headOf(s) != null || s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)))
+                    Talk.opt(p, s, "Personnel", "mg_page", "Hiring, interviews and appointments" + (Management.headOf(s) != null ? " in their department" : ""), Talk.ORDER_C);
+                if (Social.slighted(s, p)) Talk.opt(p, s, "Discipline", "discipline", "They disrespected you. Deal with it", Social.DISCIPLINE_C);
+                Talk.opt(p, s, "Family Tree", "family_tree", "Their family, from grandparents to grandchildren", 0xF0A8C8);
+            }
         }
-        if (s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)) Talk.opt(p, s, "Brief me", "brief", "Messages, calendar and site status", Talk.ORDER_C);
-        if (tier.ordinal() >= Scene.Tier.STAFF.ordinal()) Talk.opt(p, s, tier.ordinal() >= Scene.Tier.DIRECTOR.ordinal() ? "Report" : "Status?", "report", "What's happening where they are, in numbers", Talk.ORDER_C);
-        Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
-        Talk.opt(p, s, "Tell me about yourself", "story", "Their life, one chapter at a time", TOPIC);
-        Talk.opt(p, s, "What's the news?", "news", "What people are talking about", TOPIC);
-        Talk.opt(p, s, "Your work", "work", "What they're doing and what they need", TOPIC);
-        Talk.opt(p, s, "The Council", "council", "Their view of the O5 and their decisions", TOPIC);
-        Talk.opt(p, s, "Site security", "safe", "Guards, attacks and threats at " + siteName(s), TOPIC);
-        if (trust(s, p) >= (tier.ordinal() >= Scene.Tier.COUNCIL.ordinal() ? 7 : 6)) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
-        Talk.opt(p, s, "Orders", "orders", "Tell them what to do", Talk.ORDER_C);
-        if (Management.mayAttend(p) && (Management.headOf(s) != null || s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)))
-            Talk.opt(p, s, "Personnel", "mg_page", "Hiring, interviews and appointments" + (Management.headOf(s) != null ? " in their department" : ""), Talk.ORDER_C);
-        Talk.opt(p, s, "Family", "family_tree", "Their family tree", 0xF0A8C8);
-        if (Social.slighted(s, p)) Talk.opt(p, s, "Discipline", "discipline", "They disrespected you. Deal with it", Social.DISCIPLINE_C);
-        Talk.opt(p, s, "Socialise", "socialise", "Chat, jokes, compliments" + (trust(s, p) >= 5 ? ", flirting" : "") + (trust(s, p) >= 6 ? ", hugs" : ""), Social.SOCIAL_C);
-        Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
         Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+    }
+
+    /** Which of MCA's menus is showing (the main one, Talk or Interact). */
+    static final Map<UUID, String> PAGE = new HashMap<>();
+
+    /** How they address you: sir, ma'am, your title, or your name (per person). */
+    static boolean address(ServerPlayer p, FoundationStaff s, String what) {
+        switch (what) {
+            case "menu_root", "menu_talk", "menu_interact" -> { PAGE.put(p.getUUID(), what.substring(5)); menu(p, s); return true; }
+            case "addr_page" -> {
+                Talk.you(p, "About how you address me.");
+                Talk.say(p, s, Clearance.RAW + "Of course. How would you like me to address you?");
+                Dialogue.clearOptions(p);
+                subtitle(p, s);
+                Talk.ans(p, s, "\"Sir\" is fine.", "addr_sir", "");
+                Talk.ans(p, s, "\"Ma'am\", please.", "addr_maam", "");
+                Talk.ans(p, s, "Use my title.", "addr_title", "Administrator, Director, Doctor...");
+                Talk.ans(p, s, "Call me by my name.", "addr_name", "They'll need to know you well");
+                topics(p, s);
+                return true;
+            }
+            case "addr_sir", "addr_maam", "addr_title", "addr_name" -> {
+                String k = what.substring(5);
+                if (k.equals("name") && trust(s, p) < 6 && !Social.partner(s, p)) {
+                    Talk.you(p, "Call me by my name.");
+                    Talk.say(p, s, Clearance.RAW + "I- I couldn't. Not yet. It wouldn't feel right.");
+                } else {
+                    Memory.put(s, p, "addr", k);
+                    Talk.you(p, switch (k) { case "sir" -> "\"Sir\" is fine."; case "maam" -> "\"Ma'am\", please."; case "title" -> "Use my title."; default -> "Call me by my name."; });
+                    Career.ADDRESS.set(k);
+                    Talk.say(p, s, Clearance.RAW + switch (k) {
+                        case "name" -> "All right. " + p.getGameProfile().getName() + ". That's going to take some getting used to.";
+                        default -> "Understood, " + Career.address(p) + ".";
+                    });
+                }
+                menu(p, s);
+                return true;
+            }
+            default -> { return false; }
+        }
     }
 
     /** A factual report on where they are: what's contained nearby, who's on duty, who's ill, what's happened. */
@@ -260,7 +318,7 @@ final class Convo {
         Talk.Temper t = Talk.temper(s);
         String a = Career.address(p);
         int trust = trust(s, p);
-        if (Recruiting.handleWalkIn(p, s, what) || Management.handle(p, s, what) || Lifecycle.handle(p, s, what) || Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
+        if (address(p, s, what) || Recruiting.handleWalkIn(p, s, what) || Management.handle(p, s, what) || Lifecycle.handle(p, s, what) || Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
             case "gift" -> {

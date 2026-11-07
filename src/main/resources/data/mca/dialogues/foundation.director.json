@@ -6,7 +6,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.strange",
             "bp": "strange"
           }
         }
@@ -18,7 +18,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.suspicious",
             "bp": "suspicious"
           }
         }
@@ -30,7 +30,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.facility",
             "bp": "facility"
           }
         }
@@ -42,7 +42,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.cover",
             "bp": "cover"
           }
         }
@@ -54,7 +54,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.amnestic",
             "bp": "amnestic"
           }
         }
@@ -66,7 +66,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.informant",
             "bp": "informant"
           }
         }
@@ -78,7 +78,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.director",
+            "next": "foundation.re.job",
             "bp": "job"
           }
         }

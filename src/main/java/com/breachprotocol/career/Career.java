@@ -64,10 +64,24 @@ public final class Career {
      * How the Council addresses you. Class-D are numbers; staff have names; the Council's own
      * members and the Administrator are "sir" to most of the Foundation.
      */
+    /** How the person you're talking to has been asked to address you ("sir", "maam", "title", "name"); set while they speak. */
+    public static final ThreadLocal<String> ADDRESS = new ThreadLocal<>();
+
     public static String address(Player p) {
         CareerData d = data(p);
         String name = p.getGameProfile().getName();
-        if (d.ascended) return "Master";
+        String asked = ADDRESS.get();
+        if (asked != null && !asked.isEmpty() && !asked.equals("title")) return switch (asked) { case "maam" -> "ma'am"; case "name" -> name; default -> "sir"; };
+        if (d.ascended) return "asked".equals(asked) ? "Master" : asked != null && asked.equals("title") ? "Master" : "sir";
+        if (asked != null && asked.equals("title")) return switch (d.getRank()) {
+            case OVERSEER -> "Overseer";
+            case ADMINISTRATOR -> "Administrator";
+            default -> address0(p, d, name);
+        };
+        return address0(p, d, name);
+    }
+
+    private static String address0(Player p, CareerData d, String name) {
         return switch (d.getRank()) {
             case CLASS_D -> personnelId(p);
             case LEVEL_1 -> name;
@@ -75,8 +89,7 @@ public final class Career {
             case LEVEL_3 -> "Officer " + name;
             case LEVEL_4 -> "Specialist " + name;
             case LEVEL_5 -> "Director " + name;
-            case OVERSEER -> p.getRandom().nextBoolean() ? "Thirteen" : "sir";
-            case ADMINISTRATOR -> p.getRandom().nextBoolean() ? "Administrator" : "sir";
+            case OVERSEER, ADMINISTRATOR -> "sir"; // unless asked otherwise (see ADDRESS)
         };
     }
 

@@ -1,0 +1,40 @@
+{
+  "answers": [
+    {
+      "name": "detail",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "emp_report.detail"
+          }
+        }
+      ]
+    },
+    {
+      "name": "good",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "emp_report.good",
+            "positive": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

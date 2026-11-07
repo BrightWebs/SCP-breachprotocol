@@ -163,7 +163,7 @@ public final class McaFoundation {
                 if (!scan) continue;
                 // something anomalous in plain sight
                 for (Mob m : l.getEntitiesOfClass(Mob.class, v.getBoundingBox().inflate(24), Unleashed::isAnomaly)) {
-                    if (Unleashed.isContained(m) || !v.hasLineOfSight(m)) continue;
+                    if (Unleashed.isContained(m) || Talk.benign(m) || !v.hasLineOfSight(m)) continue;
                     boolean fresh = now - pd.getLong("bp_saw_t") > 6000;
                     pd.putString("bp_saw", Unleashed.designation(m));
                     pd.putLong("bp_saw_t", now);
@@ -382,6 +382,7 @@ public final class McaFoundation {
             case "app_why" -> say(p, v, saw ? "Because I saw something I can't explain, and I want to know I'm not mad." : pick(r, "Because the village is small and the world is big, and you seem to be where the world keeps its secrets.", "Good wages. And honestly? Curiosity."));
             case "app_breach" -> say(p, v, pe == Personality.ANXIOUS || pe == Personality.SENSITIVE ? "Run? No- hide. Hide and wait for someone with a gun." : "Get everyone out of the room, shut the door, and find someone who knows what they're doing.");
             default -> {
+                if (key.contains(".")) { followUp(key, v, p, r, pe, saw, amn, what, sn, a, hearts); break; }
                 if (key.startsWith("hire_")) {
                     if (tier(p) < 3) { say(p, v, "I think I need to speak to someone who can actually hire me."); break; }
                     FoundationStaff.Role role = switch (key.substring(5)) {
@@ -397,6 +398,58 @@ public final class McaFoundation {
                 }
             }
         }
+    }
+
+    /** Your answer to what they just said, and what they say back. */
+    private static void followUp(String key, Entity v, ServerPlayer p, Random r, Personality pe, boolean saw, boolean amn, String what, String sn, String a, int hearts) {
+        CompoundTag pd = v.getPersistentData();
+        long now = v.level().getGameTime();
+        boolean meek = pe == Personality.ANXIOUS || pe == Personality.SENSITIVE || pe == Personality.PEACEFUL || pe == Personality.FRIENDLY;
+        String line = switch (key) {
+            case "strange.where" -> saw ? (tier(p) >= 2 ? "Out to the " + dir(v, pd.getInt("bp_saw_x"), pd.getInt("bp_saw_z")) + ", near " + pd.getInt("bp_saw_x") + ", " + pd.getInt("bp_saw_z") + ". By the time I'd looked twice, it was gone." : "Out past the fields. I'm not going back to check.")
+                    : "Nowhere. I told you, I didn't see anything.";
+            case "strange.believe" -> saw ? pick(r, "...You do? Thank god. Everyone else looks at me like I've lost my mind.", "Thank you. I needed someone to say that.") : "Believe what? There's nothing to believe.";
+            case "strange.imagined" -> {
+                if (!saw) yield "That's what I said.";
+                if (meek) { pd.putBoolean("bp_saw_cover", true); yield pick(r, "Yes. Yes, I probably did. It was late. I was tired.", "You're right. Of course you're right. I'll stop thinking about it."); }
+                yield pe == Personality.CRABBY || pe == Personality.GLOOMY ? "Don't tell me what I saw. I know what I saw." : "Maybe. Maybe not. You'd say that either way, wouldn't you?";
+            }
+            case "facility.more" -> pick(r, "They say it goes deeper underground than it is tall.", "My cousin delivered bread there once. They made her sign something before she was allowed to leave.", "Someone swears they saw a statue on the back of a truck. Then the truck was empty.", "They never get sick up there. Ever. Have you noticed?");
+            case "facility.plant" -> pe == Personality.CRABBY || pe == Personality.ODD ? "A plant. With guards. And sirens. Sure." : pick(r, "Oh. Well, that's disappointing. I'd built it up in my head.", "Medicine. Right. That makes sense.");
+            case "facility.careful" -> pick(r, "Nobody goes near it. The dogs won't even walk that way.", "We don't. Well. The children dare each other. Nobody does it twice.");
+            case "suspicious.describe" -> condition("attack", v, p) ? "Grey jackets, no insignia. Rifles. One had a scar across his chin. They didn't buy anything. They just looked."
+                    : pick(r, "A woman with a camera. She photographed the road for an hour and left.", "A man who asked a lot of questions about where the trucks go. Very friendly. Too friendly.");
+            case "suspicious.thanks" -> pick(r, "I will. Is that... part of the job now? Helping you?", "You'll be the first to know.");
+            case "cover.sure" -> pick(r, "Your word. All right. That's good enough for me.", "Thank you. I'll sleep tonight.");
+            case "cover.headache" -> "Headaches. Yes, I have had headaches. How did you know?";
+            case "amnestic.weather" -> pick(r, "Oh! Yes. The weather. It's been lovely, hasn't it? Strange. I feel like I've forgotten something.", "Was I? I suppose I was. Mild for the time of year.");
+            case "amnestic.rest" -> "I think I will. My head feels... light.";
+            case "informant.only" -> "Only you. I'll send word. How will I- oh. The phone thing. Right.";
+            case "informant.careful" -> pe == Personality.ODD ? "I never look for trouble. It looks for me." : "I won't. I'm not brave. Just observant.";
+            case "job.when" -> "I'll walk up today. Before I lose my nerve.";
+            case "job.pay" -> pe == Personality.GREEDY ? "Good pay and few questions. My two favourite things." : "Few questions? That's... a bit ominous. I'll still come.";
+            case "emp_report.detail" -> {
+                List<String> l = new ArrayList<>();
+                if (saw) l.add("I saw " + what + " loose near the village. It's in my report.");
+                if (condition("attack", v, p)) l.add("There were armed strangers near the site this week.");
+                if (amn) l.add("I've had a dose of amnestics recently. I'm told that's normal.");
+                if (l.isEmpty()) l.add(pick(r, "No. Quiet shift. I like quiet shifts.", "Only that the coffee machine is making tea again."));
+                yield String.join(" ", l);
+            }
+            case "emp_report.good" -> pick(r, "Thank you, " + a + ". I will.", "Yes, " + a + ".");
+            case "emp_how.need" -> pick(r, "A day off would be nice. Or a better chair.", "More people on my shift. It's lonely after dark.", "Honestly? Just this. Someone asking.");
+            case "emp_how.glad" -> pick(r, "So am I. Most days.", "...That means a lot, " + a + ".");
+            case "emp_commend.earned" -> "Then I'll keep earning it.";
+            case "emp_dayoff.family" -> "I will. They'll ask what I do. I'll say 'paperwork'. It's not even a lie.";
+            case "app_about.family" -> "Some. My mother. She thinks I'm applying to a bakery.";
+            case "app_about.skills" -> switch (pe) { case GREEDY -> "Counting. Mostly money."; case EXTROVERTED -> "People. I can talk to anyone."; case INTROVERTED -> "Being quiet. Noticing."; default -> pick(r, "Hard work. I don't complain.", "Fixing things. Anything with a handle."); };
+            case "app_why.honest" -> "Thank you. I didn't know what answer you wanted.";
+            case "app_why.dangerous" -> meek ? "I- I know. I've heard the sirens. I still want to do it." : "Everything's dangerous. At least this way someone pays me for it.";
+            case "app_breach.right" -> "Oh, good. I was guessing.";
+            case "app_breach.wrong" -> "Procedure. Right. I'll learn the procedure.";
+            default -> "";
+        };
+        if (!line.isEmpty()) say(p, v, line);
     }
 
     /** Hire a villager into a role at the nearest site (the post comes from colleagues already working there). */

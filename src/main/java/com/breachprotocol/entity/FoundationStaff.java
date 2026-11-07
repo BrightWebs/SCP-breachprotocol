@@ -710,13 +710,14 @@ public class FoundationStaff extends PathfinderMob implements Person {
         Rank r = Career.rank(p);
         // the top brass gets everyone on their feet
         if ((r.atLeast(Rank.OVERSEER) || Career.isAscended(p)) && Seats.seated(this)) Seats.stand(this);
-        say(p, Talk.greeting(this, p, greeting(p, r)));
+        Career.ADDRESS.set(Memory.get(this, p, "addr"));
+        try { say(p, Talk.greeting(this, p, greeting(p, r))); } finally { Career.ADDRESS.remove(); }
         if (!Seats.seated(this)) entityData.set(WAVE, 30);
     }
 
     private String greeting(ServerPlayer p, Rank r) {
         String a = Career.address(p);
-        if (Career.isAscended(p)) return pick("Administrator. Welcome back.", "Administrator. Whatever you need.", "Administrator. The site is ready for you.", "Good to see you, Administrator.");
+        if (Career.isAscended(p)) return pick(Scene.cap(a) + ". Welcome back.", Scene.cap(a) + ". Whatever you need.", "The site is ready for you, " + a + ".", "Good to see you, " + a + ".");
         return switch (r) {
             case CLASS_D -> switch (role()) {
                 case GUARD -> pick("Eyes down, " + a + ". Keep moving.", "Hands where I can see them, " + a + ".", "You're out of your block, " + a + ". Back. Now.");
@@ -727,8 +728,8 @@ public class FoundationStaff extends PathfinderMob implements Person {
             case LEVEL_1, LEVEL_2 -> pick("Morning, " + a + ".", "Badge on you, " + a + "? Good.", "Coffee's fresh on the ground floor, " + a + ".");
             case LEVEL_3, LEVEL_4 -> pick("Officer " + a + ". Cell checks are done.", a + ". All quiet on this floor.", "Good to see you, " + a + ".");
             case LEVEL_5 -> pick("Director. The reports are on your desk.", "Director " + a + ". Everything's on schedule.", "Morning, Director.");
-            case OVERSEER -> pick("O5. It's... an honour.", "Overseer. Anything you need.", "Overseer " + a + ". We're ready.");
-            case ADMINISTRATOR -> pick("Administrator! Everyone up.", "Administrator. The site is yours.", "Administrator. We didn't know you were coming.");
+            case OVERSEER -> pick(Scene.cap(a) + ". It's... an honour.", "Anything you need, " + a + ".", "We're ready, " + a + ".");
+            case ADMINISTRATOR -> pick(Scene.cap(a) + "! Everyone up.", "Good to see you, " + a + ". The site is yours.", Scene.cap(a) + ". We didn't know you were coming.", "Morning, " + a + ".");
         };
     }
 

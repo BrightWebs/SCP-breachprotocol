@@ -165,7 +165,19 @@ public final class Talk {
     static Mob anomalyNear(Entity e, double r) {
         // only what they can actually see: an anomaly behind walls or in its cell frightens no one
         for (Mob m : e.level().getEntitiesOfClass(Mob.class, e.getBoundingBox().inflate(r), Unleashed::isAnomaly))
-            if (!Unleashed.isContained(m) && (!(e instanceof net.minecraft.world.entity.LivingEntity le) || le.hasLineOfSight(m))) return m;
+            if (!benign(m) && !Unleashed.isContained(m) && (!(e instanceof net.minecraft.world.entity.LivingEntity le) || le.hasLineOfSight(m))) return m;
+        return null;
+    }
+
+    /** Anomalies that are good to have around: SCP-999 (the Tickle Monster, kept for staff morale) and SCP-131 (the Eye Pods). */
+    static boolean benign(Mob m) {
+        String id = Unleashed.idOf(m).getPath();
+        return id.equals(Unleashed.SCP_999) || id.equals(Unleashed.SCP_131) || id.contains("999");
+    }
+
+    /** SCP-999 nearby: everyone cheers up. */
+    static Mob joyNear(Entity e, double r) {
+        for (Mob m : e.level().getEntitiesOfClass(Mob.class, e.getBoundingBox().inflate(r), Unleashed::isAnomaly)) if (Unleashed.idOf(m).getPath().contains("999")) return m;
         return null;
     }
 
@@ -188,6 +200,8 @@ public final class Talk {
                 default -> pick(r, "Is that " + what + "?! Why is it out?", "I'm not paid enough to be this close to " + what + ".", "Please tell me someone's coming for " + what + ".");
             };
         }
+        if (joyNear(s, 16) != null) return pick(r, "Honestly? Wonderful. 999 came past and I haven't stopped smiling since.", "Better than I've been all week. Have you seen 999 today? It hugged my clipboard.",
+                "Great! Thank you for letting 999 wander the halls. Morale's never been higher.", "Good. 999 sat on my feet for ten minutes. I think I'm in love.");
         if (Career.isAscended(p)) return pick(r, "I'm... fine. I'm fine. Please don't look at me like that.", "Everything is very good. Is that what you want to hear?");
         if (!s.illness().isEmpty()) return pick(r, "Honestly? I've got " + s.illness() + ". Medical says it'll pass. Medical says a lot of things.",
                 "Not well. " + Character.toUpperCase(s.illness().charAt(0)) + s.illness().substring(1) + ". If you've got any SCP-500 spare...",
@@ -229,7 +243,7 @@ public final class Talk {
 
     /** What they say to your face about something you did. */
     static String toYou(WorldNews.Item i, ServerPlayer p, Temper t, Random r) {
-        String a = topBrass(p) ? "Administrator" : Career.address(p);
+        String a = Career.address(p);
         return switch (i.kind()) {
             case SHYGUY_KILLED -> pick(r, "The containment team for 096 asked me to pass on their thanks, " + a + ".", "096's cell is empty for the first time in decades. Thank you, " + a + ".");
             case SHYGUY_CALMED -> pick(r, "096's handlers say it's never been this calm. Whatever you did, " + a + ", it worked.", "Containment on 096 reports no incidents since your visit, " + a + ".");
@@ -400,9 +414,12 @@ public final class Talk {
     }
 
     public static void open(ServerPlayer p, FoundationStaff s) {
-        Dialogue.begin(p, sess(s), s.getName().getString(), staffSubtitle(s), s.getId());
-        Convo.open(p, s);
-        Dialogue.send(p, true);
+        Career.ADDRESS.set(Memory.get(s, p, "addr"));
+        try {
+            Dialogue.begin(p, sess(s), s.getName().getString(), staffSubtitle(s), s.getId());
+            Convo.open(p, s);
+            Dialogue.send(p, true);
+        } finally { Career.ADDRESS.remove(); }
     }
 
     public static void openO5(ServerPlayer p, O5MemberEntity m) { openO5(p, m, Career.rank(p) == Rank.ADMINISTRATOR ? "Administrator." : "Yes?"); }
@@ -593,6 +610,12 @@ public final class Talk {
             Map.entry("worry", "What worries you?"), Map.entry("bye", "Goodbye."));
 
     private static void handle(ServerPlayer p, Entity e, String what) {
+        // they address you the way you asked them to
+        Career.ADDRESS.set(e instanceof FoundationStaff fs ? Memory.get(fs, p, "addr") : null);
+        try { handle0(p, e, what); } finally { Career.ADDRESS.remove(); }
+    }
+
+    private static void handle0(ServerPlayer p, Entity e, String what) {
         if (com.breachprotocol.compat.McaCompat.isVillager(e)) { Recruiting.talk(p, e, what); return; } // MCA villagers, as the Foundation
         ensure(p, e);
         if (e instanceof FoundationStaff fs && Convo.handle(p, fs, what)) {

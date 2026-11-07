@@ -1,0 +1,40 @@
+{
+  "answers": [
+    {
+      "name": "weather",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "amnestic.weather"
+          }
+        }
+      ]
+    },
+    {
+      "name": "rest",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "amnestic.rest",
+            "positive": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

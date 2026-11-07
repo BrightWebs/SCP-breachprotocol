@@ -1,0 +1,40 @@
+{
+  "answers": [
+    {
+      "name": "honest",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "app_why.honest",
+            "positive": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "dangerous",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "app_why.dangerous"
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

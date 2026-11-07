@@ -1,0 +1,40 @@
+{
+  "answers": [
+    {
+      "name": "describe",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "suspicious.describe"
+          }
+        }
+      ]
+    },
+    {
+      "name": "thanks",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "suspicious.thanks",
+            "positive": 2
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "answers": [
+    {
+      "name": "where",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "strange.where"
+          }
+        }
+      ]
+    },
+    {
+      "name": "believe",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "strange.believe",
+            "positive": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "imagined",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "strange.imagined"
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

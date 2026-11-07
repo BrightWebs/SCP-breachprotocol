@@ -6,7 +6,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.colleague",
+            "next": "foundation.re.emp_report",
             "bp": "emp_report"
           }
         }
@@ -18,7 +18,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.colleague",
+            "next": "foundation.re.emp_how",
             "bp": "emp_how"
           }
         }
@@ -30,7 +30,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.colleague",
+            "next": "foundation.re.strange",
             "bp": "strange"
           }
         }

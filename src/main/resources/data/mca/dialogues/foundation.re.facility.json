@@ -1,0 +1,51 @@
+{
+  "answers": [
+    {
+      "name": "more",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "facility.more"
+          }
+        }
+      ]
+    },
+    {
+      "name": "plant",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "facility.plant"
+          }
+        }
+      ]
+    },
+    {
+      "name": "careful",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "facility.careful"
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

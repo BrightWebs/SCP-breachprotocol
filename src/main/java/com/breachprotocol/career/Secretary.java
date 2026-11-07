@@ -203,7 +203,8 @@ public final class Secretary {
 
     private static String greeting(ServerPlayer p) {
         int h = (int) ((p.server.overworld().getDayTime() % Calendar.DAY) / Calendar.HOUR + 6) % 24;
-        return h < 12 ? "Good morning, Administrator." : h < 18 ? "Good afternoon, Administrator." : "Good evening, Administrator.";
+        String a = Career.address(p);
+        return (h < 12 ? "Good morning, " : h < 18 ? "Good afternoon, " : "Good evening, ") + a + ".";
     }
 
     public static void brief(ServerPlayer p, FoundationStaff f, String what) {

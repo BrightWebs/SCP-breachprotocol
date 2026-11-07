@@ -1,0 +1,95 @@
+{
+  "auto": true,
+  "silent": true,
+  "answers": [
+    {
+      "name": "",
+      "results": [
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_applicant_hire"
+            }
+          ],
+          "actions": {
+            "next": "foundation.applicant_hire"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_applicant"
+            }
+          ],
+          "actions": {
+            "next": "foundation.applicant"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_boss"
+            }
+          ],
+          "actions": {
+            "next": "foundation.boss"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_colleague"
+            }
+          ],
+          "actions": {
+            "next": "foundation.colleague"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_director"
+            }
+          ],
+          "actions": {
+            "next": "foundation.director"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_staff"
+            }
+          ],
+          "actions": {
+            "next": "foundation.staff"
+          }
+        },
+        {
+          "baseChance": 0,
+          "conditions": [
+            {
+              "chance": 100,
+              "bp": "route_civilian"
+            }
+          ],
+          "actions": {
+            "next": "foundation.civilian"
+          }
+        }
+      ]
+    }
+  ]
+}

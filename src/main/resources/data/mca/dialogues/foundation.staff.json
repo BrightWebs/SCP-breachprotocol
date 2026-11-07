@@ -6,7 +6,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.staff",
+            "next": "foundation.re.strange",
             "bp": "strange"
           }
         }
@@ -18,7 +18,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.staff",
+            "next": "foundation.re.suspicious",
             "bp": "suspicious"
           }
         }
@@ -30,7 +30,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.staff",
+            "next": "foundation.re.facility",
             "bp": "facility"
           }
         }
@@ -42,7 +42,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.staff",
+            "next": "foundation.re.cover",
             "bp": "cover"
           }
         }

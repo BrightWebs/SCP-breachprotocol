@@ -6,7 +6,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.boss",
+            "next": "foundation.re.emp_report",
             "bp": "emp_report"
           }
         }
@@ -18,7 +18,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.boss",
+            "next": "foundation.re.emp_how",
             "bp": "emp_how"
           }
         }
@@ -30,7 +30,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.boss",
+            "next": "foundation.re.emp_commend",
             "bp": "emp_commend"
           }
         }
@@ -42,7 +42,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.boss",
+            "next": "foundation.menu",
             "bp": "emp_post"
           }
         }
@@ -54,7 +54,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.boss",
+            "next": "foundation.re.emp_dayoff",
             "bp": "emp_dayoff"
           }
         }
@@ -66,7 +66,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.boss",
+            "next": "foundation.re.strange",
             "bp": "strange"
           }
         }

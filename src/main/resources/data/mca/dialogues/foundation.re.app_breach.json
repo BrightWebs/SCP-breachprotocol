@@ -1,0 +1,40 @@
+{
+  "answers": [
+    {
+      "name": "right",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "app_breach.right",
+            "positive": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "wrong",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu",
+            "bp": "app_breach.wrong"
+          }
+        }
+      ]
+    },
+    {
+      "name": "menu",
+      "results": [
+        {
+          "baseChance": 1,
+          "actions": {
+            "next": "foundation.menu"
+          }
+        }
+      ]
+    }
+  ]
+}

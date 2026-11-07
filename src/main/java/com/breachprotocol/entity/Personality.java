@@ -39,7 +39,7 @@ public enum Personality {
         return switch (this) {
             case FRIENDLY -> r.nextBoolean() ? you + ", " + lower(l) : l + " Good to see you, by the way.";
             case UPBEAT -> r.nextBoolean() ? "Oh! " + l : l.replaceAll("\\.$", "!") + " We'll be fine.";
-            case PLAYFUL -> l + " " + pick(r, "(Don't tell 682 I said that.)", "Anyway. Coffee?", "...Too soon?", "That's what I'd say if I were a mimetic hazard, too.");
+            case PLAYFUL -> l + " " + pick(r, "Anyway. Coffee?", "...Too soon?", "That's what I'd say if I were a mimetic hazard, too.");
             case GLOOMY -> l + " " + pick(r, "Not that it'll last.", "We'll all be in a dossier one day.", "It always gets worse before it gets worse.");
             case SENSITIVE -> l + " " + pick(r, "Sorry. It's been a long week.", "Thank you for listening, really.");
             case GREEDY -> l + " " + pick(r, "Any word on hazard pay?", "They don't pay me enough for this floor.");

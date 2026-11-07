@@ -6,7 +6,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.applicant_hire",
+            "next": "foundation.re.app_about",
             "bp": "app_about"
           }
         }
@@ -18,7 +18,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.applicant_hire",
+            "next": "foundation.re.app_why",
             "bp": "app_why"
           }
         }
@@ -30,7 +30,7 @@
         {
           "baseChance": 1,
           "actions": {
-            "next": "foundation.applicant_hire",
+            "next": "foundation.re.app_breach",
             "bp": "app_breach"
           }
         }
