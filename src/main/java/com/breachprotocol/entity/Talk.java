@@ -163,8 +163,9 @@ public final class Talk {
     }
 
     static Mob anomalyNear(Entity e, double r) {
+        // only what they can actually see: an anomaly behind walls or in its cell frightens no one
         for (Mob m : e.level().getEntitiesOfClass(Mob.class, e.getBoundingBox().inflate(r), Unleashed::isAnomaly))
-            if (!Unleashed.isContained(m)) return m;
+            if (!Unleashed.isContained(m) && (!(e instanceof net.minecraft.world.entity.LivingEntity le) || le.hasLineOfSight(m))) return m;
         return null;
     }
 

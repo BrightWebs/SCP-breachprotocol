@@ -180,15 +180,16 @@ public class McaStaffModel<T extends net.minecraft.world.entity.Mob & com.breach
             rightArm.yRot = 0;
             rightArm.zRot = -0.25F + Mth.sin(age * 0.9F) * 0.4F;
         }
-        // frightened (an anomaly loose and no gun): hands up, as MCA's panicking villagers do
+        // frightened (something loose, close and in plain sight): drawn in, arms up in front of the chest, trembling
         if (e.isFrightened() && !armed) {
-            float r = (float) Math.PI / 180;
-            float raise = ((Mth.sin(age / 5) * 30 - 180) + Mth.sin(age / 3) * 3) * r;
-            float side = (Mth.sin(age / 2) * 12 - 17) * r;
-            leftArm.xRot = raise;
-            leftArm.zRot = -side;
-            rightArm.xRot = -raise;
-            rightArm.zRot = side;
+            float shake = Mth.sin(age * 1.7F) * 0.05F;
+            rightArm.xRot = -1.25F + shake;
+            rightArm.yRot = -0.55F;
+            rightArm.zRot = 0.1F;
+            leftArm.xRot = -1.15F - shake;
+            leftArm.yRot = 0.55F;
+            leftArm.zRot = -0.1F;
+            head.xRot = Math.max(head.xRot, 0.15F); // chin down
         }
 
         // the chest: shown for women, sized and placed by her figure (MCA's geometry)

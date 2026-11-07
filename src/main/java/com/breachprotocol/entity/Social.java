@@ -199,6 +199,7 @@ public final class Social {
             new Act("compliment", "Compliment", "Something nice about them or their work"), new Act("comfort", "Comfort", "When they're having a hard time"),
             new Act("flirt", "Flirt", "Only if you know each other well"), new Act("hug", "Hug", "Only if you're close")};
 
+    /** Like MCA's Interact menu: the interactions take the place of the topic buttons, with a way back. */
     static void socialPage(ServerPlayer p, FoundationStaff s) {
         Dialogue.clearOptions(p);
         Convo.subtitle(p, s);
@@ -208,9 +209,11 @@ public final class Social {
             if (a.id.equals("flirt") && (t < 5 && !admirer(s) || dclass)) continue;
             if (a.id.equals("hug") && t < 6 && !partner(s, p)) continue;
             int tired = fatigue(s, p, a.id);
-            Talk.ans(p, s, a.label, "soc_" + a.id, a.hover + (tired > 0 ? " (tried " + tired + "x today)" : ""));
+            Talk.opt(p, s, a.label, "soc_" + a.id, a.hover + (tired > 0 ? " (tried " + tired + "x today)" : ""), SOCIAL_C);
         }
-        Convo.topics(p, s);
+        if (t < 5 && !admirer(s) && !dclass) Talk.opt(p, s, "Flirt", "soc_locked", "Get to know them better first (5 hearts)", 0x808080);
+        if (t < 6 && !partner(s, p)) Talk.opt(p, s, "Hug", "soc_locked", "You're not that close yet (6 hearts)", 0x808080);
+        Talk.opt(p, s, "Back", "menu", "Back to the topics", 0xC8D0DA);
     }
 
     private static String fkey(FoundationStaff s, ServerPlayer p, String act) { return "bp_soc_" + p.getUUID() + "_" + act; }
@@ -613,6 +616,7 @@ public final class Social {
         Random r = new Random();
         switch (what) {
             case "socialise" -> { Talk.you(p, Talk.pick(r, "Got a minute?", "How are you, really?", "Mind if I sit with you?")); Talk.say(p, s, Talk.pick(r, "Sure. What's on your mind?", "For you? Of course.", "I've got a minute.")); socialPage(p, s); return true; }
+            case "soc_locked" -> { Talk.note(p, "(Not yet. Get to know them better first.)"); socialPage(p, s); return true; }
             case "discipline" -> { Talk.you(p, "About what you said."); disciplinePage(p, s); return true; }
             case "soc_forgive" -> { Talk.you(p, "...Forget it."); Talk.say(p, s, Clearance.RAW + "Thank you."); resolve(s, p); Convo.menu(p, s); return true; }
             case "soc_report" -> {

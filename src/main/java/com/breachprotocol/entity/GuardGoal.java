@@ -30,6 +30,10 @@ public class GuardGoal extends Goal {
     private LivingEntity target;
     private int scan, repath, strafe;
     private boolean retreating;
+    /** Ticks spent unable to see or reach the target; and a target given up on, until when. */
+    private int stuck;
+    private java.util.UUID ignored;
+    private long ignoreUntil;
 
     private static Method fireAt, clearShot, range;
     private static boolean looked;
@@ -55,12 +59,19 @@ public class GuardGoal extends Goal {
             double d = g.distanceTo(c);
             if (d > r) continue;
             boolean sees = g.getSensing().hasLineOfSight(c);
-            if (!sees && d > 16) continue;
+            if (c.getUUID().equals(ignored) && g.level().getGameTime() < ignoreUntil) continue;
+            if (!sees && (d > 16 || !reachable(c))) continue; // behind a wall with no way round: not ours to chase
             // creepers first, then whoever is closest; intruders before stray mobs
             double score = d - (c instanceof Creeper ? 40 : 0) - (Defence.intruder(g.getServer(), c) ? 20 : 0) + (sees ? 0 : 12);
             if (score < bestScore) { bestScore = score; best = c; }
         }
         return best;
+    }
+
+    /** Whether there is a walkable way to them. */
+    private boolean reachable(LivingEntity c) {
+        net.minecraft.world.level.pathfinder.Path path = g.getNavigation().createPath(c, 1);
+        return path != null && path.canReach();
     }
 
     @Override
@@ -78,6 +89,7 @@ public class GuardGoal extends Goal {
     @Override
     public boolean canContinueToUse() {
         if (target != null) return target.isAlive() && g.distanceTo(target) < reach() + 10 && Defence.threat(g, target);
+        if (stuck == 0 && ignored != null && g.level().getGameTime() < ignoreUntil && Defence.alertNear(g) == null) return false;
         Defence.Alert a = Defence.alertNear(g);
         return a != null && g.blockPosition().distSqr(a.where) > 10 * 10;
     }
@@ -115,9 +127,20 @@ public class GuardGoal extends Goal {
             if (g.tickCount % 10 == 0) { LivingEntity t = find(); if (t != null) { target = t; g.shout(t); } }
             return;
         }
-        g.getLookControl().setLookAt(target, 60, 60);
         double d = g.distanceTo(target);
         boolean sees = g.getSensing().hasLineOfSight(target);
+        // only aim at what they can see; otherwise look where they're going
+        if (sees) { g.getLookControl().setLookAt(target, 60, 60); stuck = 0; }
+        else if (++stuck > 100 || stuck % 20 == 0 && !reachable(target)) {
+            // can't see it and can't get to it: give up on it for a while
+            ignored = target.getUUID();
+            ignoreUntil = g.level().getGameTime() + 400;
+            target = null;
+            stuck = 0;
+            g.getNavigation().stop();
+            g.setSprinting(false);
+            return;
+        }
         boolean creeper = target instanceof Creeper;
         double keep = creeper ? 11 : 5;
         double engage = Math.min(range(), creeper ? 34 : 28);

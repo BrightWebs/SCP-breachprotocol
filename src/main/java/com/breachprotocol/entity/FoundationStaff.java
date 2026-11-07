@@ -544,7 +544,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
         if (!level().isClientSide && tickCount % 5 == 0) errandTick();
         if (!level().isClientSide) {
             if (tickCount % 10 == 0) entityData.set(TALKING, Dialogue.talkingTo(this) != null);
-            if (tickCount % 20 == 5) entityData.set(FRIGHT, role() != Role.GUARD && Talk.anomalyNear(this, 14) != null);
+            if (tickCount % 20 == 5) entityData.set(FRIGHT, role() != Role.GUARD && unit == null && Talk.anomalyNear(this, 9) != null);
             int w = entityData.get(WAVE);
             if (w > 0) entityData.set(WAVE, w - 1);
         }
