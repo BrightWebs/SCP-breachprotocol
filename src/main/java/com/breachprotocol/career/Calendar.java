@@ -14,6 +14,7 @@ import java.util.Random;
  * just call them. At the meeting time they ring you. Only things that can't wait (breaches, rifts,
  * attacks) still arrive as messages.
  */
+@net.neoforged.fml.common.EventBusSubscriber(modid = com.breachprotocol.BreachProtocol.MODID)
 public final class Calendar {
     private Calendar() {}
 
