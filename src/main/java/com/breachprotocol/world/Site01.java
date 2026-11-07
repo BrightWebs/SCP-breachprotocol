@@ -15,6 +15,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -53,7 +54,7 @@ public final class Site01 {
 
     public static final int SX = 66, SY = 10, SZ = 72;
     /** 3 = rebuilt from SCP Unleashed's facility blocks. Older sites are rebuilt on the next visit. */
-    private static final int VERSION = 3;
+    private static final int VERSION = 4;
 
     // ------------------------------------------------------------------ saved state
 
@@ -61,6 +62,10 @@ public final class Site01 {
         public boolean built;
         /** Layout version (see VERSION). */
         public int version;
+        /** The one player in the world who holds the rank of Administrator ("" = nobody). */
+        public String admin = "";
+        /** Overseer seats (1-12) given up to players, and which player holds each. */
+        public final java.util.Map<Integer, String> holders = new java.util.HashMap<>();
 
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
 
@@ -68,6 +73,9 @@ public final class Site01 {
             Data d = new Data();
             d.built = tag.getBoolean("built");
             d.version = tag.getInt("version");
+            d.admin = tag.getString("admin");
+            CompoundTag h = tag.getCompound("holders");
+            for (String k : h.getAllKeys()) d.holders.put(Integer.parseInt(k), h.getString(k));
             return d;
         }
 
@@ -75,8 +83,86 @@ public final class Site01 {
         public CompoundTag save(CompoundTag tag, HolderLookup.Provider provider) {
             tag.putBoolean("built", built);
             tag.putInt("version", version);
+            tag.putString("admin", admin);
+            CompoundTag h = new CompoundTag();
+            holders.forEach((k, v) -> h.putString(String.valueOf(k), v));
+            tag.put("holders", h);
             return tag;
         }
+    }
+
+    public static Data data(net.minecraft.server.MinecraftServer server) {
+        return server.overworld().getDataStorage().computeIfAbsent(Data.FACTORY, "breachprotocol_site01");
+    }
+
+    // ------------------------------------------------------------------ the council chamber
+
+    /** The Administrator's chair at the head of the council table (relative to the origin). */
+    public static final BlockPos HEAD = new BlockPos(20, 0, 9);
+
+    /** Overseer chairs 1-12: five down the left side, five down the right, two across the far end. */
+    public static BlockPos seatChair(int seat) {
+        int i = seat - 1;
+        if (i < 5) return new BlockPos(23 + i * 2, 0, 5);
+        if (i < 10) return new BlockPos(23 + (i - 5) * 2, 0, 13);
+        return new BlockPos(34, 0, i == 10 ? 8 : 10);
+    }
+
+    /** Which way an Overseer's chair faces (toward the table). */
+    public static Direction seatFacing(int seat) {
+        return seat <= 5 ? Direction.SOUTH : seat <= 10 ? Direction.NORTH : Direction.WEST;
+    }
+
+    private static BlockPos cachedOrigin;
+    private static long cachedSeed;
+
+    public static BlockPos origin(ServerLevel overworld) {
+        if (cachedOrigin == null || cachedSeed != overworld.getSeed()) { cachedOrigin = location(overworld); cachedSeed = overworld.getSeed(); }
+        return cachedOrigin;
+    }
+
+    /** Council seat number (1-12) for a chair position, 0 for the head chair, -1 if it isn't a council chair. */
+    public static int councilSeatAt(ServerLevel overworld, BlockPos pos) {
+        BlockPos rel = pos.subtract(origin(overworld));
+        if (rel.equals(HEAD)) return 0;
+        for (int n = 1; n <= 12; n++) if (rel.equals(seatChair(n))) return n;
+        return -1;
+    }
+
+    /** NPCs keep off the council chairs, except an Overseer in their own seat. */
+    public static boolean mayUseChair(net.minecraft.world.entity.Mob mob, BlockPos pos) {
+        if (!(mob.level() instanceof ServerLevel sl) || sl.dimension() != Level.OVERWORLD) return true;
+        int seat = councilSeatAt(sl, pos);
+        if (seat < 0) return true;
+        if (seat == 0) return false;
+        return mob instanceof O5MemberEntity m && !m.isUnseated() && m.getSeat() != null && m.getSeat().seat == seat
+                && !data(sl.getServer()).holders.containsKey(seat);
+    }
+
+    public static boolean isInside(Level level, BlockPos pos) {
+        if (!(level instanceof ServerLevel sl) || sl.dimension() != Level.OVERWORLD) return false;
+        BlockPos o = origin(sl);
+        return pos.getX() >= o.getX() - 1 && pos.getX() <= o.getX() + SX && pos.getZ() >= o.getZ() - 1 && pos.getZ() <= o.getZ() + SZ
+                && pos.getY() >= o.getY() - 2 && pos.getY() <= o.getY() + SY;
+    }
+
+    /** Only one player in the world may be The Administrator. */
+    public static boolean claimAdministrator(ServerPlayer p) {
+        Data d = data(p.server);
+        String me = p.getUUID().toString();
+        if (!d.admin.isEmpty() && !d.admin.equals(me)) return false;
+        d.admin = me;
+        d.setDirty();
+        return true;
+    }
+
+    public static void releaseAdministrator(ServerPlayer p) {
+        Data d = data(p.server);
+        if (d.admin.equals(p.getUUID().toString())) { d.admin = ""; d.setDirty(); }
+    }
+
+    public static boolean isAdministrator(net.minecraft.world.entity.player.Player p) {
+        return p.getServer() != null && data(p.getServer()).admin.equals(p.getUUID().toString());
     }
 
     public static BlockPos location(ServerLevel overworld) {
@@ -98,7 +184,7 @@ public final class Site01 {
 
     public static BlockPos ensureBuilt(ServerLevel overworld) {
         BlockPos o = location(overworld);
-        Data data = overworld.getDataStorage().computeIfAbsent(Data.FACTORY, "breachprotocol_site01");
+        Data data = data(overworld.getServer());
         if (!data.built || data.version < VERSION) {
             // first visit, or an older layout: (re)build the whole site
             new Builder(overworld, o).build();
@@ -138,8 +224,10 @@ public final class Site01 {
                 for (int cz = (o.getZ() - 2) >> 4; cz <= (o.getZ() + SZ + 2) >> 4; cz++)
                     l.getChunk(cx, cz);
             // the old Overseers, if this is a rebuild
-            for (O5MemberEntity m : l.getEntitiesOfClass(O5MemberEntity.class, new AABB(o.getX() - 2, o.getY() - 4, o.getZ() - 2, o.getX() + SX + 2, o.getY() + SY + 4, o.getZ() + SZ + 2)))
-                m.discard();
+            AABB box = new AABB(o.getX() - 2, o.getY() - 4, o.getZ() - 2, o.getX() + SX + 2, o.getY() + SY + 4, o.getZ() + SZ + 2);
+            for (net.minecraft.world.entity.Entity e : l.getEntities((net.minecraft.world.entity.Entity) null, box,
+                    e -> e instanceof O5MemberEntity || e instanceof com.breachprotocol.entity.FoundationStaff || e instanceof com.breachprotocol.entity.NpcSeat))
+                e.discard();
             fill(-1, -2, -1, SX, SY, SZ, "reinforced_containment_wall");
 
             hall();
@@ -157,6 +245,30 @@ public final class Site01 {
             servers();
             barracks();
             office();
+            seal();
+            staff();
+        }
+
+        /** A few people keep Site-01 running. */
+        private void staff() {
+            com.breachprotocol.entity.FoundationStaff.Role G = com.breachprotocol.entity.FoundationStaff.Role.GUARD;
+            spawnStaff(G, 46, 22); spawnStaff(G, 30, 22); spawnStaff(G, 8, 30);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.CLERK, 44, 11);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.MEDIC, 21, 34);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.TECHNICIAN, 26, 66);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.RESEARCHER, 10, 62);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.RESEARCHER, 14, 56);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.TECHNICIAN, 56, 37);
+            spawnStaff(com.breachprotocol.entity.FoundationStaff.Role.JANITOR, 20, 47);
+        }
+
+        private void spawnStaff(com.breachprotocol.entity.FoundationStaff.Role role, int x, int z) {
+            com.breachprotocol.entity.FoundationStaff s = ModEntities.STAFF.get().create(l);
+            if (s == null) return;
+            BlockPos p = at(x, Y + 1, z);
+            s.moveTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5, l.random.nextFloat() * 360F, 0);
+            s.setup(role, p);
+            l.addFreshEntity(s);
         }
 
         // ---------------------------------------------------------------- the Grand Hall
@@ -194,7 +306,7 @@ public final class Site01 {
                     "scp5001_arch_panel_seam", "scp5001_arch_ceiling", "scp5001_arch_glass");
             // Gate Hall: tall, dark steel, the hall opens into it
             room(HCZP, 40, 16, 54, 28, Y, 8, false);
-            for (int z = 19; z <= 25; z++) for (int yy = Y + 1; yy <= Y + 4; yy++) set(40, yy, z, "minecraft:air");
+            for (int z = 19; z <= 25; z++) for (int yy = Y + 1; yy <= Y + 4; yy++) opening(40, yy, z);
             for (int x = 41; x < 54; x++) set(x, Y, 22, "hcz_floor_arrow[facing=east]");
             for (int x = 42; x <= 52; x += 5) for (int z = 18; z <= 26; z += 4) light(x, Y + 8, z, false);
             for (int x = 42; x <= 52; x += 5) { stack(x, Y + 1, 17, "hcz_pipe_manifold", S, 6); stack(x, Y + 1, 27, "hcz_pipe_manifold", N, 6); }
@@ -249,28 +361,29 @@ public final class Site01 {
                 boolean side = x == x0 || x == x1, end = z == z0 || z == z1;
                 set(x, Y + 1, z, "conference_table[north=" + (side && z > z0) + ",south=" + (side && z < z1) + ",west=" + (end && x > x0) + ",east=" + (end && x < x1) + "]");
             }
-            List<int[]> seats = new ArrayList<>();
-            for (int x = x0 + 1; x <= x1 - 1; x += 2) { seats.add(new int[]{x, z0 - 1}); seats.add(new int[]{x, z1 + 1}); }
-            double cx = o.getX() + (x0 + x1) / 2.0 + 0.5, cz = o.getZ() + (z0 + z1) / 2.0 + 0.5;
-            for (int i = 0; i < seats.size() && i < 12; i++) {
-                int[] s = seats.get(i);
-                boolean north = s[1] < z0;
-                set(s[0], Y + 1, s[1], "office_chair[facing=" + (north ? "south" : "north") + "]");
-                set(s[0], Y + 2, north ? z0 : z1, "crt_monitor[facing=" + (north ? "north" : "south") + ",lit=true,screen=" + (i % 10) + "]");
+            Data data = data(l.getServer());
+            for (int n = 1; n <= 12; n++) {
+                BlockPos c = seatChair(n);
+                Direction f = seatFacing(n);
+                set(c.getX(), Y + 1, c.getZ(), "office_chair[facing=" + f(f) + "]");
+                BlockPos mon = c.relative(f);
+                set(mon.getX(), Y + 2, mon.getZ(), "crt_monitor[facing=" + f(f.getOpposite()) + ",lit=true,screen=" + (n % 10) + "]");
                 O5MemberEntity m = ModEntities.O5_MEMBER.get().create(l);
-                if (m != null) {
-                    m.setSeat(O5.seat(i + 1));
-                    double ex = o.getX() + s[0] + 0.5, ez = o.getZ() + s[1] + 0.5;
-                    float yaw = (float) (Mth.atan2(cz - ez, cx - ex) * Mth.RAD_TO_DEG) - 90F;
-                    m.moveTo(ex, o.getY() + 0.5, ez, yaw, 0);
-                    m.setYHeadRot(yaw);
-                    m.setYBodyRot(yaw);
-                    m.setPersistenceRequired();
-                    l.addFreshEntity(m);
-                }
+                if (m == null) continue;
+                m.setSeat(O5.seat(n));
+                BlockPos chair = at(c.getX(), Y + 1, c.getZ());
+                boolean gone = data.holders.containsKey(n);
+                m.setHome(chair, gone);
+                // unseated Overseers start out in the Grand Hall
+                BlockPos start = gone ? at(8 + n * 2, Y + 1, 22) : chair;
+                m.moveTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5, f.toYRot(), 0);
+                m.setPersistenceRequired();
+                l.addFreshEntity(m);
+                if (!gone) com.breachprotocol.entity.Seats.sit(m, chair);
             }
             // the Administrator's seat at the head of the table, under the emblem
-            set(x0 - 1, Y + 1, (z0 + z1) / 2, "office_chair[facing=east]");
+            set(HEAD.getX(), Y + 1, HEAD.getZ(), "office_chair[facing=east]");
+            plate(17, Y + 2, 8, E, "THE", "ADMINISTRATOR");
             scpSign(17, Y + 3, 10, E);
             for (int[] p : new int[][]{{17, 1}, {37, 1}, {17, 17}, {37, 17}}) set(p[0], Y + 1, p[1], "ez_planter[facing=south]");
             for (int z = 3; z <= 15; z += 6) set(37, Y + 2, z, "wall_monitor[facing=west,hanging=false,lit=true,screen=" + z % 10 + "]");

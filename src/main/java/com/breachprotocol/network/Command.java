@@ -120,6 +120,7 @@ public final class Command {
         t.putInt("carried", Clearance.carried(p));
         t.putInt("rankClr", Clearance.fromRank(p));
         t.putBoolean("ascended", com.breachprotocol.career.Career.isAscended(p));
+        t.putInt("rankId", com.breachprotocol.career.Career.rank(p).ordinal());
         t.putBoolean("creative", p.getAbilities().instabuild);
         ListTag links = new ListTag();
         for (String l : Clearance.links(Clearance.phoneOf(p))) links.add(net.minecraft.nbt.StringTag.valueOf(l));

@@ -207,12 +207,53 @@ public abstract class FacilityBuilder {
 
     /** A room with {@code h} blocks of clear height (ceiling at Y+h+1). */
     protected void room(Pal p, int x0, int z0, int x1, int z1, int Y, int h, boolean lights) {
+        rooms.add(new RoomRec(p, x0, z0, x1, z1, Y, h));
         fill(x0, Y, z0, x1, Y, z1, p.floor());
         fill(x0, Y + h + 1, z0, x1, Y + h + 1, z1, p.ceiling());
         air(x0 + 1, Y + 1, z0 + 1, x1 - 1, Y + h, z1 - 1);
         for (int x = x0; x <= x1; x++) { column(p, x, z0, Y, h); column(p, x, z1, Y, h); }
         for (int z = z0; z <= z1; z++) { column(p, x0, z, Y, h); column(p, x1, z, Y, h); }
         if (lights) lights(x0, z0, x1, z1, Y + h - 4);
+    }
+
+    private record RoomRec(Pal p, int x0, int z0, int x1, int z1, int Y, int h) {}
+
+    private final java.util.List<RoomRec> rooms = new java.util.ArrayList<>();
+    private final java.util.Set<BlockPos> openings = new java.util.HashSet<>();
+
+    /** An intentional gap in a wall (an archway, a turnstile's headroom). */
+    protected void opening(int x, int y, int z) {
+        openings.add(at(x, y, z));
+        set(x, y, z, "minecraft:air");
+    }
+
+    /**
+     * The last pass: every room's walls must be solid. Anything that ended up standing in a wall line
+     * (a prop or an accidental gap) is replaced with the wall, so nothing can be seen through. Doors,
+     * windows, glass, turnstiles and intentional openings stay.
+     */
+    protected void seal() {
+        for (RoomRec r : rooms) {
+            for (int x = r.x0(); x <= r.x1(); x++) for (int z = r.z0(); z <= r.z1(); z++) {
+                if (x != r.x0() && x != r.x1() && z != r.z0() && z != r.z1()) continue;
+                for (int yy = r.Y() + 1; yy <= r.Y() + r.h(); yy++) {
+                    BlockPos p = at(x, yy, z);
+                    if (openings.contains(p)) continue;
+                    BlockState st = l.getBlockState(p);
+                    if (structural(st, p)) continue;
+                    int lv = yy - r.Y();
+                    set(x, yy, z, lv == 1 ? r.p().bottom() : lv == r.h() ? r.p().top() : r.p().middle());
+                }
+            }
+        }
+    }
+
+    private boolean structural(BlockState st, BlockPos p) {
+        if (st.isAir()) return false;
+        if (st.isSolidRender(l, p)) return true;
+        String path = BuiltInRegistries.BLOCK.getKey(st.getBlock()).getPath();
+        return path.contains("door") || path.contains("window") || path.contains("glass") || path.contains("turnstile") || path.contains("gate")
+                || path.contains("pane") || path.contains("stairs") || path.contains("slab");
     }
 
     protected void column(Pal p, int x, int z, int Y, int h) {
@@ -268,7 +309,11 @@ public abstract class FacilityBuilder {
         Block blk = Unleashed.block(kind, Blocks.AIR);
         if (blk == Blocks.AIR) {
             // no such door: leave an open doorway
-            for (int c = 0; c < w; c++) for (int r = 0; r < h; r++) l.setBlock(origin.relative(right, c).above(r), Blocks.AIR.defaultBlockState(), FLAGS);
+            for (int c = 0; c < w; c++) for (int r = 0; r < h; r++) {
+                BlockPos q = origin.relative(right, c).above(r);
+                l.setBlock(q, Blocks.AIR.defaultBlockState(), FLAGS);
+                openings.add(q);
+            }
             return origin.relative(right, w);
         }
         for (int c = 0; c < w; c++)

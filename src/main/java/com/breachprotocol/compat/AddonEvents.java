@@ -29,6 +29,9 @@ public final class AddonEvents {
         if (event.getLevel().isClientSide) return;
         if (event.getEntity() instanceof PathfinderMob mob && UnleashedApi.isDClass(mob)) {
             mob.goalSelector.addGoal(0, new OrderGoal(mob));
+            // D-Class sit down on the site's chairs and benches now and then
+            mob.goalSelector.addGoal(6, new com.breachprotocol.entity.SitGoal(mob, null, 0.004F, 20 * 30, 20 * 120, 6,
+                    pos -> com.breachprotocol.world.Site01.mayUseChair(mob, pos)));
         }
     }
 

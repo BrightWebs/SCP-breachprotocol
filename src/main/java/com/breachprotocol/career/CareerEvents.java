@@ -210,6 +210,7 @@ public final class CareerEvents {
         com.breachprotocol.compat.UnleashedApi.calmGuardian(event.getTarget(), 20 * 300);
         p.serverLevel().sendParticles(ParticleTypes.END_ROD, event.getTarget().getX(), event.getTarget().getY() + 6, event.getTarget().getZ(), 60, 1.5, 4, 1.5, 0.04);
         p.displayClientMessage(Component.literal("SCP-001-1 lowers its blades. The way into the Garden is open, Master.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        GatePass.menu(p);
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
     }

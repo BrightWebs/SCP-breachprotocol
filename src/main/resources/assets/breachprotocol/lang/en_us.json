@@ -4,6 +4,8 @@
   "message.breachprotocol.breach.subtitle": "%s has breached containment",
   "message.breachprotocol.breach.chat": "%s breached containment near %s, %s, %s. All personnel evacuate.",
   "entity.breachprotocol.o5_member": "O5 Council Member",
+  "entity.breachprotocol.foundation_staff": "Foundation Personnel",
+  "entity.breachprotocol.npc_seat": "Seat",
   "item.breachprotocol.phone": "Foundation Phone",
   "item.breachprotocol.o5_member_spawn_egg": "O5 Council Member Spawn Egg",
   "block.breachprotocol.ascension_altar": "Ascension Altar",

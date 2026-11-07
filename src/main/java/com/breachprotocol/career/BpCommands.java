@@ -140,6 +140,7 @@ public final class BpCommands {
                     ServerPlayer p = c.getSource().getPlayerOrException();
                     p.removeTag(CareerEvents.GATE_SPARED);
                     p.setInvulnerable(false);
+                    com.breachprotocol.world.Site01.releaseAdministrator(p);
                     CareerData fresh = new CareerData();
                     fresh.recruited = true;
                     Career.data(p).load(fresh.save());

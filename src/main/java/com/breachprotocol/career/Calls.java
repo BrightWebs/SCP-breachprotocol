@@ -207,6 +207,11 @@ public final class Calls {
                         }))), true);
     }
 
+    /** Agenda items the Council can debate in session (the Administrator gets the admin-only ones too). */
+    public static List<Template> councilPool(boolean admin) {
+        return RANDOM_POOL.stream().filter(t -> admin || !t.adminOnly()).toList();
+    }
+
     public static Template get(String id) {
         return TEMPLATES.get(id);
     }

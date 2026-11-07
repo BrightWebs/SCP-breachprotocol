@@ -35,8 +35,8 @@ public final class Directives {
             new Directive("fortify", "Order: Fortify All Sites", "Every site reinforces containment. Stability +8.", Rank.ADMINISTRATOR, 20 * 60),
             new Directive("global", "Global Recontainment", "Every anomaly within 128m that stasis can hold is pinned for 5 minutes.", Rank.ADMINISTRATOR, 30 * 60),
             new Directive("tower", "Construct a Site Tower", "Builds a full Foundation site here: a ten-storey tower over Light and Heavy Containment. Clear space first. One per Overseer.", Rank.OVERSEER, 60),
-            new Directive("site01", "Travel to Site-01", "Teleport to your secret sanctum.", Rank.ADMINISTRATOR, 10),
-            new Directive("return", "Return from Site-01", "Go back to where you were.", Rank.ADMINISTRATOR, 10));
+            new Directive("site01", "Travel to Site-01", "Teleport to Site-01, where the O5 Council sits.", Rank.OVERSEER, 10),
+            new Directive("return", "Return from Site-01", "Go back to where you were.", Rank.OVERSEER, 10));
 
     public static List<Directive> available(CareerData d) {
         List<Directive> out = new ArrayList<>();
@@ -130,7 +130,7 @@ public final class Directives {
                 BlockPos site = Site01.ensureBuilt(ow);
                 BlockPos arrive = Site01.arrival(site);
                 p.teleportTo(ow, arrive.getX() + 0.5, arrive.getY(), arrive.getZ() + 0.5, -90F, 0F);
-                p.displayClientMessage(Component.literal("Welcome home, Administrator.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+                p.displayClientMessage(Component.literal(d.getRank() == Rank.ADMINISTRATOR ? "Welcome home, Administrator." : "Site-01. The Council chamber is north of the Grand Hall.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
                 yield true;
             }
             case "return" -> {

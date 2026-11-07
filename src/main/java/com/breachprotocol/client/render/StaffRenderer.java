@@ -1,0 +1,29 @@
+package com.breachprotocol.client.render;
+
+import com.breachprotocol.BreachProtocol;
+import com.breachprotocol.entity.FoundationStaff;
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.renderer.entity.EntityRendererProvider;
+import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
+import net.minecraft.resources.ResourceLocation;
+
+/** Foundation personnel: a humanoid in their department's uniform (three looks per department). */
+public class StaffRenderer extends HumanoidMobRenderer<FoundationStaff, HumanoidModel<FoundationStaff>> {
+    private static final ResourceLocation[][] SKINS = new ResourceLocation[FoundationStaff.Role.values().length][3];
+
+    static {
+        for (FoundationStaff.Role r : FoundationStaff.Role.values())
+            for (int v = 0; v < 3; v++)
+                SKINS[r.ordinal()][v] = BreachProtocol.id("textures/entity/staff/" + r.name().toLowerCase(java.util.Locale.ROOT) + "_" + v + ".png");
+    }
+
+    public StaffRenderer(EntityRendererProvider.Context ctx) {
+        super(ctx, new HumanoidModel<>(ctx.bakeLayer(ModelLayers.ZOMBIE)), 0.4F);
+    }
+
+    @Override
+    public ResourceLocation getTextureLocation(FoundationStaff e) {
+        return SKINS[e.role().ordinal()][Math.floorMod(e.variant(), 3)];
+    }
+}

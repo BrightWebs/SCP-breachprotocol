@@ -16,6 +16,8 @@ public final class ClientSetup {
         @SubscribeEvent
         public static void renderers(EntityRenderersEvent.RegisterRenderers event) {
             event.registerEntityRenderer(ModEntities.O5_MEMBER.get(), O5MemberRenderer::new);
+            event.registerEntityRenderer(ModEntities.STAFF.get(), com.breachprotocol.client.render.StaffRenderer::new);
+            event.registerEntityRenderer(ModEntities.NPC_SEAT.get(), net.minecraft.client.renderer.entity.NoopRenderer::new);
         }
 
     }

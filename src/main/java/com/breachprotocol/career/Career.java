@@ -159,6 +159,12 @@ public final class Career {
 
     public static void promote(ServerPlayer p, Rank r) {
         CareerData d = data(p);
+        // there is only ever one Administrator
+        if (r == Rank.ADMINISTRATOR && !Site01.claimAdministrator(p)) {
+            p.sendSystemMessage(Component.literal("The Foundation already has an Administrator. There can only be one.").withStyle(ChatFormatting.DARK_PURPLE));
+            return;
+        }
+        if (d.getRank() == Rank.ADMINISTRATOR && r != Rank.ADMINISTRATOR) Site01.releaseAdministrator(p);
         d.setRank(r);
         d.xp = Math.max(d.xp, r.xpRequired);
         Component title = Component.literal("PROMOTED").withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD);

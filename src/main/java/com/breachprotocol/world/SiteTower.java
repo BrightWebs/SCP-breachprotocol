@@ -4,6 +4,8 @@ import com.breachprotocol.BreachProtocol;
 import com.breachprotocol.career.Sites;
 import com.breachprotocol.compat.Unleashed;
 import com.breachprotocol.compat.UnleashedApi;
+import com.breachprotocol.entity.FoundationStaff;
+import com.breachprotocol.registry.ModEntities;
 import com.breachprotocol.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -157,6 +159,8 @@ public final class SiteTower extends FacilityBuilder {
         for (int s = 0; s <= TOP; s++) b.facade(s);
         b.roof();
         b.stairwell();
+        b.seal();
+        b.staff();
         String name = b.register(ownerUuid, ownerName);
         BreachProtocol.LOGGER.info("Built {} at {}", name, o);
         return o;
@@ -194,6 +198,47 @@ public final class SiteTower extends FacilityBuilder {
         for (int z : new int[]{4, 16, 28}) { set(-3, 1, z, "ez_planter[facing=west]"); set(T + 3, 1, z, "ez_planter[facing=east]"); }
         // basement shell
         fill(BX0 - 1, y(LOWEST) - 1, -NZ - 1, BX1 + 1, -2, T + 1, "facility_concrete");
+    }
+
+    // ================================================================== people
+
+    /** Staff on every floor (they wander their floor and sit down now and then), D-Class in holding. */
+    private void staff() {
+        FoundationStaff.Role R = FoundationStaff.Role.RESEARCHER, G = FoundationStaff.Role.GUARD, M = FoundationStaff.Role.MEDIC,
+                Tc = FoundationStaff.Role.TECHNICIAN, C = FoundationStaff.Role.CLERK, J = FoundationStaff.Role.JANITOR;
+        Object[][] plan = {
+                {0, C, 5, 18}, {0, C, 7, 17}, {0, G, 21, 16}, {0, G, 16, 11}, {0, J, 25, 28},
+                {1, R, 6, 23}, {1, R, 10, 18}, {1, R, 22, 20}, {1, R, 27, 26}, {1, R, 4, 4},
+                {2, M, 10, 24}, {2, M, 26, 20}, {2, C, 18, 5},
+                {3, G, 8, 20}, {3, G, 24, 21}, {3, G, 6, 5}, {3, G, 18, 6},
+                {4, C, 16, 28}, {4, C, 5, 5},
+                {5, C, 5, 21}, {5, C, 11, 26}, {5, C, 21, 21}, {5, C, 27, 26}, {5, R, 14, 5},
+                {6, Tc, 16, 22}, {6, Tc, 7, 5},
+                {7, Tc, 8, 21}, {7, Tc, 24, 21}, {7, R, 16, 25},
+                {8, G, 4, 20}, {9, G, 10, 12},
+                {-1, G, 2, 11}, {-1, G, 30, 11}, {-1, Tc, 36, -2}, {-1, R, 23, 0},
+                {-2, G, 2, 11}, {-2, G, 30, 11}, {-2, G, 23, 0},
+                {-3, G, 2, 11}, {-3, G, 30, 11}, {-3, Tc, 23, 0},
+                {-4, G, 2, 11}, {-4, G, 30, 11}, {-4, R, 23, 0}};
+        for (Object[] e : plan) {
+            FoundationStaff st = ModEntities.STAFF.get().create(l);
+            if (st == null) continue;
+            BlockPos p = at((Integer) e[2], y((Integer) e[0]) + 1, (Integer) e[3]);
+            st.moveTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5, l.random.nextFloat() * 360F, 0);
+            st.setup((FoundationStaff.Role) e[1], p);
+            l.addFreshEntity(st);
+        }
+        // D-Class in holding on B1
+        Unleashed.entity(Unleashed.DCLASS).ifPresent(type -> {
+            for (int i = 0; i < 4; i++) {
+                net.minecraft.world.entity.Entity d = type.create(l);
+                if (d == null) continue;
+                BlockPos p = at(37 + (i % 2) * 2, y(-1) + 1, 18 + i * 3);
+                d.moveTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5, l.random.nextFloat() * 360F, 0);
+                if (d instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
+                l.addFreshEntity(d);
+            }
+        });
     }
 
     // ================================================================== containment levels B1-B4
@@ -306,7 +351,7 @@ public final class SiteTower extends FacilityBuilder {
         for (int z = 15; z < T; z++) fill(15, Y, z, 17, Y, z, "facility_carpet_blue");
         for (int z = 15; z < T; z++) { set(14, Y, z, EZ.marked() + "[facing=west]"); set(18, Y, z, EZ.marked() + "[facing=east]"); }
         // security checkpoint into the corridor: turnstiles, and a keyed staff gate
-        for (int x = 15; x <= 17; x++) { set(x, Y + 1, 14, "ez_turnstile[facing=south]"); set(x, Y + 2, 14, "minecraft:air"); }
+        for (int x = 15; x <= 17; x++) { set(x, Y + 1, 14, "ez_turnstile[facing=south]"); opening(x, Y + 2, 14); }
         gate("glass_room_door", 2, 2, 20, 14, Y, S, 1);
         windows(EZ, 9, 14, 13, 14, Y);
         sign2("facility_sign_security_checkpoint", 16, Y + 4, 15, S, "none", false);

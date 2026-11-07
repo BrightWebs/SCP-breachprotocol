@@ -15,12 +15,20 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.ai.goal.FloatGoal;
 import net.minecraft.world.entity.ai.goal.LookAtPlayerGoal;
 import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
+import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 
-/** One of the twelve Overseers, seated in Site-01's council chamber. Talk to them. */
+/**
+ * One of the twelve Overseers in Site-01's council chamber. Each has a home chair at the council
+ * table and spends most of their time in it (really seated, on SCP Unleashed's office chair), getting
+ * up now and then to stretch their legs. An Overseer who has given up their seat to a player is
+ * "unseated": they wander the site and sit wherever they like. Talk to them.
+ */
 public class O5MemberEntity extends PathfinderMob {
     private static final EntityDataAccessor<Integer> SEAT = SynchedEntityData.defineId(O5MemberEntity.class, EntityDataSerializers.INT);
 
@@ -28,6 +36,10 @@ public class O5MemberEntity extends PathfinderMob {
             "You should not be here. How did you get in?",
             "Your clearance is noted. And insufficient.",
             "Leave, and we'll consider this a misunderstanding."};
+
+    private BlockPos home;
+    private boolean unseated;
+    private long holdUntil;
 
     public O5MemberEntity(EntityType<? extends PathfinderMob> type, Level level) {
         super(type, level);
@@ -38,7 +50,7 @@ public class O5MemberEntity extends PathfinderMob {
     public static AttributeSupplier.Builder createAttributes() {
         return PathfinderMob.createMobAttributes()
                 .add(Attributes.MAX_HEALTH, 100)
-                .add(Attributes.MOVEMENT_SPEED, 0);
+                .add(Attributes.MOVEMENT_SPEED, 0.22);
     }
 
     @Override
@@ -49,8 +61,45 @@ public class O5MemberEntity extends PathfinderMob {
 
     @Override
     protected void registerGoals() {
-        this.goalSelector.addGoal(1, new LookAtPlayerGoal(this, Player.class, 16F, 1.0F));
-        this.goalSelector.addGoal(2, new RandomLookAroundGoal(this));
+        this.goalSelector.addGoal(0, new FloatGoal(this));
+        // seated most of the time: back to their chair quickly, minutes at a time
+        this.goalSelector.addGoal(1, new SitGoal(this, () -> unseated ? null : home, 0.04F, 20 * 120, 20 * 360, 10,
+                pos -> com.breachprotocol.world.Site01.mayUseChair(this, pos)));
+        this.goalSelector.addGoal(2, new LookAtPlayerGoal(this, Player.class, 12F, 1.0F));
+        this.goalSelector.addGoal(3, new WaterAvoidingRandomStrollGoal(this, 0.6, 0.004F));
+        this.goalSelector.addGoal(4, new RandomLookAroundGoal(this));
+    }
+
+    /** Their council chair, and whether they still hold it. */
+    public void setHome(BlockPos chair, boolean unseated) {
+        this.home = chair;
+        this.unseated = unseated;
+        restrict();
+    }
+
+    public BlockPos home() { return home; }
+
+    public boolean isUnseated() { return unseated; }
+
+    public void unseat() {
+        unseated = true;
+        Seats.stand(this);
+        restrict();
+    }
+
+    /** Keep them seated (during a council session) for a while. */
+    public void holdSeated(int ticks) { holdUntil = level().getGameTime() + ticks; }
+
+    public boolean holdSeat() { return level().getGameTime() < holdUntil; }
+
+    private void restrict() {
+        if (home != null) restrictTo(home, unseated ? 40 : 9);
+    }
+
+    @Override
+    public void aiStep() {
+        super.aiStep();
+        if (!level().isClientSide && tickCount % 200 == 0) restrict();
     }
 
     public O5 getSeat() {
@@ -68,7 +117,13 @@ public class O5MemberEntity extends PathfinderMob {
         if (!level().isClientSide && hand == InteractionHand.MAIN_HAND) {
             O5 me = getSeat();
             String line;
-            if (Career.isAscended(player)) {
+            if (unseated && !Career.isAscended(player)) {
+                line = switch (random.nextInt(3)) {
+                    case 0 -> "I gave my chair to someone younger. The Foundation endures. So do I.";
+                    case 1 -> "Off the Council, not out of the Foundation. I still read every report.";
+                    default -> "The vote was fair. Mostly. Don't let it go to your head.";
+                };
+            } else if (Career.isAscended(player)) {
                 line = "...Master. Forgive us for ever trying to contain you.";
             } else if (Career.rank(player) == Rank.ADMINISTRATOR) {
                 line = switch (me) {
@@ -104,11 +159,16 @@ public class O5MemberEntity extends PathfinderMob {
     public void addAdditionalSaveData(CompoundTag tag) {
         super.addAdditionalSaveData(tag);
         tag.putInt("Seat", this.entityData.get(SEAT));
+        if (home != null) { tag.putInt("HomeX", home.getX()); tag.putInt("HomeY", home.getY()); tag.putInt("HomeZ", home.getZ()); }
+        tag.putBoolean("Unseated", unseated);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag tag) {
         super.readAdditionalSaveData(tag);
         if (tag.contains("Seat")) this.entityData.set(SEAT, tag.getInt("Seat"));
+        if (tag.contains("HomeX")) home = new BlockPos(tag.getInt("HomeX"), tag.getInt("HomeY"), tag.getInt("HomeZ"));
+        unseated = tag.getBoolean("Unseated");
+        restrict();
     }
 }
