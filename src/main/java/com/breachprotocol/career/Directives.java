@@ -116,7 +116,7 @@ public final class Directives {
                 BlockPos origin = com.breachprotocol.world.SiteTower.build(p.serverLevel(), p.blockPosition(), p.getUUID().toString(), p.getGameProfile().getName());
                 d.builtTower = true;
                 p.teleportTo(origin.getX() + 15.5, origin.getY() + 1, origin.getZ() + 24.5);
-                Career.message(p, O5.O5_6, "Your site is standing. Entrance Zone at ground level, containment below, the Council chamber and your office at the top. Cells are assigned and keyed.");
+                Career.message(p, O5.O5_6, "Your site is standing. Lobby at ground level, containment on B1 and B2, the Council on 8 and your office on 9. The stairwell in the north-east corner reaches every floor. Cells are assigned and keyed.");
                 yield true;
             }
             case "site01" -> {
