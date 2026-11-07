@@ -67,6 +67,8 @@ public class FoundationStaff extends PathfinderMob {
 
     public com.breachprotocol.career.Forces.Unit unit() { return unit; }
 
+    public boolean following(Player p) { return "follow".equals(mode) && p.getUUID().equals(leader); }
+
     /** Makes them a member of an armed unit, posted at {@code post}. */
     public void setupUnit(com.breachprotocol.career.Forces.Unit u, BlockPos post) {
         this.unit = u;
@@ -130,6 +132,7 @@ public class FoundationStaff extends PathfinderMob {
     protected void registerGoals() {
         goalSelector.addGoal(0, new FloatGoal(this));
         goalSelector.addGoal(1, new GuardGoal(this));
+        goalSelector.addGoal(1, new ListenGoal(this));
         goalSelector.addGoal(1, new PanicGoal(this, 1.4) {
             @Override
             public boolean canUse() { return role() != Role.GUARD && super.canUse(); }

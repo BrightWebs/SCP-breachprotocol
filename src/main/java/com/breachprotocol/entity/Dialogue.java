@@ -23,11 +23,24 @@ public final class Dialogue {
         final List<CompoundTag> options = new ArrayList<>();
         String input = "";
         boolean hud;
+        long touched;
     }
 
     private static final Map<UUID, State> STATES = new HashMap<>();
 
     private static State st(ServerPlayer p) { return STATES.computeIfAbsent(p.getUUID(), k -> new State()); }
+
+    /** The player with a conversation open with this mob (and active in the last two minutes), or null. */
+    public static ServerPlayer talkingTo(net.minecraft.world.entity.Mob m) {
+        if (!(m.level() instanceof net.minecraft.server.level.ServerLevel l)) return null;
+        String key = "npc:" + m.getId();
+        long now = System.currentTimeMillis();
+        for (ServerPlayer p : l.players()) {
+            State s = STATES.get(p.getUUID());
+            if (s != null && s.session.equals(key) && now - s.touched < 120_000 && p.distanceToSqr(m) < 32 * 32) return p;
+        }
+        return null;
+    }
 
     /** Starts a new conversation (clears the history unless it's the same session). */
     public static void begin(ServerPlayer p, String session, String title, String subtitle, int entityId) {
@@ -79,6 +92,7 @@ public final class Dialogue {
     /** Sends the window. {@code open}: open it if it isn't already (otherwise it just updates if open). */
     public static void send(ServerPlayer p, boolean open) {
         State s = st(p);
+        s.touched = System.currentTimeMillis();
         CompoundTag t = new CompoundTag();
         t.putString("session", s.session);
         t.putString("title", s.title);

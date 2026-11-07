@@ -41,6 +41,8 @@ public class O5MemberEntity extends PathfinderMob {
     private boolean unseated;
     private long holdUntil;
     private java.util.UUID leader;
+
+    public java.util.UUID leader() { return leader; }
     /** Overseers age too: slowly while their SCP-006 treatments continue, normally once they leave the Council. */
     private double age = -1;
     private int lastYear = -1;
@@ -78,6 +80,7 @@ public class O5MemberEntity extends PathfinderMob {
     @Override
     protected void registerGoals() {
         this.goalSelector.addGoal(0, new FloatGoal(this));
+        this.goalSelector.addGoal(1, new ListenGoal(this));
         this.goalSelector.addGoal(1, new FollowGoal(this, () -> leader != null && level() instanceof net.minecraft.server.level.ServerLevel sl ? sl.getPlayerByUUID(leader) : null));
         // seated most of the time: back to their chair quickly, minutes at a time
         this.goalSelector.addGoal(2, new SitGoal(this, () -> unseated || leader != null ? null : home, 0.04F, 20 * 120, 20 * 360, 10,

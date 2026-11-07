@@ -18,7 +18,7 @@ import java.util.*;
 final class Convo {
     private Convo() {}
 
-    private static final int TOPIC = 0, DEEP = 0x9FD8FF, SECRET = 0xD8A8FF, BACK = 0x9AA4B2;
+    private static final int TOPIC = 0, DEEP = 0x9FD8FF, SECRET = 0xD8A8FF, BACK = 0xC8D0DA;
 
     // ================================================================== trust
 
@@ -118,7 +118,7 @@ final class Convo {
         Dialogue.clearOptions(p);
         subtitle(p, s);
         for (String[] o : opts) Talk.opt(p, s, o[0], o[1], o.length > 2 ? o[2] : "", DEEP);
-        Talk.opt(p, s, "Something else", "menu", "Other topics", BACK);
+        Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
         Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
     }
 
@@ -184,7 +184,7 @@ final class Convo {
                 subtitle(p, s);
                 Talk.opt(p, s, "I'll see to it.", "promise", "Promise to help (they'll remember)", DEEP);
                 Talk.opt(p, s, "That's not my problem.", "dismiss", "Brush it off", 0xFF9A9A);
-                Talk.opt(p, s, "Something else", "menu", "Other topics", BACK);
+                Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
                 return true;
             }
             case "promise" -> {

@@ -343,7 +343,7 @@ public final class Talk {
             opt(p, e, "What worries you?", "worry", "The Council's concerns", 0);
             if (mayCommand(p, e)) opt(p, e, "Orders", "orders", "Tell them what to do", ORDER_C);
         }
-        opt(p, e, "Goodbye", "bye", "End the conversation", 0x9AA4B2);
+        opt(p, e, "Goodbye", "bye", "End the conversation", 0xC8D0DA);
     }
 
     public static void open(ServerPlayer p, FoundationStaff s) {
@@ -438,7 +438,7 @@ public final class Talk {
             opt(p, who, "Walk with me", "follow", "They come with you", ORDER_C);
             opt(p, who, "Return to your seat", "post", "Back to the council table", ORDER_C);
         }
-        opt(p, who, "Back", "menu", "Other topics", 0x9AA4B2);
+        opt(p, who, "◀ Back to topics", "menu", "Other things to talk about", 0xC8D0DA);
         return true;
     }
 
@@ -499,8 +499,26 @@ public final class Talk {
                 .then(Commands.argument("id", IntegerArgumentType.integer()).then(Commands.argument("what", StringArgumentType.word()).executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
                     Entity e = p.serverLevel().getEntity(IntegerArgumentType.getInteger(c, "id"));
-                    if (e == null || e.distanceTo(p) > 10) return 0;
-                    handle(p, e, StringArgumentType.getString(c, "what"));
+                    if (e == null || !e.isAlive()) {
+                        Dialogue.line(p, "", "They're gone.", 0);
+                        Dialogue.clearOptions(p);
+                        Dialogue.option(p, "Close", "close", "", 0xC8D0DA);
+                        Dialogue.send(p, false);
+                        return 0;
+                    }
+                    if (e.distanceTo(p) > 24) {
+                        Dialogue.line(p, "", "They're too far away to hear you. Walk back over to them.", 0);
+                        Dialogue.send(p, false);
+                        return 0;
+                    }
+                    try {
+                        handle(p, e, StringArgumentType.getString(c, "what"));
+                    } catch (Throwable t) {
+                        BreachProtocol.LOGGER.error("Conversation step failed", t);
+                        Dialogue.line(p, "", "(They lost their train of thought: " + t.getClass().getSimpleName() + ". Try another topic.)", 0);
+                        mainMenu(p, e);
+                        Dialogue.send(p, false);
+                    }
                     return 1;
                 }))));
     }
