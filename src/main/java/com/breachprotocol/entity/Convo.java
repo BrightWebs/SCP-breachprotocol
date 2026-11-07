@@ -103,6 +103,7 @@ final class Convo {
     static void menu(ServerPlayer p, FoundationStaff s) {
         Dialogue.clearOptions(p);
         subtitle(p, s);
+        if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) Talk.opt(p, s, "You wanted to tell me something?", "recall", "They remember your last conversation", SECRET);
         if (s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)) Talk.opt(p, s, "Brief me", "brief", "Messages, calendar and site status", Talk.ORDER_C);
         Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
         Talk.opt(p, s, "Tell me about yourself", "story", "Their life, one chapter at a time", TOPIC);
@@ -131,6 +132,13 @@ final class Convo {
         int trust = trust(s, p);
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
+            case "recall" -> {
+                Talk.you(p, "You wanted to tell me something?");
+                String m = Memory.recall(s, p, r);
+                Talk.say(p, s, m.isEmpty() ? "Hm? No. Just glad to see you." : m);
+                menu(p, s);
+                return true;
+            }
             case "brief", "brief_msg", "brief_cal", "brief_news", "brief_accept", "brief_site" -> {
                 if (s.role() != FoundationStaff.Role.SECRETARY) return false;
                 if (!Talk.topBrass(p)) { Talk.say(p, s, "I'm sorry. Briefings are for the Administrator."); menu(p, s); return true; }
@@ -197,6 +205,7 @@ final class Convo {
             }
             case "promise" -> {
                 Talk.you(p, "I'll see to it.");
+                Memory.count(s, p, "promised");
                 s.getPersistentData().putInt(tkey(p), Math.min(10, trust + 1));
                 if (s.role() == FoundationStaff.Role.GUARD && Talk.topBrass(p)) {
                     Sites.Site x = site(s);
@@ -243,7 +252,8 @@ final class Convo {
                 Talk.you(p, "Tell me about yourself.");
                 Talk.say(p, s, Talk.story(s, s.role(), p));
                 bump(s, p, "story");
-                page(p, s, new String[][]{{"And then what happened?", "story_more", "The next chapter"},
+                page(p, s, new String[][]{{"That must have been hard.", "listen_hard", "They'll remember you listened"}, {"Thank you for telling me.", "listen_thanks", "They'll remember you listened"},
+                        {"And then what happened?", "story_more", "The next chapter"},
                         {"How long have you been here?", "story_years", "Their years with the Foundation"},
                         {"Do you have family?", "story_family", "Life outside the walls"}});
                 return true;
@@ -251,7 +261,8 @@ final class Convo {
             case "story_more" -> {
                 Talk.you(p, "And then what happened?");
                 Talk.say(p, s, Talk.story(s, s.role(), p));
-                page(p, s, new String[][]{{"And then?", "story_more", "Keep listening"}, {"Do you have family?", "story_family", "Life outside"}});
+                page(p, s, new String[][]{{"That must have been hard.", "listen_hard", "They'll remember"}, {"That's the job, I suppose.", "listen_job", "They'll remember"},
+                        {"And then?", "story_more", "Keep listening"}, {"Do you have family?", "story_family", "Life outside"}});
                 return true;
             }
             case "story_years" -> {
@@ -422,12 +433,60 @@ final class Convo {
             case "secret" -> {
                 Talk.you(p, "Off the record?");
                 if (trust < 6) { Talk.say(p, s, "I don't know you well enough for that."); menu(p, s); return true; }
-                Talk.say(p, s, secret(p, s, r));
+                Memory.Secret sec = null;
+                for (Memory.Secret x : Memory.secrets(s, p)) if (Memory.get(s, p, "s_" + x.id()).isEmpty()) { sec = x; break; }
+                if (sec == null) {
+                    Talk.say(p, s, "That's everything I know. Really. If I hear anything else, you'll be the first.");
+                    menu(p, s);
+                    return true;
+                }
+                Talk.say(p, s, sec.text());
                 bump(s, p, "secret");
-                menu(p, s);
+                Dialogue.clearOptions(p);
+                subtitle(p, s);
+                for (int i = 0; i < sec.replies().size(); i++) Talk.opt(p, s, sec.replies().get(i).label(), "sr_" + sec.id() + "_" + i, "They'll remember what you said", SECRET);
+                Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
                 return true;
             }
-            default -> { return false; }
+            case "listen_hard", "listen_thanks", "listen_job" -> {
+                Talk.you(p, switch (what) { case "listen_hard" -> "That must have been hard."; case "listen_thanks" -> "Thank you for telling me."; default -> "That's the job, I suppose."; });
+                Memory.count(s, p, "listened");
+                Memory.put(s, p, "story_reply", what.substring(7));
+                s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, trust + (what.equals("listen_job") ? 0 : 1))));
+                Talk.say(p, s, switch (what) {
+                    case "listen_hard" -> Talk.pick(r, "It was. Thank you for saying it.", "Some days it still is.", "...Yes. It was.");
+                    case "listen_thanks" -> Talk.pick(r, "Thank you for asking. People don't.", "It's nice to tell someone.");
+                    default -> switch (t) {
+                        case CYNICAL -> "That's what they tell us.";
+                        case EARNEST -> "I suppose it is. I'd still rather it wasn't.";
+                        default -> "Right. The job.";
+                    };
+                });
+                page(p, s, new String[][]{{"And then what happened?", "story_more", "The next chapter"}, {"Do you have family?", "story_family", "Life outside the walls"}});
+                return true;
+            }
+            default -> {
+                if (!what.startsWith("sr_")) return false;
+                int us = what.lastIndexOf('_');
+                String id = what.substring(3, us);
+                int n;
+                try { n = Integer.parseInt(what.substring(us + 1)); } catch (NumberFormatException e) { return false; }
+                for (Memory.Secret sec : Memory.secrets(s, p)) {
+                    if (!sec.id().equals(id) || n < 0 || n >= sec.replies().size()) continue;
+                    Memory.Reply rp = sec.replies().get(n);
+                    Talk.you(p, rp.label());
+                    Talk.say(p, s, rp.reaction());
+                    Memory.put(s, p, "s_" + id, rp.remember());
+                    s.getPersistentData().putInt(tkey(p), Math.max(0, Math.min(10, trust + rp.trust())));
+                    Dialogue.clearOptions(p);
+                    subtitle(p, s);
+                    Talk.opt(p, s, "Anything else off the record?", "secret", "Another secret", SECRET);
+                    Talk.opt(p, s, "◀ Back to topics", "menu", "Other things to talk about", BACK);
+                    Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
+                    return true;
+                }
+                return false;
+            }
         }
     }
 

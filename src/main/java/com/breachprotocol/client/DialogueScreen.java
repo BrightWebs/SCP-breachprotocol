@@ -175,8 +175,18 @@ public class DialogueScreen extends Screen {
             Entity e = minecraft.level.getEntity(id);
             g.fill(px + 8, py + 30, px + 98, logY + logH, 0xFF181B21);
             if (e instanceof LivingEntity le) {
-                InventoryScreen.renderEntityInInventoryFollowsMouse(g, px + 8, py + 30, px + 98, logY + logH,
-                        Math.max(24, Math.min(46, logH / 3)), 0.0625F, mouseX, mouseY, le);
+                // no floating name tag over the portrait (the name is in the title)
+                Component name = le.getCustomName();
+                boolean shown = le.isCustomNameVisible();
+                le.setCustomName(null);
+                le.setCustomNameVisible(false);
+                try {
+                    InventoryScreen.renderEntityInInventoryFollowsMouse(g, px + 8, py + 30, px + 98, logY + logH,
+                            Math.max(24, Math.min(46, logH / 3)), 0.0625F, mouseX, mouseY, le);
+                } finally {
+                    le.setCustomName(name);
+                    le.setCustomNameVisible(shown);
+                }
             }
         }
 

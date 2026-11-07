@@ -348,7 +348,8 @@ public final class Talk {
 
     public static void open(ServerPlayer p, FoundationStaff s) {
         Dialogue.begin(p, sess(s), s.getName().getString(), staffSubtitle(s), s.getId());
-        say(p, s, howAreThings(s, p));
+        String remembered = Memory.recall(s, p, new Random());
+        say(p, s, !remembered.isEmpty() && new Random().nextInt(3) > 0 ? remembered : howAreThings(s, p));
         mainMenu(p, s);
         Dialogue.send(p, true);
     }
