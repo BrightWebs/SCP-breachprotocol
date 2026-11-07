@@ -532,7 +532,7 @@ public final class Talk {
                 case "story" -> say(p, s, story(s, s.role(), p));
                 case "rumour" -> say(p, s, rumour(s, p));
                 case "council" -> say(p, s, councilView(s, p));
-                case "orders" -> { you(p, "I have something for you."); showOrders = orders(p, s); }
+                case "orders" -> { you(p, "I have orders for you."); showOrders = orders(p, s); }
                 case "menu" -> {}
                 case "follow", "stay", "post", "sit" -> {
                     if (!mayCommand(p, s)) { orders(p, s); break; }
@@ -546,6 +546,14 @@ public final class Talk {
                     showOrders = true;
                 }
                 case "job" -> {
+                    you(p, switch (s.role()) {
+                        case MEDIC -> "Can you patch me up?";
+                        case CLERK -> "Any assignments for me?";
+                        case RESEARCHER -> "Take a look at what I'm holding.";
+                        case TECHNICIAN -> "Check the power for me.";
+                        case JANITOR -> "Clean this up, would you?";
+                        case GUARD -> "Stand guard here.";
+                    });
                     if (!mayCommand(p, s) && !(s.role() == FoundationStaff.Role.MEDIC && Career.rank(p) != Rank.CLASS_D)) { orders(p, s); break; }
                     job(p, s);
                     showOrders = mayCommand(p, s);
@@ -564,7 +572,7 @@ public final class Talk {
                     m.getPersistentData().putInt(key, ch + 1);
                 }
                 case "worry" -> say(p, m, o5Worry(p));
-                case "orders" -> showOrders = orders(p, m);
+                case "orders" -> { you(p, "I have orders for you."); showOrders = orders(p, m); }
                 case "follow" -> { if (mayCommand(p, m)) { m.follow(p); say(p, m, "As you wish."); showOrders = true; } }
                 case "post" -> { if (mayCommand(p, m)) { m.follow(null); say(p, m, "I'll be at the table."); showOrders = true; } }
                 default -> {}

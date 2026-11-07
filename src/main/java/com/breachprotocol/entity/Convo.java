@@ -411,8 +411,8 @@ final class Convo {
 
             // ------------------------------------------------------------ off the record
             case "secret" -> {
-                if (trust < 6) { Talk.say(p, s, "I don't know you well enough for that."); menu(p, s); return true; }
                 Talk.you(p, "Off the record?");
+                if (trust < 6) { Talk.say(p, s, "I don't know you well enough for that."); menu(p, s); return true; }
                 Talk.say(p, s, secret(p, s, r));
                 bump(s, p, "secret");
                 menu(p, s);
