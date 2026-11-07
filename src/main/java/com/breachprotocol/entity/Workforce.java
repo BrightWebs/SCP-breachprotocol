@@ -1,6 +1,7 @@
 package com.breachprotocol.entity;
 
 import com.breachprotocol.career.*;
+import com.breachprotocol.career.Calendar;
 import com.breachprotocol.network.DialoguePayload;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
