@@ -112,6 +112,9 @@ public final class AgendaBuilder {
                             opt("D-Class are expendable", (q, x) -> stab(q, -2, "That's... the official position. It won't help morale.")))));
         }
 
+        // ------------------------------------------------------------ appointments: lost heads of department
+        out.addAll(com.breachprotocol.entity.Management.agenda(p));
+
         // ------------------------------------------------------------ what the Overseers added this week
         for (String id : new ArrayList<>(d.agenda)) {
             Calls.Template t = Calls.get(id);

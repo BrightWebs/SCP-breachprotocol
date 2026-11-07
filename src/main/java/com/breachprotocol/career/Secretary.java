@@ -35,11 +35,11 @@ public final class Secretary {
 
     private static boolean topBrass(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
 
-    static BlockPos origin(Sites.Site s) { return new BlockPos(s.x - SiteTower.T / 2, s.y, s.z - SiteTower.T / 2); }
+    public static BlockPos origin(Sites.Site s) { return new BlockPos(s.x - SiteTower.T / 2, s.y, s.z - SiteTower.T / 2); }
 
     static BlockPos deskChair(Sites.Site s) { return origin(s).offset(16, SiteTower.y(SiteTower.TOP) + 1, 26); }
 
-    static BlockPos post(Sites.Site s) { return origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 21); }
+    public static BlockPos post(Sites.Site s) { return origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 21); }
 
     static boolean isTower(ServerLevel l, Sites.Site s) {
         BlockPos desk = Desk.deskSpot(s).below();
@@ -119,6 +119,15 @@ public final class Secretary {
         return f;
     }
 
+    /** A new secretary chosen in person at interview: she takes the post. */
+    public static void install(Sites.Site s, FoundationStaff f) {
+        Forces.Data d = Forces.data(f.getServer());
+        d.secretaries.put(s.name, f.getUUID());
+        d.secretaryNames.put(s.name, f.getName().getString());
+        d.secretaryDue.remove(s.name);
+        d.setDirty();
+    }
+
     /** She retired or died: the Council will appoint someone. */
     public static void vacancy(FoundationStaff f, String how) {
         MinecraftServer s = f.getServer();
@@ -128,10 +137,12 @@ public final class Secretary {
             if (!e.getValue().equals(f.getUUID())) continue;
             d.secretaries.remove(e.getKey());
             d.secretaryNames.remove(e.getKey());
-            d.secretaryDue.put(e.getKey(), s.overworld().getGameTime() + 6000);
+            d.secretaryDue.put(e.getKey(), Long.MAX_VALUE / 4); // until the interviews (or the Council) decide
             d.setDirty();
+            for (Sites.Site site : Sites.get(s).sites)
+                if (site.name.equals(e.getKey()) && f.level() instanceof ServerLevel sl) com.breachprotocol.entity.Management.staffVacancy(sl, post(site), FoundationStaff.Role.SECRETARY, f.getName().getString());
             for (ServerPlayer q : s.getPlayerList().getPlayers())
-                if (topBrass(q)) Career.message(q, O5.O5_7, "Your secretary, " + f.getName().getString() + ", has " + how + ". The Council is choosing her successor. She'll be at your desk at " + e.getKey() + " shortly.");
+                if (topBrass(q)) Career.message(q, O5.O5_7, "Your secretary, " + f.getName().getString() + ", has " + how + ". Personnel has three candidates for you to interview in your office, or the Council will choose.");
         }
     }
 
@@ -213,6 +224,8 @@ public final class Secretary {
                 if (weekly != null) parts.add("The Council sits " + Calendar.when(weekly.at) + ", as usual" + (d.agenda.isEmpty() ? "." : ", with " + d.agenda.size() + " item" + (d.agenda.size() == 1 ? "" : "s") + " added so far, on top of the week's business and Peanut's cell."));
                 Defence.Alert al = Defence.alertAt(deskOf(p) == null ? "" : deskOf(p).name);
                 if (al != null) parts.add("And security reports " + al.org + " on the grounds. They're handling it.");
+                String people = com.breachprotocol.entity.Management.summary(p.server);
+                if (!people.isEmpty()) parts.add(people);
                 Dialogue.line(p, me, greeting(p) + " " + String.join(" ", parts), c);
             }
             case "brief_msg" -> {
@@ -271,6 +284,7 @@ public final class Secretary {
         if (d.appts.stream().anyMatch(a -> !a.confirmed)) Dialogue.option(p, "Accept the meeting requests", "/talk " + f.getId() + " brief_accept", "", 0x9FD8FF);
         Dialogue.option(p, "Anything I should know?", "/talk " + f.getId() + " brief_news", "", 0x9FD8FF);
         Dialogue.option(p, "How is the site?", "/talk " + f.getId() + " brief_site", "", 0x9FD8FF);
+        Dialogue.option(p, "Personnel matters", "/talk " + f.getId() + " mg_page", "Hires, interviews, appointments and the registry", 0x9FD8FF);
         Dialogue.option(p, "That's all, thank you", "/talk " + f.getId() + " bye", "", 0xC8D0DA);
         Dialogue.send(p, true);
     }

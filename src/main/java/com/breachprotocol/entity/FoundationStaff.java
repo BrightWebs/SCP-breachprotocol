@@ -23,7 +23,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 
@@ -51,6 +53,8 @@ public class FoundationStaff extends PathfinderMob implements Person {
     private static final EntityDataAccessor<Boolean> TALKING = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
     private static final EntityDataAccessor<Integer> WAVE = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> FRIGHT = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.BOOLEAN);
+    /** Inherited genes and traits ("hexgenome|TRAIT,TRAIT"), for those born to parents on record; empty for everyone else. */
+    private static final EntityDataAccessor<String> GENOME = SynchedEntityData.defineId(FoundationStaff.class, EntityDataSerializers.STRING);
 
     /** One year of a staff member's life passes every Minecraft day. */
     public static final int YEAR = 24000;
@@ -83,6 +87,117 @@ public class FoundationStaff extends PathfinderMob implements Person {
 
     /** Her figure, 0 (slight) to 1 (full). */
     public float bustSize() { return gene(8); }
+
+    // ================================================================== genes and traits (MCA's genetics)
+
+    private String genomeCache, traitCache;
+    private EnumSet<Traits> traitSet;
+
+    /** The inherited genome (hex), or "" if their genes are their own. */
+    public String genome() { String g = entityData.get(GENOME); int i = g.indexOf('|'); return i < 0 ? g : g.substring(0, i); }
+
+    public void setGenome(String genome, Set<Traits> traits) { entityData.set(GENOME, genome + "|" + Traits.write(traits)); traitsApplied = false; }
+
+    public EnumSet<Traits> traits() {
+        String g = entityData.get(GENOME);
+        if (!g.equals(traitCache) || traitSet == null) {
+            traitCache = g;
+            int i = g.indexOf('|');
+            traitSet = i < 0 ? Traits.natural(getUUID()) : Traits.read(g.substring(i + 1));
+        }
+        return traitSet;
+    }
+
+    public boolean has(Traits t) { return traits().contains(t); }
+
+    @Override
+    public float gene(int salt) {
+        String g = genome();
+        if (!g.isEmpty() && salt < Registry.GENES) { float v = Registry.gene(g, salt); if (v >= 0) return v; }
+        return Person.super.gene(salt);
+    }
+
+    @Override
+    public float melanin() { return has(Traits.ALBINISM) ? 0.0F : Person.super.melanin(); }
+
+    @Override
+    public float hemoglobin() { return has(Traits.ALBINISM) ? 0.25F : Person.super.hemoglobin(); }
+
+    @Override
+    public float eumelanin() { return has(Traits.ALBINISM) ? 0.02F : Person.super.eumelanin(); }
+
+    @Override
+    public float pheomelanin() { return has(Traits.ALBINISM) ? 0.05F : Person.super.pheomelanin(); }
+
+    @Override
+    public float heightScale() { return Person.super.heightScale() * (has(Traits.DWARFISM) ? 0.78F : 1F); }
+
+    private boolean traitsApplied;
+    private static final net.minecraft.resources.ResourceLocation TRAIT_SPEED = com.breachprotocol.BreachProtocol.id("trait_speed"), TRAIT_HEALTH = com.breachprotocol.BreachProtocol.id("trait_health");
+
+    /** Athletic, tough and frail actually change how they move and how much they can take. */
+    private void applyTraits() {
+        traitsApplied = true;
+        var spd = getAttribute(Attributes.MOVEMENT_SPEED);
+        if (spd != null) {
+            spd.removeModifier(TRAIT_SPEED);
+            double m = (has(Traits.ATHLETIC) ? 0.12 : 0) - (has(Traits.ASTHMA) ? 0.06 : 0);
+            if (m != 0) spd.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(TRAIT_SPEED, m, net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_MULTIPLIED_BASE));
+        }
+        var hp = getAttribute(Attributes.MAX_HEALTH);
+        if (hp != null) {
+            hp.removeModifier(TRAIT_HEALTH);
+            double h = (has(Traits.TOUGH) ? 8 : 0) - (has(Traits.WEAK) ? 6 : 0);
+            if (h != 0) hp.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(TRAIT_HEALTH, h, net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE));
+        }
+    }
+
+    // ================================================================== hiring
+
+    /** Takes up a job (a hired applicant): keeps their own name and age. */
+    public void hireAs(Role role, BlockPos post) {
+        entityData.set(ROLE, role.ordinal());
+        entityData.set(VARIANT, random.nextInt(3));
+        this.post = post;
+        mode = "post";
+        stayAt = null;
+        restrictTo(post, role == Role.SECRETARY ? 6 : 12);
+        getNavigation().moveTo(post.getX() + 0.5, post.getY(), post.getZ() + 0.5, 1.0);
+        getPersistentData().remove("bp_cand");
+    }
+
+    /** An applicant: name, age and the uniform of the job they want; they wait where they're put. */
+    public void applicant(Role role, String name, int age, BlockPos wait) {
+        entityData.set(ROLE, role.ordinal());
+        entityData.set(VARIANT, random.nextInt(3));
+        setCustomName(Component.literal(name).withStyle(ChatFormatting.WHITE));
+        setCustomNameVisible(false);
+        named = true;
+        gender();
+        setAge(age);
+        lastYear = age;
+        walkTo(wait);
+    }
+
+    /** Walk somewhere and wait there. */
+    public void walkTo(BlockPos at) {
+        Seats.stand(this);
+        mode = "stay";
+        stayAt = at;
+        clearRestriction();
+        getNavigation().moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.9);
+    }
+
+    /** Go and sit in this chair. */
+    public void sitAt(BlockPos chair) {
+        mode = "stay";
+        stayAt = chair;
+        clearRestriction();
+        sitTarget = chair;
+        sitTries = -40;
+    }
+
+    public BlockPos post() { return post; }
 
     /** Greying with age (white when old). 0 = natural colour. */
     public int greyHair() { return elder() ? 0xFFD8D8DC : age() >= 52 && gene(14) < 0.5F ? 0xFFA6A4A2 : 0; }
@@ -277,6 +392,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
         builder.define(TALKING, false);
         builder.define(WAVE, 0);
         builder.define(FRIGHT, false);
+        builder.define(GENOME, "");
     }
 
     @Override
@@ -438,7 +554,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
     void leaveService() {
         if (level() instanceof net.minecraft.server.level.ServerLevel sl) {
             if (role() == Role.SECRETARY) com.breachprotocol.career.Secretary.vacancy(this, "was dismissed");
-            else if (unit == null && post != null) Hires.schedule(sl, post, role());
+            else if (unit == null && post != null) Management.staffVacancy(sl, post, role(), name());
         }
         Seats.stand(this);
         discard();
@@ -452,7 +568,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
             sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL, getX(), getY() + 1, getZ(), 12, 0.3, 0.5, 0.3, 0.02);
             if (unit != null) com.breachprotocol.career.Forces.died(this, cause);
             else if (role() == Role.SECRETARY) com.breachprotocol.career.Secretary.vacancy(this, "died " + cause);
-            else if (post != null) Hires.schedule(sl, post, role());
+            else if (post != null) Management.staffVacancy(sl, post, role(), name());
         }
         Seats.stand(this);
         discard();
@@ -472,7 +588,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
             com.breachprotocol.career.Secretary.vacancy(this, "was killed " + by);
         } else {
             news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + " (" + role().title + ") was killed " + by, -3);
-            if (post != null) Hires.schedule(sl, post, role());
+            if (post != null) Management.staffVacancy(sl, post, role(), name());
         }
     }
 
@@ -561,6 +677,9 @@ public class FoundationStaff extends PathfinderMob implements Person {
             if (!illness.isEmpty() && random.nextInt(6) == 0 && level() instanceof net.minecraft.server.level.ServerLevel sl)
                 sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SNEEZE, getX(), getEyeY(), getZ(), 3, 0.1, 0.1, 0.1, 0.02);
         }
+        if (!traitsApplied) applyTraits();
+        if ("stay".equals(mode) && stayAt != null && sitTarget == null && !Seats.seated(this) && tickCount % 40 == 0 && distanceToSqr(stayAt.getX() + 0.5, stayAt.getY(), stayAt.getZ() + 0.5) > 4)
+            getNavigation().moveTo(stayAt.getX() + 0.5, stayAt.getY(), stayAt.getZ() + 0.5, 0.9);
         if (sitTarget != null) {
             if (++sitTries > 20 || Seats.seated(this)) sitTarget = null;
             else if (position().distanceToSqr(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5) < 2.6) { Seats.sit(this, sitTarget); sitTarget = null; }
@@ -662,6 +781,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
         if (unit != null) tag.putString("Unit", unit.name());
         if (leader != null) tag.putUUID("Leader", leader);
         if (stayAt != null) { tag.putInt("StayX", stayAt.getX()); tag.putInt("StayY", stayAt.getY()); tag.putInt("StayZ", stayAt.getZ()); }
+        tag.putString("Genome", entityData.get(GENOME));
     }
 
     @Override
@@ -687,5 +807,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
         if (tag.hasUUID("Leader")) leader = tag.getUUID("Leader");
         if (tag.contains("StayX")) { stayAt = new BlockPos(tag.getInt("StayX"), tag.getInt("StayY"), tag.getInt("StayZ")); if ("stay".equals(mode)) restrictTo(stayAt, 1); }
         if ("follow".equals(mode)) clearRestriction();
+        entityData.set(GENOME, tag.getString("Genome"));
+        traitsApplied = false;
     }
 }

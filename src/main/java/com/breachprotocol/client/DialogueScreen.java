@@ -56,6 +56,11 @@ public class DialogueScreen extends Screen {
     public static void received(CompoundTag tag) {
         Minecraft mc = Minecraft.getInstance();
         if (tag.getBoolean("desktop")) { mc.setScreen(new PhoneScreen(true)); return; }
+        if (tag.getBoolean("tree")) {
+            if (mc.screen instanceof FamilyTreeScreen f) f.update(tag);
+            else mc.setScreen(new FamilyTreeScreen(tag, mc.screen));
+            return;
+        }
         if (tag.getBoolean("close")) {
             if (mc.screen instanceof com.breachprotocol.client.mca.McaInteractScreen m && m.data().getString("session").equals(tag.getString("session"))) m.closeQuietly();
             if (DialogueHud.hud != null && DialogueHud.hud.getString("session").equals(tag.getString("session"))) DialogueHud.hud = null;

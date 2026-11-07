@@ -45,6 +45,7 @@ public final class Social {
 
     /** Their own standing in the Foundation (clearance level). */
     static int level(FoundationStaff s) {
+        if (Management.headOf(s) != null) return 4;
         if (s.unit() != null) return 3;
         return switch (s.role()) {
             case JANITOR, CLERK -> 1;
@@ -183,6 +184,7 @@ public final class Social {
         if (widowedRecently(s) && r.nextInt(4) == 0) return line + " ...Sorry. I keep forgetting to breathe.";
         if (shy(s, p) && r.nextInt(100) < 45)
             return Talk.pick(r, "Oh! I- ", "Um. ", "S-sorry, ") + Personality.lower(line) + Talk.pick(r, "", " ...Sorry, I'm rambling.", " (" + Scene.cap(she(s)) + " tucks " + her(s) + " hair behind " + her(s) + " ear.)", " Ha. Um.");
+        if (Lifecycle.bereaved(s) && r.nextInt(5) == 0) return line + " ...Sorry. My " + s.getPersistentData().getString("bp_loss_rel") + " died this week. I'm not myself.";
         if (partner(s, p) && r.nextInt(100) < 25) return line + Talk.pick(r, " ...I missed you today.", " Come find me after your shift?", "");
         int rs = respect(s, p);
         if (rs <= 2 && r.nextInt(100) < 50) return Talk.pick(r, "*sigh* ", "Ugh. ", "") + line + Talk.pick(r, " Happy?", " Whatever.", "");
@@ -213,6 +215,7 @@ public final class Social {
         }
         if (t < 5 && !admirer(s) && !dclass) Talk.opt(p, s, "Flirt", "soc_locked", "Get to know them better first (5 hearts)", 0x808080);
         if (t < 6 && !partner(s, p)) Talk.opt(p, s, "Hug", "soc_locked", "You're not that close yet (6 hearts)", 0x808080);
+        Lifecycle.options(p, s);
         Talk.opt(p, s, "Back", "menu", "Back to the topics", 0xC8D0DA);
     }
 
@@ -468,6 +471,20 @@ public final class Social {
     static void died(FoundationStaff s, String how) {
         MinecraftServer srv = s.getServer();
         if (srv == null) return;
+        // the registry
+        Registry.Rec rec = Registry.of(s);
+        long now = srv.overworld().getGameTime();
+        if (how.contains("reclassified")) { rec.status = "dclass"; Registry.log(srv, rec.name + " " + how + "."); }
+        else {
+            rec.status = how.contains("terminated") ? "terminated" : "dead";
+            rec.died = now;
+            rec.cause = how;
+            Registry.log(srv, rec.name + " " + how + ", aged " + s.age() + ".");
+        }
+        Registry.Rec sp = Registry.find(srv, rec.spouse);
+        if (sp != null && rec.died > 0) sp.rel = "widowed";
+        if (rec.partner != null) { Registry.Rec pa = Registry.find(srv, rec.partner); if (pa != null) { pa.partner = null; pa.rel = "single"; } }
+        Registry.dirty(srv);
         CompoundTag r = s.getPersistentData();
         if (r.contains("bp_fam")) {
             CompoundTag f = r.getCompound("bp_fam");

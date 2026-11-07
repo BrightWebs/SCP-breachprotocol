@@ -53,7 +53,8 @@ final class Convo {
         Dialogue.subtitle(p, Talk.staffSubtitle(s) + " · " + hearts(t) + " " + bond(t));
         mood(p, s);
         List<String> info = new ArrayList<>();
-        info.add((s.unit() != null ? s.unit().title : s.role().title) + " · age " + s.age());
+        String head = Management.title(s);
+        info.add((head != null ? head : s.unit() != null ? s.unit().title : s.role().title) + " · age " + s.age());
         Personality pe = Personality.of(s);
         info.add("Personality: " + pe.label + " - " + pe.about);
         int rs = Social.respect(s, p);
@@ -65,6 +66,7 @@ final class Convo {
         if (!s.illness().isEmpty()) traits.add("ill with " + s.illness());
         if (!Memory.recall(s, p, new Random(s.getId())).isEmpty()) traits.add("remembers you");
         traits.addAll(Social.familyTraits(s));
+        for (Traits x : s.traits()) if (!x.about.isEmpty() && (x != Traits.INFERTILE || trust(s, p) >= 8)) traits.add(x.label.toLowerCase(Locale.ROOT));
         if (Social.partner(s, p)) traits.add("your partner");
         if (Social.slighted(s, p)) traits.add("insolent");
         if (Memory.get(s, p, "reprimanded").equals("1")) traits.add("reprimanded");
@@ -163,6 +165,7 @@ final class Convo {
             Talk.opt(p, s, "Goodbye", "bye", "End the conversation", BACK);
             return;
         }
+        if (Management.candidate(s)) { Dialogue.clearOptions(p); Management.openInterview(p, s); return; }
         Social.seed(s, p);
         Openers.Opener op = Social.opener(p, s);
         if (op == null) op = Openers.of(p, s);
@@ -183,6 +186,7 @@ final class Convo {
 
     /** The topic buttons down the right of the screen (and the facts down the left). */
     static void topics(ServerPlayer p, FoundationStaff s) {
+        if (Management.candidate(s)) { Management.topics(p, s); return; } // an interview
         subtitle(p, s);
         if (!Dialogue.hasAnswers(p)) Converse.replies(p, s); // there is always something to say back
         Scene.Tier tier = Scene.tier(p);
@@ -209,6 +213,9 @@ final class Convo {
         Talk.opt(p, s, "Site security", "safe", "Guards, attacks and threats at " + siteName(s), TOPIC);
         if (trust(s, p) >= (tier.ordinal() >= Scene.Tier.COUNCIL.ordinal() ? 7 : 6)) Talk.opt(p, s, "Off the record...", "secret", "They trust you enough to tell you what they shouldn't", SECRET);
         Talk.opt(p, s, "Orders", "orders", "Tell them what to do", Talk.ORDER_C);
+        if (Management.mayAttend(p) && (Management.headOf(s) != null || s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)))
+            Talk.opt(p, s, "Personnel", "mg_page", "Hiring, interviews and appointments" + (Management.headOf(s) != null ? " in their department" : ""), Talk.ORDER_C);
+        Talk.opt(p, s, "Family", "family_tree", "Their family tree", 0xF0A8C8);
         if (Social.slighted(s, p)) Talk.opt(p, s, "Discipline", "discipline", "They disrespected you. Deal with it", Social.DISCIPLINE_C);
         Talk.opt(p, s, "Socialise", "socialise", "Chat, jokes, compliments" + (trust(s, p) >= 5 ? ", flirting" : "") + (trust(s, p) >= 6 ? ", hugs" : ""), Social.SOCIAL_C);
         Dialogue.option(p, "Give a gift", "gift:" + s.getId(), "Hold something and right-click them to give it", 0xF0A8C8);
@@ -251,7 +258,7 @@ final class Convo {
         Talk.Temper t = Talk.temper(s);
         String a = Career.address(p);
         int trust = trust(s, p);
-        if (Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
+        if (Management.handle(p, s, what) || Lifecycle.handle(p, s, what) || Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
             case "gift" -> {

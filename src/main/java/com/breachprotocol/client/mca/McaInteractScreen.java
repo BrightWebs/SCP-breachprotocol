@@ -46,6 +46,7 @@ public class McaInteractScreen extends Screen {
     private float chars;
     private long lastFrame;
     private int lastBlip;
+    private net.minecraft.client.gui.components.EditBox box;
 
     public McaInteractScreen(CompoundTag data) {
         super(Component.literal(data.getString("title")));
@@ -96,6 +97,14 @@ public class McaInteractScreen extends Screen {
             addRenderableWidget(Button.builder(Component.literal("<"), b -> { giftMode = false; rebuildWidgets(); }).bounds(width - 113, 10, 20, 20).build());
             return;
         }
+        if (!data.getString("input").isEmpty()) {
+            // something to type (a name for the baby, say): Enter sends it
+            box = new net.minecraft.client.gui.components.EditBox(font, width / 2 - 80, height - 40, 160, 18, Component.literal("..."));
+            box.setMaxLength(24);
+            box.setHint(Component.literal("Type, then press Enter").withColor(0xFF808080));
+            addRenderableWidget(box);
+            setInitialFocus(box);
+        } else box = null;
         int row = 0;
         ListTag os = options();
         for (int i = 0; i < os.size(); i++) {
@@ -118,6 +127,14 @@ public class McaInteractScreen extends Screen {
             if (giftMode) { giftMode = false; rebuildWidgets(); return true; }
             onClose();
             return true;
+        }
+        if (box != null && box.isFocused()) {
+            if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && !box.getValue().isBlank()) {
+                PacketDistributor.sendToServer(new DialogueActionPayload(data.getString("input"), box.getValue().trim().replace(' ', '_')));
+                box.setValue("");
+                return true;
+            }
+            return box.keyPressed(key, scan, mods) || box.canConsumeInput() || super.keyPressed(key, scan, mods);
         }
         if (key == GLFW.GLFW_KEY_SPACE && shown < lines().size()) { shown = lines().size(); return true; }
         if (key >= GLFW.GLFW_KEY_1 && key <= GLFW.GLFW_KEY_9) {

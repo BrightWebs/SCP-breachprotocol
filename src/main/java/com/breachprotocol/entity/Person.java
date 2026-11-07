@@ -26,8 +26,11 @@ public interface Person {
     /** White or grey hair (ARGB), or 0 for their natural colour. */
     int greyHair();
 
-    default float gene(int salt) {
-        long x = getUUID().getMostSignificantBits() * 31 + getUUID().getLeastSignificantBits() * (salt * 2654435761L + 1);
+    default float gene(int salt) { return geneOf(getUUID(), salt); }
+
+    /** A gene fixed by identity alone (for anyone without parents on record). */
+    static float geneOf(UUID id, int salt) {
+        long x = id.getMostSignificantBits() * 31 + id.getLeastSignificantBits() * (salt * 2654435761L + 1);
         x ^= x >>> 33; x *= 0xff51afd7ed558ccdL; x ^= x >>> 33; x *= 0xc4ceb9fe1a85ec53L; x ^= x >>> 33;
         return ((x >>> 11) & 0xFFFFFF) / (float) 0xFFFFFF;
     }
