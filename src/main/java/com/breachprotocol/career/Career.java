@@ -841,6 +841,7 @@ public final class Career {
         // calls (council votes / requests for orders)
         // the Council no longer rings out of the blue: meetings go on the calendar (see Calendar)
         Calendar.tick(p, d, now);
+        if (d.call != null && Council.inSession(p)) d.call.expires = Math.max(d.call.expires, now + 20 * 60); // a ringing call waits out the meeting
         if (d.call != null && !d.call.outgoing && now > d.call.expires) Calls.timeout(p);
         // flavour intel
         if (d.nextFlavor == 0) d.nextFlavor = now + 6 * MINUTE;

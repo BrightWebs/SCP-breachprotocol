@@ -97,6 +97,12 @@ public final class Council {
         }
     }
 
+    /** Whether this player is sitting in a Council session right now. */
+    public static boolean inSession(ServerPlayer p) {
+        Session s = SESSIONS.get(p.getUUID());
+        return s != null && !s.done;
+    }
+
     private static void start(ServerPlayer p, Session s) {
         SESSIONS.put(p.getUUID(), s);
         s.begin();

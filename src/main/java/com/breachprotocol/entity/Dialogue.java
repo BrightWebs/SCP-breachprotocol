@@ -30,6 +30,18 @@ public final class Dialogue {
 
     private static State st(ServerPlayer p) { return STATES.computeIfAbsent(p.getUUID(), k -> new State()); }
 
+    /** The Overseer seat this player is talking to face to face (0 = none). */
+    public static int talkingSeat(ServerPlayer p) {
+        State s = STATES.get(p.getUUID());
+        if (s == null || !s.session.startsWith("npc:") || System.currentTimeMillis() - s.touched > 120_000) return 0;
+        try {
+            net.minecraft.world.entity.Entity e = p.serverLevel().getEntity(Integer.parseInt(s.session.substring(4)));
+            return e instanceof O5MemberEntity m && m.getSeat() != null ? m.getSeat().seat : 0;
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
     /** The player with a conversation open with this mob (and active in the last two minutes), or null. */
     public static ServerPlayer talkingTo(net.minecraft.world.entity.Mob m) {
         if (!(m.level() instanceof net.minecraft.server.level.ServerLevel l)) return null;

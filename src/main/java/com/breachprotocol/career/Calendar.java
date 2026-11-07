@@ -55,15 +55,24 @@ public final class Calendar {
         if (!council(d)) return;
         long n = now(p);
         Random r = new Random();
+        // nobody rings you in the middle of a Council meeting: it all waits until you're done
+        boolean meeting = Council.inSession(p);
+        int faceToFace = com.breachprotocol.entity.Dialogue.talkingSeat(p);
+        if (meeting) {
+            if (d.nextRequest > 0 && n >= d.nextRequest) d.nextRequest = n + HOUR;
+            return;
+        }
         // a request for a meeting every couple of days
         if (d.nextRequest == 0) d.nextRequest = n + DAY / 2;
         if (n >= d.nextRequest) {
             d.nextRequest = n + 2L * DAY + r.nextInt(DAY);
             long open = d.appts.stream().filter(a -> !a.confirmed).count();
+            int skip = faceToFace;
             if (open < 3 && d.appts.size() < MAX) {
                 CareerData.Appt a = new CareerData.Appt();
                 a.id = d.nextApptId++;
                 a.seat = 1 + r.nextInt(12);
+                if (a.seat == skip) a.seat = a.seat % 12 + 1;
                 a.topic = Calls.topicFor(a.seat, admin(d), r);
                 a.at = r.nextBoolean() ? inHours(p, 2 + r.nextInt(6)) : at(p, new int[]{9, 11, 14, 16, 19}[r.nextInt(5)], r.nextInt(2));
                 a.confirmed = false;
@@ -81,6 +90,7 @@ public final class Calendar {
             if (a.at > n) continue;
             if (!a.confirmed) { it.remove(); d.dirty = true; continue; }
             if (d.call != null) continue; // after the current call
+            if (a.seat == faceToFace) continue; // you're talking to them in person; they'll ring after
             it.remove();
             d.dirty = true;
             Calls.start(p, a.topic, a.seat);
