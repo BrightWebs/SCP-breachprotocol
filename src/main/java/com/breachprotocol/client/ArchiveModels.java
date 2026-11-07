@@ -57,16 +57,20 @@ public final class ArchiveModels {
         Matcher dm = Pattern.compile("(\\d{3,4})").matcher(des);
         if (dm.find()) prefixes.add("scp" + dm.group(1));
         List<EntityType<?>> out = new ArrayList<>();
+        // last resort: any SCP Unleashed creature whose id carries the same number (scp173, scp_173_statue ...)
+        String num = m.matches() ? m.group(1) : dm.reset().find() ? dm.group(1) : null;
+        if (num != null) prefixes.add("#" + num.replaceFirst("^0+(?=\\d{3})", ""));
         for (String prefix : prefixes) {
             List<EntityType<?>> found = new ArrayList<>();
             for (EntityType<?> t : BuiltInRegistries.ENTITY_TYPE) {
                 ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(t);
                 if (!"scp_unleashed".equals(id.getNamespace())) continue;
                 String p = id.getPath();
-                boolean match = prefix.endsWith("_") ? p.startsWith(prefix) : p.equals(prefix) || p.startsWith(prefix + "_");
+                boolean match = prefix.startsWith("#") ? p.matches("^(scp_?)" + prefix.substring(1) + "(_.*)?$")
+                        : prefix.endsWith("_") ? p.startsWith(prefix) : p.equals(prefix) || p.startsWith(prefix + "_");
                 if (!match) continue;
                 // scp001 alone shouldn't pick up scp001_day_* etc.; scp049 shouldn't pick scp049_2 first
-                if (prefix.equals("scp001") && p.startsWith("scp001_") ) continue;
+                if ((prefix.equals("scp001") || prefix.equals("#001")) && p.startsWith("scp001_")) continue;
                 if (p.contains("portal") || p.contains("seat") || p.contains("restraint") || p.contains("egg") || p.contains("bolt")
                         || p.contains("thrown") || p.contains("shot") || p.contains("image") || p.contains("field") || p.contains("note")) continue;
                 found.add(t);
@@ -95,7 +99,8 @@ public final class ArchiveModels {
                 BreachProtocol.LOGGER.warn("Archive preview: could not create {} for {}: {}", BuiltInRegistries.ENTITY_TYPE.getKey(t), docId, ex.toString());
             }
         }
-        BreachProtocol.LOGGER.info("Archive preview: no creature for {}", docId);
+        BreachProtocol.LOGGER.info("Archive preview: no creature for {} (tried {})", docId, candidates(docId));
+        PROBLEM.put(docId, candidates(docId).isEmpty() ? "NOT A CREATURE - NO MODEL" : "MODEL UNAVAILABLE");
         FAILED.put(docId, NONE);
         return null;
     }
@@ -144,6 +149,13 @@ public final class ArchiveModels {
         return le != null && render(g, le, x, y, w, h, docId);
     }
 
+    private static final Map<String, String> PROBLEM = new HashMap<>();
+
+    /** Short reason shown in the preview box when nothing can be drawn. */
+    public static String lastProblem(String docId) {
+        return PROBLEM.getOrDefault(docId, Minecraft.getInstance().level == null ? "LOADING" : "NO SPECIMEN MODEL");
+    }
+
     private static boolean render(GuiGraphics g, LivingEntity le, int x, int y, int w, int h, String key) {
         try {
             float rot = (System.currentTimeMillis() % 14000L) / 14000F * 360F;
@@ -158,6 +170,7 @@ public final class ArchiveModels {
             return true;
         } catch (Throwable t) {
             BreachProtocol.LOGGER.warn("Preview failed to draw {}", key, t);
+            PROBLEM.put(key, "MODEL FAILED TO RENDER");
             CACHE.remove(key);
             FAILED.put(key, NONE);
             return false;

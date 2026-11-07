@@ -43,6 +43,8 @@ public final class PhoneActions {
             case "orbital_strike" -> Command.orbitalStrike(p);
             case "site_declare" -> com.breachprotocol.career.Sites.declare(p, arg);
             case "site_remove" -> com.breachprotocol.career.Sites.remove(p, arg);
+            case "rift_dclass" -> com.breachprotocol.career.RiftTeams.send(p, arg, false);
+            case "rift_mtf" -> com.breachprotocol.career.RiftTeams.send(p, arg, true);
             case "link" -> com.breachprotocol.career.Clearance.link(p, arg);
             case "contact_req" -> com.breachprotocol.career.Contacts.request(p, arg);
             case "contact_accept" -> com.breachprotocol.career.Contacts.accept(p, arg);

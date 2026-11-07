@@ -168,13 +168,30 @@ public class PhoneScreen extends Screen {
         circle(g, cx, cy, r - 1, Terminal.BG);
     }
 
-    private void text(GuiGraphics g, String s, int x, int y, int c) { g.drawString(font, s, x, y, Terminal.map(c), false); }
-    private void textC(GuiGraphics g, String s, int cx, int y, int c) { g.drawString(font, s, cx - font.width(s) / 2, y, Terminal.map(c), false); }
+    /** Every line of text is kept inside the screen: anything too long is shortened with "...". */
+    private void text(GuiGraphics g, String s, int x, int y, int c) {
+        int room = SX + SW - 4 - x;
+        g.drawString(font, room > 8 ? ellipsize(s, room) : s, x, y, Terminal.map(c), false);
+    }
+    private void textC(GuiGraphics g, String s, int cx, int y, int c) {
+        int room = 2 * Math.min(cx - SX - 5, SX + SW - 5 - cx);
+        if (room > 8) s = ellipsize(s, room);
+        g.drawString(font, s, cx - font.width(s) / 2, y, Terminal.map(c), false);
+    }
+
+    /** 1:05, 12:30, 2h 05m - never a huge raw number. */
+    private static String clock(int seconds) {
+        seconds = Math.max(0, seconds);
+        if (seconds >= 3600) return seconds / 3600 + "h " + String.format("%02d", seconds % 3600 / 60) + "m";
+        return seconds / 60 + ":" + String.format("%02d", seconds % 60);
+    }
 
     private void big(GuiGraphics g, String s, int cx, int y, float k, int c) {
         g.pose().pushPose();
         g.pose().translate(cx, y, 0);
         g.pose().scale(k, k, 1);
+        int room = (int) (2 * Math.min(cx - SX - 5, SX + SW - 5 - cx) / k);
+        if (room > 8) s = ellipsize(s, room);
         g.drawString(font, s, -font.width(s) / 2, 0, Terminal.map(c), false);
         g.pose().popPose();
     }
@@ -516,6 +533,8 @@ public class PhoneScreen extends Screen {
         g.pose().pushPose();
         g.pose().translate(cx, y, 0);
         g.pose().scale(0.75F, 0.75F, 1);
+        int room = (int) (2 * Math.min(cx - SX - 4, SX + SW - 4 - cx) / 0.75F);
+        if (room > 8) s = ellipsize(s, room);
         g.drawString(font, s, -font.width(s) / 2, 0, Terminal.map(c), false);
         g.pose().popPose();
     }
@@ -846,7 +865,7 @@ public class PhoneScreen extends Screen {
         int mx = m.getInt("x"), my = m.getInt("y"), mz = m.getInt("z");
         card(g, x, y, w, 24);
         g.fill(x, y, x + 2, y + 24, Terminal.map(missionColor(m.getString("type"))));
-        text(g, m.getString("type").replace('_', ' '), x + 6, y + 3, Terminal.GREEN);
+        text(g, ellipsize(m.getString("type").replace('_', ' '), w - 60), x + 6, y + 3, Terminal.GREEN);
         String info = mx + ", " + mz;
         if (mc.player != null) {
             int d = (int) Math.sqrt(mc.player.distanceToSqr(mx + 0.5, mc.player.getY(), mz + 0.5));
@@ -890,7 +909,7 @@ public class PhoneScreen extends Screen {
             List<String> meta = new ArrayList<>();
             if (m.getBoolean("hasPos")) meta.add("\u2316 " + m.getInt("x") + ", " + m.getInt("z"));
             long exp = m.getLong("expires");
-            if (exp < Long.MAX_VALUE / 2) { long sec = Math.max(0, (exp - now) / 20); meta.add("\u23F1 " + sec / 60 + ":" + String.format("%02d", sec % 60)); }
+            if (exp < Long.MAX_VALUE / 2) { long sec = Math.max(0, (exp - now) / 20); meta.add("\u23F1 " + clock((int) Math.min(Integer.MAX_VALUE, sec))); }
             int h = pad + 16 + descH + 6 + 10 + (meta.isEmpty() ? 0 : 12) + (trial ? 0 : 18) + pad - 2;
             card(g, x, y, w, h);
             rect(g, x, y + 6, 2, h - 12, chip);
@@ -1234,7 +1253,7 @@ public class PhoneScreen extends Screen {
         // the anomaly itself, slowly turning (SCP-096's image is withheld, as in its own dossier)
         boolean shy = e.id().endsWith("scp_096") || e.designation().equals("SCP-096");
         ArchiveModels.designation(e.id(), e.designation());
-        if (shy || ArchiveModels.has(e.id())) {
+        {
             int mh = 96;
             rrect(g, x, y, w, mh, 10, 0xFF0F151C);
             for (int gy = y + 8; gy < y + mh; gy += 8) rect(g, x + 4, gy, w - 8, 1, 0x0FFFFFFF);
@@ -1242,8 +1261,9 @@ public class PhoneScreen extends Screen {
             if (shy) {
                 rect(g, x + w / 2 - 30, y + 30, 60, 24, 0xFF000000);
                 small(g, "IMAGE WITHHELD", x + w / 2, y + 60, 0xFFFF8A8F);
-            } else {
-                ArchiveModels.draw(g, e.id(), x, y + 2, w, mh - 14);
+            } else if (!ArchiveModels.draw(g, e.id(), x, y + 2, w, mh - 14)) {
+                // never an empty gap: say plainly why there's no specimen to show
+                small(g, ArchiveModels.lastProblem(e.id()), x + w / 2, y + mh / 2 - 6, MUTED);
             }
             small(g, e.designation().toUpperCase(Locale.ROOT), x + w / 2, y + mh - 10, MUTED);
             y += mh + 6;
@@ -1307,7 +1327,8 @@ public class PhoneScreen extends Screen {
             int bx = x + i * (tw + 3);
             boolean sel = containTab == i, hov = over(bx, y, tw, 14);
             rbox(g, bx, y, tw, 14, 7, sel ? Terminal.SELECT : 0xFF08180E, sel || hov ? Terminal.SELECT : 0xFF163D24);
-            g.drawString(font, tabs[i], bx + tw / 2 - font.width(tabs[i]) / 2, y + 3, sel ? Terminal.ON_SELECT : Terminal.GREEN, false);
+            String tl = ellipsize(tabs[i], tw - 6);
+            g.drawString(font, tl, bx + tw / 2 - font.width(tl) / 2, y + 3, sel ? Terminal.ON_SELECT : Terminal.GREEN, false);
             final int idx = i;
             hit(bx, y, tw, 14, () -> { containTab = idx; scroll = 0; });
         }
@@ -1351,7 +1372,11 @@ public class PhoneScreen extends Screen {
         if (rifts.isEmpty()) { empty(g, y - 20, "No rifts", "Nothing open within 128m. You'll get a message when one appears."); return y + 60; }
         for (Tag tg : rifts) {
             CompoundTag r = (CompoundTag) tg;
-            int h = 40, id = r.getInt("id");
+            int clr = t().getInt("rankClr");
+            boolean canD = clr >= 4 || t().getBoolean("ascended"), canMtf = clr >= 5 || t().getBoolean("ascended");
+            boolean sent = false;
+            for (Tag q : t().getList("riftTeams", Tag.TAG_INT)) if (((net.minecraft.nbt.IntTag) q).getAsInt() == r.getInt("id")) sent = true;
+            int h = canD ? 58 : 40, id = r.getInt("id");
             card(g, x, y, w, h);
             int colour = 0xFF000000 | r.getInt("colour");
             RAW = true;
@@ -1372,6 +1397,14 @@ public class PhoneScreen extends Screen {
             final int rx = r.getInt("x"), ry = r.getInt("y"), rz = r.getInt("z");
             final String label = title;
             pill(g, x + w - 52, y + 18, 46, 14, on ? "Stop" : "Guide", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.startEntity(id, rx, ry, rz, label); });
+            if (canD) {
+                int half = (w - 22) / 2;
+                if (sent) small(g, "TEAM EN ROUTE", x + w / 2, y + 43, 0xFF5BE36F);
+                else {
+                    pill(g, x + 9, y + 38, half, 14, "Send D-Class", 0xFF2E9E57, true, () -> send("rift_dclass", id));
+                    pill(g, x + 13 + half, y + 38, half, 14, "Send MTF", 0xFF2E9E57, canMtf, () -> send("rift_mtf", id));
+                }
+            }
             y += h + 4;
         }
         return y;
@@ -1557,7 +1590,7 @@ public class PhoneScreen extends Screen {
         for (Tag st0 : siteList) {
             CompoundTag st = (CompoundTag) st0;
             card(g, x, y, w, 24);
-            text(g, st.getString("n"), x + 8, y + 3, st.getBoolean("here") ? 0xFF5BE36F : 0xFFE8EEF4);
+            text(g, ellipsize(st.getString("n"), w - 60), x + 8, y + 3, st.getBoolean("here") ? 0xFF5BE36F : 0xFFE8EEF4);
             String info = st.getInt("r") + "m @ " + st.getInt("x") + ", " + st.getInt("z") + "  \u00B7  " + st.getString("on");
             small(g, ellipsize(info, (int) ((w - 60) / 0.75F)), x + 8 + (int) (font.width(ellipsize(info, (int) ((w - 60) / 0.75F))) * 0.375F), y + 14, MUTED);
             final int si = st.getInt("i");
@@ -1646,7 +1679,7 @@ public class PhoneScreen extends Screen {
             long cd = t().getLong("mtfCd");
             card(g, x, y, w, 30);
             text(g, "Mobile Task Force", x + 8, y + 5, 0xFFFFFFFF);
-            text(g, cd > 0 ? "Command regrouping: " + cd / 60 + ":" + String.format("%02d", cd % 60) : "Command is ready", x + 8, y + 17, cd > 0 ? AMBER : 0xFF5BE36F);
+            text(g, cd > 0 ? "Regrouping: " + clock(cd) : "Command is ready", x + 8, y + 17, cd > 0 ? AMBER : 0xFF5BE36F);
             y += 36;
             label(g, "Spend an Unstable Fragment", x + 2, y);
             y += 12;
@@ -1723,11 +1756,11 @@ public class PhoneScreen extends Screen {
             ring(g, x + 22, y + 22, 14, ready ? 0xFF5BE36F : AMBER);
             circle(g, x + 22, y + 22, 3, ready ? 0xFF5BE36F : AMBER);
             text(g, !complete ? "Array incomplete" : ready ? "Satellite ready" : "Recharging", x + 44, y + 9, ready ? 0xFF5BE36F : AMBER);
-            text(g, !complete ? parts + " parts in orbit" : ready ? "Pick a target" : wait / 60 + ":" + String.format("%02d", wait % 60) + " until ready", x + 44, y + 21, 0xFF9FB1C2);
+            text(g, !complete ? parts + " parts in orbit" : ready ? "Pick a target" : "Ready in " + clock(wait), x + 44, y + 21, 0xFF9FB1C2);
             int half = (w - 16) / 2;
             if (hasLink("orbital")) {
-                pill(g, x + 6, y + 42, half, 16, "At crosshair", 0xFFA8323A, ready, () -> send("orbital_strike", 0));
-                pill(g, x + 10 + half, y + 42, half, 16, "On the map", 0xFF2E9E57, true, () -> go(View.MAP));
+                pill(g, x + 6, y + 42, half, 16, "Crosshair", 0xFFA8323A, ready, () -> send("orbital_strike", 0));
+                pill(g, x + 10 + half, y + 42, half, 16, "Map", 0xFF2E9E57, true, () -> go(View.MAP));
             } else {
                 pill(g, x + 6, y + 42, w - 12, 16, "Link a ZENITH Designator", 0xFF2E9E57, true, () -> go(View.SETTINGS));
             }

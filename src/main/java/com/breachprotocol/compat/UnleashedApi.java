@@ -210,7 +210,8 @@ public final class UnleashedApi {
         Object complete = call(method("orbital.OrbitalArray", "complete", java.util.UUID.class), arr, p.getUUID());
         Object readyAt = call(method("orbital.OrbitalArray", "readyAt", java.util.UUID.class), arr, p.getUUID());
         long now = p.server.overworld().getGameTime();
-        int wait = readyAt instanceof Long r ? (int) Math.max(0, (r - now + 19) / 20) : 0;
+        // readyAt is Long.MIN_VALUE before the first shot: that's "ready now" (and must not overflow)
+        int wait = readyAt instanceof Long r && r > now ? (int) Math.min(Integer.MAX_VALUE, (r - now + 19) / 20) : 0;
         return new int[]{count instanceof Integer i ? i : 0, complete instanceof Boolean b && b ? 1 : 0, wait};
     }
 
@@ -398,6 +399,13 @@ public final class UnleashedApi {
     public static float riftExtraction(Entity e) {
         Object r = call(method("anomaly.Extractable", "getExtraction"), e);
         return r instanceof Float f ? f : 0F;
+    }
+
+    /** What a finished extraction leaves behind (Extractable.createFragment), then the rift closes (collapse). */
+    public static ItemStack extractRift(Entity e) {
+        Object frag = call(method("anomaly.Extractable", "createFragment"), e);
+        call(method("anomaly.Extractable", "collapse"), e);
+        return frag instanceof ItemStack s ? s : ItemStack.EMPTY;
     }
 
     public static boolean riftExtractable(Entity e) {
