@@ -166,6 +166,7 @@ final class Convo {
             return;
         }
         if (Management.candidate(s)) { Dialogue.clearOptions(p); Management.openInterview(p, s); return; }
+        if (Recruiting.walkIn(s)) { Dialogue.clearOptions(p); Recruiting.openWalkIn(p, s); return; }
         Social.seed(s, p);
         Openers.Opener op = Social.opener(p, s);
         if (op == null) op = Openers.of(p, s);
@@ -187,6 +188,7 @@ final class Convo {
     /** The topic buttons down the right of the screen (and the facts down the left). */
     static void topics(ServerPlayer p, FoundationStaff s) {
         if (Management.candidate(s)) { Management.topics(p, s); return; } // an interview
+        if (Recruiting.walkIn(s)) { Recruiting.walkInTopics(p, s); return; } // a villager asking for work
         subtitle(p, s);
         if (!Dialogue.hasAnswers(p)) Converse.replies(p, s); // there is always something to say back
         Scene.Tier tier = Scene.tier(p);
@@ -258,7 +260,7 @@ final class Convo {
         Talk.Temper t = Talk.temper(s);
         String a = Career.address(p);
         int trust = trust(s, p);
-        if (Management.handle(p, s, what) || Lifecycle.handle(p, s, what) || Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
+        if (Recruiting.handleWalkIn(p, s, what) || Management.handle(p, s, what) || Lifecycle.handle(p, s, what) || Social.handle(p, s, what) || Converse.handle(p, s, what)) return true;
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
             case "gift" -> {

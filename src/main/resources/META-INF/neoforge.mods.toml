@@ -37,3 +37,12 @@ type = "required"
 versionRange = "[0.0.5.2,)"
 ordering = "AFTER"
 side = "BOTH"
+
+# Optional: with Minecraft Comes Alive Reborn, villagers near a site walk in to apply for jobs,
+# and keep their names, looks, personalities, traits and families when they join.
+[[dependencies.${mod_id}]]
+modId = "mca"
+type = "optional"
+versionRange = "*"
+ordering = "AFTER"
+side = "BOTH"

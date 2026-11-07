@@ -593,6 +593,7 @@ public final class Talk {
             Map.entry("worry", "What worries you?"), Map.entry("bye", "Goodbye."));
 
     private static void handle(ServerPlayer p, Entity e, String what) {
+        if (com.breachprotocol.compat.McaCompat.isVillager(e)) { Recruiting.talk(p, e, what); return; } // MCA villagers, as the Foundation
         ensure(p, e);
         if (e instanceof FoundationStaff fs && Convo.handle(p, fs, what)) {
             Dialogue.send(p, true);

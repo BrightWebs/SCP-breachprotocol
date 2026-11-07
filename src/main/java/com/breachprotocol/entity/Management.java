@@ -273,6 +273,27 @@ public final class Management {
         return c;
     }
 
+    /** A shortlist entry for someone already standing here (a walk-in from the village). */
+    static CompoundTag candidateFrom(MinecraftServer s, FoundationStaff f, int role) {
+        CompoundTag c = new CompoundTag();
+        Registry.Rec e = Registry.find(s, f.getUUID());
+        Random r = new Random(f.getUUID().getLeastSignificantBits());
+        EnumSet<Traits> ts = f.traits();
+        int comp = 2 + r.nextInt(6) + (ts.contains(Traits.EIDETIC) ? 2 : 0) + (ts.contains(Traits.ATHLETIC) && role == FoundationStaff.Role.GUARD.ordinal() ? 1 : 0);
+        c.putUUID("id", f.getUUID());
+        c.putString("name", f.getName().getString());
+        c.putBoolean("female", f.isFemale());
+        c.putInt("age", f.age());
+        c.putInt("comp", Math.max(1, Math.min(10, comp)));
+        c.putString("mole", "");
+        c.putString("bg", "Walked up from the village to ask for work. No Foundation experience; plenty of willingness.");
+        c.putString("genome", e == null ? "" : e.genome);
+        c.putString("traits", Traits.write(ts));
+        c.putBoolean("villager", true);
+        if (e != null && e.spouse != null) { Registry.Rec sp = Registry.find(s, e.spouse); if (sp != null) c.putString("family", "Married to " + sp.name + ", in the village."); }
+        return c;
+    }
+
     private static Personality personality(CompoundTag c) {
         return Personality.values()[Math.min(13, (int) (Person.geneOf(c.getUUID("id"), 20) * 14))];
     }
@@ -306,6 +327,9 @@ public final class Management {
         Set<UUID> taken = new HashSet<>();
         for (int i = 0; i < 3; i++) v.cands.add(candidate(s, role, r, taken));
         sortBest(v);
+        // villagers waiting in the lobby get first look
+        for (FoundationStaff w : l.getEntities(ModEntities.STAFF.get(), e -> v.site.equals(e.getPersistentData().getString("bp_walkin")) && !e.getPersistentData().contains("bp_cand")))
+            if (role != FoundationStaff.Role.SECRETARY || w.isFemale()) { v.cands.add(0, candidateFrom(s, w, role.ordinal())); if (v.cands.size() > 4) v.cands.remove(v.cands.size() - 1); }
         d.vac.add(v);
         d.setDirty();
         Dept dept = Dept.of(role);
@@ -419,9 +443,8 @@ public final class Management {
         int i = 0;
         for (Tag x : v.cands) {
             CompoundTag c = (CompoundTag) x;
-            FoundationStaff f;
-            if (c.getBoolean("internal")) {
-                f = Lifecycle.entity(s, c.getUUID("id"));
+            FoundationStaff f = Lifecycle.entity(s, c.getUUID("id"));
+            if (f != null || c.getBoolean("internal") || c.getBoolean("villager")) {
                 if (f == null) continue;
                 f.getPersistentData().putInt("bp_cand", v.id);
                 f.walkTo(waiting(t, i++));
@@ -529,6 +552,7 @@ public final class Management {
         else f.hireAs(v.role(), post);
         if (f == null) return;
         f.getPersistentData().remove("bp_cand");
+        f.getPersistentData().remove("bp_walkin");
         if (!c.getString("mole").isEmpty()) {
             f.getPersistentData().putString("bp_mole", c.getString("mole"));
             f.getPersistentData().putLong("bp_mole_at", s.overworld().getGameTime() + FoundationStaff.YEAR * (3 + new Random().nextInt(4)));
@@ -626,14 +650,14 @@ public final class Management {
         // heads: the founding heads are the most senior; a lost head goes to the Council
         Map<String, List<FoundationStaff>> bySite = new HashMap<>();
         for (ServerLevel l : s.getAllLevels())
-            for (FoundationStaff f : l.getEntities(ModEntities.STAFF.get(), e -> e.isAlive() && e.unit() == null && !e.getPersistentData().contains("bp_cand"))) {
+            for (FoundationStaff f : l.getEntities(ModEntities.STAFF.get(), e -> e.isAlive() && e.unit() == null && !e.getPersistentData().contains("bp_cand") && !e.getPersistentData().contains("bp_walkin"))) {
                 String site = Registry.of(f).site;
                 if (!site.isEmpty()) bySite.computeIfAbsent(site, k -> new ArrayList<>()).add(f);
                 // applicants who were turned away leave
             }
         for (ServerLevel l : s.getAllLevels())
             for (FoundationStaff f : l.getEntities(ModEntities.STAFF.get(), e -> e.getPersistentData().contains("bp_leaving")))
-                if (now > f.getPersistentData().getLong("bp_leaving")) f.discard();
+                if (now > f.getPersistentData().getLong("bp_leaving")) { if (Recruiting.fromVillage(s, f.getUUID())) Recruiting.goHome(f); else f.discard(); }
         for (Map.Entry<String, List<FoundationStaff>> e : bySite.entrySet()) {
             for (Dept dept : Dept.values()) {
                 String k = key(e.getKey(), dept);

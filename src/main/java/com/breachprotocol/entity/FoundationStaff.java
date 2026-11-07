@@ -96,14 +96,25 @@ public class FoundationStaff extends PathfinderMob implements Person {
     /** The inherited genome (hex), or "" if their genes are their own. */
     public String genome() { String g = entityData.get(GENOME); int i = g.indexOf('|'); return i < 0 ? g : g.substring(0, i); }
 
-    public void setGenome(String genome, Set<Traits> traits) { entityData.set(GENOME, genome + "|" + Traits.write(traits)); traitsApplied = false; }
+    /** Pigments taken straight from an MCA villager's genes (rather than worked out from heritage). */
+    public boolean directPigment() { return entityData.get(GENOME).endsWith("|D"); }
+
+    /** Sets inherited genes ("hex", or "hex|D" for an MCA villager's direct pigments) and traits. */
+    public void setGenome(String genome, Set<Traits> traits) {
+        boolean d = genome.endsWith("|D");
+        String hex = d ? genome.substring(0, genome.length() - 2) : genome;
+        entityData.set(GENOME, hex + "|" + Traits.write(traits) + (d ? "|D" : ""));
+        traitsApplied = false;
+    }
+
+    public void setSex(boolean female) { getPersistentData().putBoolean("bp_sex", female); entityData.set(FEMALE, female); }
 
     public EnumSet<Traits> traits() {
         String g = entityData.get(GENOME);
         if (!g.equals(traitCache) || traitSet == null) {
             traitCache = g;
-            int i = g.indexOf('|');
-            traitSet = i < 0 ? Traits.natural(getUUID()) : Traits.read(g.substring(i + 1));
+            String[] parts = g.split("\\|", -1);
+            traitSet = parts.length < 2 ? Traits.natural(getUUID()) : Traits.read(parts[1]);
         }
         return traitSet;
     }
@@ -118,10 +129,10 @@ public class FoundationStaff extends PathfinderMob implements Person {
     }
 
     @Override
-    public float melanin() { return has(Traits.ALBINISM) ? 0.0F : Person.super.melanin(); }
+    public float melanin() { return has(Traits.ALBINISM) ? 0.0F : directPigment() ? gene(2) : Person.super.melanin(); }
 
     @Override
-    public float hemoglobin() { return has(Traits.ALBINISM) ? 0.25F : Person.super.hemoglobin(); }
+    public float hemoglobin() { return has(Traits.ALBINISM) ? 0.25F : directPigment() ? gene(4) : Person.super.hemoglobin(); }
 
     @Override
     public float eumelanin() { return has(Traits.ALBINISM) ? 0.02F : Person.super.eumelanin(); }
@@ -234,6 +245,7 @@ public class FoundationStaff extends PathfinderMob implements Person {
 
     /** Women and men by their (first) name; the secretary is always a woman. */
     private void gender() {
+        if (getPersistentData().contains("bp_sex")) { entityData.set(FEMALE, getPersistentData().getBoolean("bp_sex")); return; } // known (a villager who joined us)
         if (role() == Role.SECRETARY) { entityData.set(FEMALE, true); return; }
         String n = getCustomName() == null ? "" : getCustomName().getString();
         boolean f = false;

@@ -141,6 +141,22 @@ public final class Workforce {
             t.put("heads", hd);
             org.add(t);
         }
+        // villagers waiting in a lobby (Minecraft Comes Alive)
+        ListTag walk = new ListTag();
+        for (net.minecraft.server.level.ServerLevel l : s.getAllLevels())
+            for (FoundationStaff f : l.getEntities(com.breachprotocol.registry.ModEntities.STAFF.get(), e -> e.getPersistentData().contains("bp_walkin") && !e.getPersistentData().contains("bp_cand"))) {
+                CompoundTag t = new CompoundTag();
+                t.putString("id", f.getUUID().toString());
+                t.putString("name", f.getName().getString());
+                t.putString("site", f.getPersistentData().getString("bp_walkin"));
+                t.putString("pers", Personality.of(f).label);
+                t.putInt("age", f.age());
+                List<String> tr = new ArrayList<>();
+                for (Traits x : f.traits()) if (!x.about.isEmpty()) tr.add(x.label);
+                t.putString("traits", String.join(", ", tr));
+                t.putInt("waited", (int) ((now - f.getPersistentData().getLong("bp_walkin_t")) / 1000));
+                walk.add(t);
+            }
         ListTag sites = new ListTag();
         for (Sites.Site x : Sites.get(s).sites) sites.add(StringTag.valueOf(x.name));
         ListTag log = new ListTag();
@@ -149,6 +165,8 @@ public final class Workforce {
         out.putBoolean("staffdir", true);
         out.put("people", people);
         out.put("vac", vac);
+        out.put("walkins", walk);
+        out.putBoolean("mca", com.breachprotocol.compat.McaCompat.present());
         out.put("org", org);
         out.put("sites", sites);
         out.put("log", log);
@@ -205,7 +223,10 @@ public final class Workforce {
                     Registry.log(s, e.name + " was dismissed by " + (Talk.topBrass(p) ? "the Administrator" : p.getGameProfile().getName()) + ". Standard amnestic exit.");
                     WorldNews.record(s, WorldNews.Kind.HIRE, "dismissed", e.name + " was let go. They won't remember why", -1, "");
                     toast(p, e.name + " has been dismissed. Personnel will open the post.");
+                    BlockPos at = f.blockPosition();
+                    boolean village = Recruiting.fromVillage(s, f.getUUID());
                     f.leaveService();
+                    if (village && f.level() instanceof net.minecraft.server.level.ServerLevel sl) { Recruiting.restore(sl, f.getUUID(), at); e.job = "lives in the village"; e.note = "worked for the Foundation once; doesn't remember it"; }
                 }
                 case "post" -> {
                     if (!hires(p)) break;
@@ -221,6 +242,17 @@ public final class Workforce {
                     String n = v.cands.getCompound(i).getString("name");
                     Management.decide(s, v, v.cands.getCompound(i));
                     toast(p, n + (v.kind.equals("head") ? " has been appointed." : " is hired and on the way to their post."));
+                }
+                case "walkhire" -> {
+                    FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
+                    if (f == null || !Recruiting.walkIn(f) || !hires(p)) break;
+                    FoundationStaff.Role role = FoundationStaff.Role.values()[Math.max(0, Math.min(5, Integer.parseInt(x[2])))];
+                    String n = f.getName().getString();
+                    toast(p, Recruiting.hireWalkIn(p, f, role) ? n + " is hired as " + role.title + "." : "Personnel couldn't find a desk for them.");
+                }
+                case "walkhome" -> {
+                    FoundationStaff f = Lifecycle.entity(s, uuid(x[1]));
+                    if (f != null && Recruiting.walkIn(f) && hires(p)) { toast(p, f.getName().getString() + " is walking back to the village."); Recruiting.goHome(f); }
                 }
                 case "vet" -> {
                     Management.Vacancy v = Management.byId(s, Integer.parseInt(x[1]));

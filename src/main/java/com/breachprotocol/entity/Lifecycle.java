@@ -124,7 +124,7 @@ public final class Lifecycle {
         // everyone on site is on record
         Map<String, List<FoundationStaff>> bySite = new HashMap<>();
         for (ServerLevel l : srv.getAllLevels())
-            for (FoundationStaff s : l.getEntities(ModEntities.STAFF.get(), e -> e.isAlive() && !e.getPersistentData().contains("bp_cand"))) {
+            for (FoundationStaff s : l.getEntities(ModEntities.STAFF.get(), e -> e.isAlive() && !e.getPersistentData().contains("bp_cand") && !e.getPersistentData().contains("bp_walkin"))) {
                 ensure(s);
                 Workforce.deliver(s);
                 Registry.Rec e = Registry.find(srv, s.getUUID());

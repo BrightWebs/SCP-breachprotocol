@@ -2169,7 +2169,7 @@ public class PhoneScreen extends Screen {
     private int waitingShortlists() {
         int n = 0;
         for (Tag t : STAFF.getList("vac", Tag.TAG_COMPOUND)) if (((CompoundTag) t).getString("state").equals("direct")) n++;
-        return n;
+        return n + STAFF.getList("walkins", Tag.TAG_COMPOUND).size();
     }
 
     private int drawDirectory(GuiGraphics g, int x, int y, int w, int top) {
@@ -2341,6 +2341,30 @@ public class PhoneScreen extends Screen {
             pill(g, x + 6, y + 43, w - 12, 14, "Find applicants", 0xFF2E9E57, !sites.isEmpty(), () -> act("post:" + site + ":" + POST_ROLE_ORD[Math.floorMod(postRole, POST_ROLES.length)]));
             y += 68;
         } else { wrap(g, "Hiring decisions are made by Site Directors and above. You can see what's open.", x, y, w, MUTED); y += 24; }
+        // villagers who walked in asking for work (with Minecraft Comes Alive)
+        ListTag walk = STAFF.getList("walkins", Tag.TAG_COMPOUND);
+        if (!walk.isEmpty()) {
+            label(g, "Waiting in the lobby", x, y);
+            y += 12;
+            String role = POST_ROLES[Math.floorMod(postRole, POST_ROLES.length)];
+            for (Tag tw : walk) {
+                CompoundTag c = (CompoundTag) tw;
+                String id = c.getString("id");
+                String body = c.getString("pers") + (c.getString("traits").isEmpty() ? "" : " · " + c.getString("traits"));
+                int h = 26 + wrapHeight(body, w - 12) + 18;
+                rbox(g, x, y, w, h, 3, Terminal.PANEL, Terminal.AMBER);
+                fit(g, c.getString("name") + ", " + c.getInt("age"), x + 6, y + 4, w - 12, 0xFFFFFFFF);
+                int hours = c.getInt("waited");
+                tiny(g, "From the village · at " + c.getString("site") + " · waiting " + (hours < 1 ? "under an hour" : hours + "h"), x + 6, y + 15, w - 12, AMBER);
+                int by = y + 25 + wrap(g, body, x + 6, y + 25, w - 12, 0xFF8FD8A8);
+                int bw = (w - 16) / 2;
+                pill(g, x + 6, by + 1, bw, 14, "Hire: " + role, 0xFF2E9E57, can, () -> act("walkhire:" + id + ":" + POST_ROLE_ORD[Math.floorMod(postRole, POST_ROLES.length)]));
+                pill(g, x + 10 + bw, by + 1, bw, 14, "Send home", 0xFF262E38, can, () -> act("walkhome:" + id));
+                y += h + 4;
+            }
+            tiny(g, "Change the role with the Role button above.", x, y, w, 0xFF2A7A44);
+            y += 12;
+        } else if (STAFF.getBoolean("mca")) { tiny(g, "Jobless villagers near a site will walk in to apply.", x, y, w, 0xFF2A7A44); y += 12; }
         ListTag vac = STAFF.getList("vac", Tag.TAG_COMPOUND);
         if (vac.isEmpty()) { fit(g, "Every post is filled.", x, y + 4, w, MUTED); return y + 20; }
         label(g, "Open posts", x, y);
