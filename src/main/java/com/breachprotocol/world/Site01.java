@@ -54,7 +54,7 @@ public final class Site01 {
 
     public static final int SX = 66, SY = 10, SZ = 72;
     /** 3 = rebuilt from SCP Unleashed's facility blocks. Older sites are rebuilt on the next visit. */
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
 
     // ------------------------------------------------------------------ saved state
 
@@ -64,6 +64,8 @@ public final class Site01 {
         public int version;
         /** The one player in the world who holds the rank of Administrator ("" = nobody). */
         public String admin = "";
+        /** Bumped on every (re)build: Overseers and staff from an older build are removed when they load. */
+        public int gen;
         /** Overseer seats (1-12) given up to players, and which player holds each. */
         public final java.util.Map<Integer, String> holders = new java.util.HashMap<>();
 
@@ -74,6 +76,7 @@ public final class Site01 {
             d.built = tag.getBoolean("built");
             d.version = tag.getInt("version");
             d.admin = tag.getString("admin");
+            d.gen = tag.getInt("gen");
             CompoundTag h = tag.getCompound("holders");
             for (String k : h.getAllKeys()) d.holders.put(Integer.parseInt(k), h.getString(k));
             return d;
@@ -84,6 +87,7 @@ public final class Site01 {
             tag.putBoolean("built", built);
             tag.putInt("version", version);
             tag.putString("admin", admin);
+            tag.putInt("gen", gen);
             CompoundTag h = new CompoundTag();
             holders.forEach((k, v) -> h.putString(String.valueOf(k), v));
             tag.put("holders", h);
@@ -165,6 +169,23 @@ public final class Site01 {
         return p.getServer() != null && data(p.getServer()).admin.equals(p.getUUID().toString());
     }
 
+    public static boolean needsRebuild(net.minecraft.server.MinecraftServer server) {
+        Data d = data(server);
+        return d.built && d.version < VERSION;
+    }
+
+    public static final String GEN_KEY = "bp_site01_gen";
+
+    /**
+     * An Overseer or staff member left over from an earlier build of Site-01 (their chunk wasn't
+     * loaded when the site was rebuilt). Exactly one of each Overseer should exist.
+     */
+    public static boolean stale(net.minecraft.world.entity.Entity e) {
+        if (!(e.level() instanceof ServerLevel sl) || sl.dimension() != Level.OVERWORLD || !isInside(sl, e.blockPosition())) return false;
+        CompoundTag t = e.getPersistentData();
+        return !t.contains(GEN_KEY) || t.getInt(GEN_KEY) != data(sl.getServer()).gen;
+    }
+
     public static BlockPos location(ServerLevel overworld) {
         Random r = new Random(overworld.getSeed() ^ 0x5C0001L);
         double ang = r.nextDouble() * Math.PI * 2;
@@ -229,6 +250,9 @@ public final class Site01 {
                     e -> e instanceof O5MemberEntity || e instanceof com.breachprotocol.entity.FoundationStaff || e instanceof com.breachprotocol.entity.NpcSeat))
                 e.discard();
             fill(-1, -2, -1, SX, SY, SZ, "reinforced_containment_wall");
+            Data gd = data(l.getServer());
+            gd.gen++;
+            gd.setDirty();
 
             hall();
             southHall();
@@ -268,6 +292,7 @@ public final class Site01 {
             BlockPos p = at(x, Y + 1, z);
             s.moveTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5, l.random.nextFloat() * 360F, 0);
             s.setup(role, p);
+            s.getPersistentData().putInt(GEN_KEY, data(l.getServer()).gen);
             l.addFreshEntity(s);
         }
 
@@ -378,6 +403,7 @@ public final class Site01 {
                 BlockPos start = gone ? at(8 + n * 2, Y + 1, 22) : chair;
                 m.moveTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5, f.toYRot(), 0);
                 m.setPersistenceRequired();
+                m.getPersistentData().putInt(GEN_KEY, data.gen);
                 l.addFreshEntity(m);
                 if (!gone) com.breachprotocol.entity.Seats.sit(m, chair);
             }

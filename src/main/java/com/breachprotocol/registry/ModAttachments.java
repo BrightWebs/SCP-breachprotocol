@@ -15,5 +15,9 @@ public final class ModAttachments {
     public static final DeferredHolder<AttachmentType<?>, AttachmentType<CareerData>> CAREER =
             ATTACHMENTS.register("career", () -> AttachmentType.serializable(() -> new CareerData()).copyOnDeath().build());
 
+    /** Garden chunks already shaped (edge trimmed, river carved, fruit trees planted). */
+    public static final DeferredHolder<AttachmentType<?>, AttachmentType<Boolean>> GARDEN_DONE =
+            ATTACHMENTS.register("garden_done", () -> AttachmentType.builder(() -> false).serialize(com.mojang.serialization.Codec.BOOL).build());
+
     private ModAttachments() {}
 }

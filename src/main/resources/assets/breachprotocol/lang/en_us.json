@@ -23,5 +23,16 @@
   "item.breachprotocol.plum": "Plum",
   "item.breachprotocol.fruit_of_life": "Fruit of the Tree of Life",
   "item.breachprotocol.fruit_of_knowledge": "Fruit of the Tree of Knowledge of Good and Evil",
-  "effect.breachprotocol.immortal": "Immortal"
+  "effect.breachprotocol.immortal": "Immortal",
+  "block.breachprotocol.fruit_apple": "Apple",
+  "block.breachprotocol.fruit_pear": "Pear",
+  "block.breachprotocol.fruit_peach": "Peach",
+  "block.breachprotocol.fruit_plum": "Plum",
+  "block.breachprotocol.fruit_fig": "Fig",
+  "block.breachprotocol.fruit_pomegranate": "Pomegranate",
+  "block.breachprotocol.fruit_olive": "Olives",
+  "block.breachprotocol.fruit_date": "Dates",
+  "block.breachprotocol.fruit_grapes": "Grapes",
+  "block.breachprotocol.fruit_life": "Fruit of Life",
+  "block.breachprotocol.fruit_knowledge": "Fruit of Knowledge"
 }

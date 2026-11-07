@@ -98,6 +98,7 @@ public class FoundationStaff extends PathfinderMob {
     @Override
     public void aiStep() {
         super.aiStep();
+        if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
         if (level().isClientSide || tickCount % 20 != 0) return;
         if (post != null && tickCount % 200 == 0) restrictTo(post, 12);
         Player near = level().getNearestPlayer(this, 6);

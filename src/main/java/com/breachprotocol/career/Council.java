@@ -83,6 +83,7 @@ public final class Council {
                 s.tick(now);
                 continue;
             }
+            if (p.level() == ow && Site01.isInside(p) && Site01.needsRebuild(p.server)) Site01.ensureBuilt(ow);
             if (p.level() != ow || !Site01.isInside(p) || now < COOLDOWN.getOrDefault(p.getUUID(), 0L)) continue;
             Rank r = Career.rank(p);
             Site01.Data d = Site01.data(p.server);

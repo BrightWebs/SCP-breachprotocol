@@ -100,6 +100,7 @@ public class O5MemberEntity extends PathfinderMob {
     public void aiStep() {
         super.aiStep();
         if (!level().isClientSide && tickCount % 200 == 0) restrict();
+        if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); }
     }
 
     public O5 getSeat() {

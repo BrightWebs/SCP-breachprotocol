@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "ripe=true": {
+      "model": "breachprotocol:block/fruit_apple"
+    },
+    "ripe=false": {
+      "model": "breachprotocol:block/fruit_bud"
+    }
+  }
+}
