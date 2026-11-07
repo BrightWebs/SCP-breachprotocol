@@ -22,7 +22,7 @@ public final class Dialogue {
         final Deque<CompoundTag> lines = new ArrayDeque<>();
         final List<CompoundTag> options = new ArrayList<>();
         String input = "";
-        boolean hud;
+        boolean hud, ask = true;
         long touched;
     }
 
@@ -65,7 +65,11 @@ public final class Dialogue {
         s.options.clear();
         s.input = "";
         s.hud = false;
+        s.ask = true;
     }
+
+    /** In an overlay conversation: whether the choices open the window by themselves (else the player presses the answer key). */
+    public static void ask(ServerPlayer p, boolean on) { st(p).ask = on; }
 
     /** This conversation runs as an overlay; the window opens only for choices. */
     public static void hud(ServerPlayer p, boolean on) { st(p).hud = on; }
@@ -73,6 +77,8 @@ public final class Dialogue {
     public static void entity(ServerPlayer p, int id) { st(p).entity = id; }
 
     public static void subtitle(ServerPlayer p, String sub) { st(p).subtitle = sub; }
+
+    public static boolean hudOpen(ServerPlayer p) { State s = STATES.get(p.getUUID()); return s != null && s.hud && !s.session.isEmpty(); }
 
     public static boolean active(ServerPlayer p, String session) { return st(p).session.equals(session); }
 
@@ -119,6 +125,7 @@ public final class Dialogue {
         t.putString("input", s.input);
         t.putBoolean("open", open);
         t.putBoolean("hud", s.hud);
+        t.putBoolean("ask", s.ask);
         PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
     }
 

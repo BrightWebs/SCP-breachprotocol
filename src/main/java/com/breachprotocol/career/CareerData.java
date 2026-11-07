@@ -64,6 +64,8 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public String topic = "";
         public long at;
         public boolean confirmed;
+        /** The weekly Council session: the secretary has texted that you're late. */
+        public boolean texted;
 
         CompoundTag save() {
             CompoundTag t = new CompoundTag();
@@ -72,8 +74,9 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             t.putString("topic", topic);
             t.putLong("at", at);
             t.putBoolean("ok", confirmed);
+            t.putBoolean("tx", texted);
             Calls.Template tp = Calls.get(topic);
-            if (tp != null) t.putString("about", Calls.title(tp));
+            t.putString("about", seat == 0 ? "Weekly O5 Council session, Site-01" : tp != null ? Calls.title(tp) : "Council business");
             return t;
         }
 
@@ -84,6 +87,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             a.topic = t.getString("topic");
             a.at = t.getLong("at");
             a.confirmed = t.getBoolean("ok");
+            a.texted = t.getBoolean("tx");
             return a;
         }
     }
@@ -144,6 +148,9 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public final List<Appt> appts = new ArrayList<>();
     public int nextApptId = 1;
     public long nextRequest;
+    /** The weekly Council session: weekday (0 = Monday, so Tuesday = 1) and hour; a week to skip. */
+    public int weeklyDow = 1, weeklyHour = 10;
+    public long skipWeek = -1;
     /** How the last call ended (shown on the phone, not as a message). */
     public String lastCallFrom = "", lastCallText = "";
     public long lastCallAt;
@@ -252,6 +259,9 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         t.put("appts", ap);
         t.putInt("nextAppt", nextApptId);
         t.putLong("nextRequest", nextRequest);
+        t.putInt("weeklyDow", weeklyDow);
+        t.putInt("weeklyHour", weeklyHour);
+        t.putLong("skipWeek", skipWeek);
         t.putString("lastCallFrom", lastCallFrom);
         t.putString("lastCallText", lastCallText);
         t.putLong("lastCallAt", lastCallAt);
@@ -314,6 +324,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         for (Tag e : t.getList("appts", Tag.TAG_COMPOUND)) appts.add(Appt.load((CompoundTag) e));
         nextApptId = Math.max(1, t.getInt("nextAppt"));
         nextRequest = t.getLong("nextRequest");
+        if (t.contains("weeklyDow")) { weeklyDow = t.getInt("weeklyDow"); weeklyHour = t.getInt("weeklyHour"); skipWeek = t.getLong("skipWeek"); }
         lastCallFrom = t.getString("lastCallFrom");
         lastCallText = t.getString("lastCallText");
         lastCallAt = t.getLong("lastCallAt");

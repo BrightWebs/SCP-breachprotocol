@@ -121,6 +121,10 @@ public final class Forces {
         public long nextReview = -1;
         /** Sites whose Administrator desk has been given its terminal. */
         public final Set<String> terminals = new HashSet<>();
+        /** Each tower's secretary, and when her successor arrives. */
+        public final Map<String, UUID> secretaries = new HashMap<>();
+        public final Map<String, Long> secretaryDue = new HashMap<>();
+        public final Map<String, String> secretaryNames = new HashMap<>();
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
 
         static Data load(CompoundTag t, HolderLookup.Provider p) {
@@ -130,6 +134,12 @@ public final class Forces {
             d.pending.addAll(t.getList("pending", Tag.TAG_COMPOUND));
             d.nextReview = t.contains("next") ? t.getLong("next") : -1;
             for (Tag x : t.getList("terminals", Tag.TAG_STRING)) d.terminals.add(x.getAsString());
+            CompoundTag sc = t.getCompound("secretaries");
+            for (String k : sc.getAllKeys()) if (sc.hasUUID(k)) d.secretaries.put(k, sc.getUUID(k));
+            CompoundTag sd = t.getCompound("secretaryDue");
+            for (String k : sd.getAllKeys()) d.secretaryDue.put(k, sd.getLong(k));
+            CompoundTag sn = t.getCompound("secretaryNames");
+            for (String k : sn.getAllKeys()) d.secretaryNames.put(k, sn.getString(k));
             return d;
         }
 
@@ -143,6 +153,15 @@ public final class Forces {
             ListTag tl = new ListTag();
             for (String x : terminals) tl.add(net.minecraft.nbt.StringTag.valueOf(x));
             t.put("terminals", tl);
+            CompoundTag sc = new CompoundTag();
+            secretaries.forEach(sc::putUUID);
+            t.put("secretaries", sc);
+            CompoundTag sd = new CompoundTag();
+            secretaryDue.forEach(sd::putLong);
+            t.put("secretaryDue", sd);
+            CompoundTag sn = new CompoundTag();
+            secretaryNames.forEach(sn::putString);
+            t.put("secretaryNames", sn);
             return t;
         }
 

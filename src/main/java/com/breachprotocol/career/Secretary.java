@@ -1,0 +1,227 @@
+package com.breachprotocol.career;
+
+import com.breachprotocol.BreachProtocol;
+import com.breachprotocol.entity.Dialogue;
+import com.breachprotocol.entity.FoundationStaff;
+import com.breachprotocol.entity.Seats;
+import com.breachprotocol.registry.ModEntities;
+import com.breachprotocol.world.SiteTower;
+import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+
+import java.util.*;
+
+/**
+ * The Administrator's secretary. She works in the Administrator's office at each site tower; when
+ * the Administrator sits at the desk she comes over and briefs them (messages, calendar, the
+ * weekly Council session, site security). She keeps the weekly Council meeting (Tuesdays unless
+ * told otherwise) and texts the Administrator if they're late. When she retires or dies, the O5
+ * Council appoints her successor.
+ */
+@EventBusSubscriber(modid = BreachProtocol.MODID)
+public final class Secretary {
+    private Secretary() {}
+
+    private static final Set<UUID> BRIEFED = new HashSet<>();
+
+    private static boolean topBrass(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
+
+    static BlockPos origin(Sites.Site s) { return new BlockPos(s.x - SiteTower.T / 2, s.y, s.z - SiteTower.T / 2); }
+
+    static BlockPos deskChair(Sites.Site s) { return origin(s).offset(16, SiteTower.y(SiteTower.TOP) + 1, 26); }
+
+    static BlockPos post(Sites.Site s) { return origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 21); }
+
+    static boolean isTower(ServerLevel l, Sites.Site s) {
+        BlockPos desk = Desk.deskSpot(s).below();
+        return l.isLoaded(desk) && BuiltInRegistries.BLOCK.getKey(l.getBlockState(desk).getBlock()).getPath().equals("office_desk");
+    }
+
+    static FoundationStaff find(ServerLevel l, Sites.Site s) {
+        UUID id = Forces.data(l.getServer()).secretaries.get(s.name);
+        if (id == null) return null;
+        Entity e = l.getEntity(id);
+        return e instanceof FoundationStaff f && f.isAlive() ? f : null;
+    }
+
+    // ================================================================== staffing
+
+    private static FoundationStaff hire(ServerLevel l, Sites.Site s) {
+        FoundationStaff f = ModEntities.STAFF.get().create(l);
+        if (f == null) return null;
+        BlockPos at = post(s);
+        f.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 180F, 0);
+        f.setup(FoundationStaff.Role.SECRETARY, at);
+        f.setPersistenceRequired();
+        l.addFreshEntity(f);
+        Forces.Data d = Forces.data(l.getServer());
+        d.secretaries.put(s.name, f.getUUID());
+        d.secretaryNames.put(s.name, f.getName().getString());
+        d.secretaryDue.remove(s.name);
+        d.setDirty();
+        return f;
+    }
+
+    /** She retired or died: the Council will appoint someone. */
+    public static void vacancy(FoundationStaff f, String how) {
+        MinecraftServer s = f.getServer();
+        if (s == null) return;
+        Forces.Data d = Forces.data(s);
+        for (Map.Entry<String, UUID> e : new ArrayList<>(d.secretaries.entrySet())) {
+            if (!e.getValue().equals(f.getUUID())) continue;
+            d.secretaries.remove(e.getKey());
+            d.secretaryNames.remove(e.getKey());
+            d.secretaryDue.put(e.getKey(), s.overworld().getGameTime() + 6000);
+            d.setDirty();
+            for (ServerPlayer q : s.getPlayerList().getPlayers())
+                if (topBrass(q)) Career.message(q, O5.O5_7, "Your secretary, " + f.getName().getString() + ", has " + how + ". The Council is choosing her successor. She'll be at your desk at " + e.getKey() + " shortly.");
+        }
+    }
+
+    // ================================================================== ticking
+
+    @SubscribeEvent
+    public static void tick(ServerTickEvent.Post event) {
+        MinecraftServer srv = event.getServer();
+        if (srv.getTickCount() % 20 != 9) return;
+        ServerLevel ow = srv.overworld();
+        long now = ow.getGameTime();
+        Forces.Data d = Forces.data(srv);
+        for (Sites.Site s : Sites.get(srv).sites) {
+            if (s.name.equals("Site-01") || !s.dim.equals("minecraft:overworld")) continue;
+            BlockPos at = post(s);
+            if (!ow.isLoaded(at) || ow.getNearestPlayer(at.getX(), at.getY(), at.getZ(), 64, false) == null || !isTower(ow, s)) continue;
+            Long due = d.secretaryDue.get(s.name);
+            if (!d.secretaries.containsKey(s.name) && (due == null || now >= due)) {
+                FoundationStaff f = hire(ow, s);
+                if (f != null && due != null) {
+                    WorldNews.record(srv, WorldNews.Kind.HIRE, "secretary", "the Council appointed " + f.getName().getString() + " as the Administrator's new secretary", 1, "the Council");
+                    for (ServerPlayer q : srv.getPlayerList().getPlayers())
+                        if (topBrass(q)) Career.message(q, O5.O5_7, "The Council has appointed " + f.getName().getString() + " as your secretary at " + s.name + ". She comes highly recommended.");
+                }
+            }
+        }
+        for (ServerPlayer p : srv.getPlayerList().getPlayers()) {
+            if (!topBrass(p)) continue;
+            Sites.Site at = deskOf(p);
+            if (at == null) {
+                if (BRIEFED.remove(p.getUUID()) && Dialogue.hudOpen(p)) Dialogue.close(p);
+                continue;
+            }
+            if (BRIEFED.contains(p.getUUID())) continue;
+            FoundationStaff f = find(ow, at);
+            if (f == null || f.distanceTo(p) > 40) continue;
+            BRIEFED.add(p.getUUID());
+            BlockPos stand = deskChair(at).north(2);
+            f.getNavigation().moveTo(stand.getX() + 0.5, stand.getY(), stand.getZ() + 0.5, 1.1);
+            Dialogue.begin(p, "npc:" + f.getId(), f.getName().getString(), "Executive Secretary to the Administrator", f.getId());
+            Dialogue.hud(p, true);
+            Dialogue.ask(p, false);
+            brief(p, f, "brief");
+        }
+    }
+
+    /** The site whose Administrator desk chair this player is sitting in. */
+    static Sites.Site deskOf(ServerPlayer p) {
+        Entity v = p.getVehicle();
+        if (v == null || p.level() != p.server.overworld()) return null;
+        BlockPos c = Seats.chairOf(v);
+        for (Sites.Site s : Sites.get(p.server).sites) if (!s.name.equals("Site-01") && deskChair(s).equals(c)) return s;
+        return null;
+    }
+
+    // ================================================================== the briefing
+
+    private static String greeting(ServerPlayer p) {
+        int h = (int) ((p.server.overworld().getDayTime() % Calendar.DAY) / Calendar.HOUR + 6) % 24;
+        return h < 12 ? "Good morning, Administrator." : h < 18 ? "Good afternoon, Administrator." : "Good evening, Administrator.";
+    }
+
+    public static void brief(ServerPlayer p, FoundationStaff f, String what) {
+        CareerData d = Career.data(p);
+        String me = f.getName().getString();
+        int c = 0xF0A8C8;
+        switch (what) {
+            case "brief" -> {
+                List<String> parts = new ArrayList<>();
+                int unread = (int) d.messages.stream().filter(m -> !m.read).count();
+                parts.add(unread == 0 ? "No new messages." : unread + " new message" + (unread == 1 ? "" : "s") + ", the latest from " + d.messages.get(0).sender + ".");
+                long reqs = d.appts.stream().filter(a -> !a.confirmed).count();
+                CareerData.Appt next = d.appts.stream().filter(a -> a.confirmed).min(Comparator.comparingLong(a -> a.at)).orElse(null);
+                if (next != null) parts.add("Next on your calendar: " + Calendar.who(next) + ", " + Calendar.when(next.at) + ".");
+                if (reqs > 0) parts.add(reqs + " meeting request" + (reqs == 1 ? "" : "s") + " waiting for your answer.");
+                CareerData.Appt weekly = Calendar.weekly(d);
+                if (weekly != null) parts.add("The Council sits " + Calendar.when(weekly.at) + ", as usual.");
+                Defence.Alert al = Defence.alertAt(deskOf(p) == null ? "" : deskOf(p).name);
+                if (al != null) parts.add("And security reports " + al.org + " on the grounds. They're handling it.");
+                Dialogue.line(p, me, greeting(p) + " " + String.join(" ", parts), c);
+            }
+            case "brief_msg" -> {
+                Dialogue.line(p, "You", "Read me the latest.", 0xB8E07A);
+                if (d.messages.isEmpty()) Dialogue.line(p, me, "Nothing in your inbox at all.", c);
+                else {
+                    CareerData.Message m = d.messages.get(0);
+                    m.read = true;
+                    d.dirty = true;
+                    Dialogue.line(p, me, "From " + m.sender + ": \"" + m.body + "\"", c);
+                }
+            }
+            case "brief_cal" -> {
+                Dialogue.line(p, "You", "What's on my calendar?", 0xB8E07A);
+                List<CareerData.Appt> list = new ArrayList<>(d.appts);
+                list.sort(Comparator.comparingLong(a -> a.at));
+                if (list.isEmpty()) Dialogue.line(p, me, "Nothing booked.", c);
+                for (int i = 0; i < Math.min(4, list.size()); i++) {
+                    CareerData.Appt a = list.get(i);
+                    Dialogue.line(p, me, (a.confirmed ? "" : "Request: ") + Calendar.who(a) + ", " + Calendar.when(a.at) + (a.seat == 0 ? "" : " (" + Calendar.about(a) + ")") + ".", c);
+                }
+            }
+            case "brief_accept" -> {
+                Dialogue.line(p, "You", "Accept the requests.", 0xB8E07A);
+                int n = 0;
+                for (CareerData.Appt a : d.appts) if (!a.confirmed) { a.confirmed = true; n++; }
+                d.dirty = true;
+                Dialogue.line(p, me, n == 0 ? "There's nothing waiting." : "Done. " + n + " meeting" + (n == 1 ? "" : "s") + " confirmed. I'll let them know.", c);
+            }
+            case "brief_news" -> {
+                Dialogue.line(p, "You", "Anything I should know?", 0xB8E07A);
+                List<WorldNews.Item> n = WorldNews.recent(p.server, 3);
+                if (n.isEmpty()) Dialogue.line(p, me, "It's been quiet. I'll let you know the moment it isn't.", c);
+                for (WorldNews.Item i : n) Dialogue.line(p, me, Character.toUpperCase(i.headline().charAt(0)) + i.headline().substring(1) + " (" + WorldNews.ago(p.server, i) + ").", c);
+            }
+            case "brief_site" -> {
+                Dialogue.line(p, "You", "How is the site?", 0xB8E07A);
+                Sites.Site s = deskOf(p);
+                String name = s == null ? "this site" : s.name;
+                int armed = s == null ? 0 : Forces.data(p.server).station(s.name).members.size();
+                Dialogue.line(p, me, name + ": " + armed + " armed personnel on duty, stability at " + d.stability + "%." + (Defence.alertAt(name) != null ? " We are under attack." : " No incidents."), c);
+            }
+            default -> {}
+        }
+        // she confirms the weekly session in person
+        Dialogue.clearOptions(p);
+        CareerData.Appt weekly = Calendar.weekly(d);
+        if (weekly != null && (!weekly.confirmed || weekly.texted) && weekly.at - p.server.overworld().getDayTime() < 3L * Calendar.DAY) {
+            Dialogue.line(p, me, "The Council is down for " + Calendar.when(weekly.at) + ". Shall I confirm it?", c);
+            Dialogue.option(p, "Confirm the Council", "/council_week keep", "Keep this week's session", 0xFFC94D);
+            Dialogue.option(p, "Move it to the next day", "/council_week next", "One day later, same time", 0xFFC94D);
+            Dialogue.option(p, "Skip this week", "/council_week skip", "No session this week", 0xFFC94D);
+        }
+        Dialogue.option(p, "Read me the latest message", "/talk " + f.getId() + " brief_msg", "", 0x9FD8FF);
+        Dialogue.option(p, "What's on my calendar?", "/talk " + f.getId() + " brief_cal", "", 0x9FD8FF);
+        if (d.appts.stream().anyMatch(a -> !a.confirmed)) Dialogue.option(p, "Accept the meeting requests", "/talk " + f.getId() + " brief_accept", "", 0x9FD8FF);
+        Dialogue.option(p, "Anything I should know?", "/talk " + f.getId() + " brief_news", "", 0x9FD8FF);
+        Dialogue.option(p, "How is the site?", "/talk " + f.getId() + " brief_site", "", 0x9FD8FF);
+        Dialogue.option(p, "That's all, thank you", "/talk " + f.getId() + " bye", "", 0xC8D0DA);
+        Dialogue.send(p, true);
+    }
+}

@@ -36,7 +36,8 @@ import java.util.UUID;
 public class FoundationStaff extends PathfinderMob {
     public enum Role {
         RESEARCHER("Researcher", "Dr."), GUARD("Security", "Officer"), MEDIC("Medical", "Dr."),
-        TECHNICIAN("Technician", "Tech"), CLERK("Administration", ""), JANITOR("Janitorial", "");
+        TECHNICIAN("Technician", "Tech"), CLERK("Administration", ""), JANITOR("Janitorial", ""),
+        SECRETARY("Executive Secretary", "Ms.");
 
         public final String title, prefix;
 
@@ -163,8 +164,8 @@ public class FoundationStaff extends PathfinderMob {
         entityData.set(VARIANT, random.nextInt(3));
         this.post = post;
         name(role);
-        setAge(22 + random.nextInt(36));
-        restrictTo(post, 12);
+        setAge(role == Role.SECRETARY ? 24 + random.nextInt(10) : 22 + random.nextInt(36));
+        restrictTo(post, role == Role.SECRETARY ? 6 : 12);
     }
 
     /** An order from a player: follow, stay, post (back to work) or sit. */
@@ -218,6 +219,7 @@ public class FoundationStaff extends PathfinderMob {
     private void birthday() {
         String who = name();
         int a = (int) age;
+        if (role() == Role.SECRETARY && a >= 58) { retire(); return; }
         if (illness.isEmpty()) {
             float chance = a < 45 ? 0.02F : a < 65 ? 0.06F : 0.14F;
             if (random.nextFloat() < chance) {
@@ -273,12 +275,22 @@ public class FoundationStaff extends PathfinderMob {
         return false;
     }
 
+    /** The Administrator's secretary steps down; the Council appoints the next one. */
+    private void retire() {
+        news(com.breachprotocol.career.WorldNews.Kind.AGING, name() + " retired after years as the Administrator's secretary", 1);
+        tellNearby(name() + " has retired. She leaves a neat desk and a long list of handover notes.", ChatFormatting.GRAY);
+        com.breachprotocol.career.Secretary.vacancy(this, "retired");
+        Seats.stand(this);
+        discard();
+    }
+
     private void die(String cause) {
         news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + " (" + role().title + ") died " + cause + " at " + (int) age, -2);
         tellNearby(name() + " has died " + cause + ", aged " + (int) age + ".", ChatFormatting.GRAY);
         if (level() instanceof net.minecraft.server.level.ServerLevel sl) {
             sl.sendParticles(net.minecraft.core.particles.ParticleTypes.SOUL, getX(), getY() + 1, getZ(), 12, 0.3, 0.5, 0.3, 0.02);
             if (unit != null) com.breachprotocol.career.Forces.died(this, cause);
+            else if (role() == Role.SECRETARY) com.breachprotocol.career.Secretary.vacancy(this, "died " + cause);
             else if (post != null) Hires.schedule(sl, post, role());
         }
         Seats.stand(this);
@@ -293,6 +305,9 @@ public class FoundationStaff extends PathfinderMob {
         String by = k == null ? "in an incident" : "by " + (k instanceof Player pl ? pl.getGameProfile().getName() : k.getName().getString());
         if (unit != null) {
             com.breachprotocol.career.Forces.died(this, "killed " + by);
+        } else if (role() == Role.SECRETARY) {
+            news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + ", the Administrator's secretary, was killed " + by, -4);
+            com.breachprotocol.career.Secretary.vacancy(this, "was killed " + by);
         } else {
             news(com.breachprotocol.career.WorldNews.Kind.DEATH, name() + " (" + role().title + ") was killed " + by, -3);
             if (post != null) Hires.schedule(sl, post, role());
@@ -339,7 +354,7 @@ public class FoundationStaff extends PathfinderMob {
     /** Gives them a first and last name no one else in the world has. */
     private void name(Role role) {
         if (!(level() instanceof net.minecraft.server.level.ServerLevel sl)) return;
-        String n = Names.person(sl.getServer(), random);
+        String n = role == Role.SECRETARY ? Names.woman(sl.getServer(), random) : Names.person(sl.getServer(), random);
         String prefix = unit != null ? unit.prefix : role.prefix;
         setCustomName(Component.literal((prefix.isEmpty() ? "" : prefix + " ") + n).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
         setCustomNameVisible(false);
@@ -433,6 +448,8 @@ public class FoundationStaff extends PathfinderMob {
                     "Server room's running cool today.");
             case CLERK -> pick("Your assignments are on your phone, " + Career.address(p) + ".", "Paperwork never ends here.", "The archive is on floor four.");
             case JANITOR -> pick("I don't clean the cells on B3. Nobody pays enough.", "Watch your step.", "Someone left 999 in the break room again.");
+            case SECRETARY -> r == Rank.ADMINISTRATOR || Career.isAscended(p) ? pick("Administrator. Your briefing is ready whenever you sit down.", "Good to have you back, Administrator.", "Administrator. I've kept your calendar clear where I could.")
+                    : pick("The Administrator's office. Do you have an appointment?", "Please wait here. The Administrator is very busy.");
         };
         say(p, line);
         return InteractionResult.sidedSuccess(level().isClientSide);

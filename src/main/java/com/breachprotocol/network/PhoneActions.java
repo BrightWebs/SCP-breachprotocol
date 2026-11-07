@@ -32,7 +32,7 @@ public final class PhoneActions {
             }
             case "answer" -> Calls.answer(p, arg);
             case "force_inc", "force_dec", "force_deploy", "force_fill", "force_auto", "force_dismiss" -> com.breachprotocol.career.Forces.action(p, action, arg);
-            case "dial", "hangup", "appt_accept", "appt_now", "appt_later", "appt_decline", "appt_cancel", "sched" -> com.breachprotocol.career.Calendar.action(p, action, arg);
+            case "week_keep", "week_otw", "week_next", "week_skip", "dial", "hangup", "appt_accept", "appt_now", "appt_later", "appt_decline", "appt_cancel", "sched" -> com.breachprotocol.career.Calendar.action(p, action, arg);
             case "def_invite" -> com.breachprotocol.career.Defence.toggleInvite(p, arg);
             case "def_kos" -> com.breachprotocol.career.Defence.toggleHostile(p, arg);
             case "submit" -> Career.submitSupply(p, arg);

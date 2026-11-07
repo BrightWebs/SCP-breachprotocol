@@ -54,7 +54,7 @@ public class DialogueScreen extends Screen {
             if (mc.screen instanceof DialogueScreen d) {
                 if (choice) d.update(tag);
                 else d.closeQuietly();
-            } else if (choice && mc.screen == null) {
+            } else if (choice && tag.getBoolean("ask") && mc.screen == null) {
                 mc.setScreen(new DialogueScreen(tag));
             }
             return;

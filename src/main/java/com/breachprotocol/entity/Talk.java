@@ -402,6 +402,7 @@ public final class Talk {
 
     static boolean mayCommand(ServerPlayer p, Entity who) {
         Rank r = Career.rank(p);
+        if (who instanceof FoundationStaff fs && fs.role() == FoundationStaff.Role.SECRETARY) return topBrass(p);
         if (Career.isAscended(p) || r.atLeast(Rank.OVERSEER)) return true;
         if (who instanceof O5MemberEntity) return false;
         FoundationStaff.Role role = ((FoundationStaff) who).role();
@@ -432,6 +433,7 @@ public final class Talk {
                 case TECHNICIAN -> new String[]{"Check the power", "job", "A report on the site's power"};
                 case GUARD -> new String[]{"Stand guard here", "stay", "They hold this spot"};
                 case JANITOR -> new String[]{"Clean this up", "job", "Sweeps up dropped items nearby"};
+                case SECRETARY -> new String[]{"Brief me", "brief", "Your messages, calendar and site status"};
             };
             opt(p, who, job[0], job[1], job[2], ORDER_C);
         } else {
@@ -570,6 +572,7 @@ public final class Talk {
                         case RESEARCHER -> "Take a look at what I'm holding.";
                         case TECHNICIAN -> "Check the power for me.";
                         case JANITOR -> "Clean this up, would you?";
+                        case SECRETARY -> "Brief me.";
                         case GUARD -> "Stand guard here.";
                     });
                     if (!mayCommand(p, s) && !(s.role() == FoundationStaff.Role.MEDIC && Career.rank(p) != Rank.CLASS_D)) { orders(p, s); break; }

@@ -77,3 +77,48 @@ for v, old in [(a, o) for o in (False, True) for a in range(3)]:
     make("clerk", (80, 84, 92, 255), (230, 230, 235, 255), (60, 62, 70, 255), rnd, v, badge=(200, 40, 40, 255), old=old)
     make("janitor", (60, 90, 70, 255), None, (54, 80, 62, 255), rnd, v, stripe=(200, 200, 200, 255), old=old)
 print("ok", len(os.listdir(OUT)))
+
+# ---------------------------------------------------------------- the Administrator's secretary
+FHAIR = [(70, 44, 28, 255), (22, 18, 16, 255), (168, 92, 52, 255)]
+
+def secretary(v, old):
+    rnd = random.Random(300 + v)
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    skin = SKIN[v]
+    hair = (196, 196, 202, 255) if old else FHAIR[v]
+    box(img, 0, 0, 8, 8, 8, skin, rnd, 3)
+    # long hair: crown, a side-swept fringe, full sides and back
+    rect(img, 8, 0, 8, 8, hair)
+    rect(img, 8, 8, 8, 1, hair); rect(img, 8, 9, 5, 1, hair); rect(img, 8, 10, 2, 1, hair)
+    rect(img, 0, 8, 8, 8, hair); rect(img, 16, 8, 8, 8, hair); rect(img, 24, 8, 8, 8, hair)
+    rect(img, 8, 11, 1, 5, hair); rect(img, 15, 10, 1, 6, hair)   # hair framing the face
+    # eyes with lashes, soft cheeks, lips
+    for ex in (9, 13):
+        rect(img, ex, 12, 2, 1, (250, 250, 250, 255))
+        rect(img, ex, 11, 2, 1, (30, 24, 22, 255))
+    img.putpixel((10, 12), (70, 110, 80, 255) if v == 2 else (60, 70, 100, 255)); img.putpixel((13, 12), (70, 110, 80, 255) if v == 2 else (60, 70, 100, 255))
+    img.putpixel((9, 13), shade(skin, 0.95)); img.putpixel((14, 13), shade(skin, 0.95))
+    rect(img, 11, 13, 2, 1, shade(skin, 0.9))
+    rect(img, 11, 15, 2, 1, (176, 84, 92, 255))
+    if old:
+        for (x, y) in [(9, 14), (14, 14)]: img.putpixel((x, y), shade(skin, 0.85))
+    # a tailored navy suit jacket over a white blouse, a small Foundation pin
+    suit = (38, 48, 78, 255)
+    box(img, 16, 16, 8, 12, 4, suit, rnd, 5)
+    box(img, 40, 16, 4, 12, 4, suit, rnd, 5)
+    rect(img, 22, 20, 4, 5, (238, 238, 242, 255)); rect(img, 23, 25, 2, 1, (238, 238, 242, 255))
+    img.putpixel((21, 22), (200, 170, 80, 255))
+    rect(img, 20, 27, 8, 1, shade(suit, 0.75))          # belt line
+    rect(img, 32, 20, 8, 5, hair)                       # hair down her back
+    rect(img, 44, 30, 4, 2, skin); rect(img, 40, 30, 4, 2, skin)
+    # pencil skirt, stockings, low heels
+    box(img, 0, 16, 4, 12, 4, shade(suit, 0.85), rnd, 4)
+    for x in (0, 4, 8, 12):
+        rect(img, x, 27, 4, 3, shade(skin, 0.82))
+        rect(img, x, 30, 4, 2, (20, 18, 22, 255))
+    img.save(os.path.join(OUT, f"secretary_{v}{'_old' if old else ''}.png"))
+
+for v in range(3):
+    for old in (False, True):
+        secretary(v, old)
+print("secretary textures generated")

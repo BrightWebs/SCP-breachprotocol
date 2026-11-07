@@ -77,6 +77,6 @@ public final class DialogueHud {
         g.drawString(f, hud.getString("subtitle"), x + 6, y + 12, 0x9AA4B2, false);
         int yy = y + 25;
         for (FormattedCharSequence s : lines) { g.drawString(f, s, x + 6, yy, 0xFFFFFF, false); yy += 10; }
-        if (ask) g.drawString(f, "The Council awaits you. Press [" + ANSWER.getTranslatedKeyMessage().getString() + "] to answer.", x + 6, yy + 2, 0xFFC94D, false);
+        if (ask) g.drawString(f, (hud.getString("session").equals("council") ? "The Council awaits you. " : "") + "Press [" + ANSWER.getTranslatedKeyMessage().getString() + "] to reply.", x + 6, yy + 2, 0xFFC94D, false);
     }
 }

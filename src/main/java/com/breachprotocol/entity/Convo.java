@@ -103,6 +103,7 @@ final class Convo {
     static void menu(ServerPlayer p, FoundationStaff s) {
         Dialogue.clearOptions(p);
         subtitle(p, s);
+        if (s.role() == FoundationStaff.Role.SECRETARY && Talk.topBrass(p)) Talk.opt(p, s, "Brief me", "brief", "Messages, calendar and site status", Talk.ORDER_C);
         Talk.opt(p, s, "How are things?", "how", "Ask how they're doing", TOPIC);
         Talk.opt(p, s, "Tell me about yourself", "story", "Their life, one chapter at a time", TOPIC);
         Talk.opt(p, s, "What's the news?", "news", "What people are talking about", TOPIC);
@@ -130,6 +131,12 @@ final class Convo {
         int trust = trust(s, p);
         switch (what) {
             case "menu" -> { menu(p, s); return true; }
+            case "brief", "brief_msg", "brief_cal", "brief_news", "brief_accept", "brief_site" -> {
+                if (s.role() != FoundationStaff.Role.SECRETARY) return false;
+                if (!Talk.topBrass(p)) { Talk.say(p, s, "I'm sorry. Briefings are for the Administrator."); menu(p, s); return true; }
+                Secretary.brief(p, s, what);
+                return true;
+            }
 
             // ------------------------------------------------------------ how are things
             case "how" -> {
@@ -177,6 +184,7 @@ final class Convo {
                     case TECHNICIAN -> "Spare outlets. Every time someone builds a new wing, they forget it needs power.";
                     case CLERK -> "For people to file their incident reports on time. I know. I'm dreaming.";
                     case JANITOR -> "A mop that doesn't dissolve. Last one went into the HCZ and came back as a stick.";
+                    case SECRETARY -> Talk.topBrass(p) ? "For you to answer the Council's requests before they start calling me instead." : "An appointment, if you want to see the Administrator.";
                 };
                 Talk.say(p, s, line);
                 bump(s, p, "how_need");
@@ -311,6 +319,7 @@ final class Convo {
                     case TECHNICIAN -> new String[]{"Check the power for me", "job", "A report on the site's power"};
                     case GUARD -> new String[]{"How's the perimeter?", "safe", "Guards and threats"};
                     case JANITOR -> new String[]{"Clean this up", "job", "Sweeps up dropped items nearby"};
+                    case SECRETARY -> new String[]{"Brief me", "brief", "Messages, calendar and site status"};
                 };
                 page(p, s, new String[][]{{"Any problems?", "work_problems", "What's getting in their way"}, job});
                 return true;
@@ -460,6 +469,7 @@ final class Convo {
             case TECHNICIAN -> "Keeping the lights on. Literally. The containment doors don't open without power, and they don't close without it either.";
             case CLERK -> "Assignments, transfers, and " + Talk.pick(r, "eleven incident reports nobody signed.", "the personnel files for the new hires.", "the casualty paperwork. There's always casualty paperwork.");
             case JANITOR -> "Cleaning. You'd be amazed what ends up on the floor around here. Some of it's still moving.";
+            case SECRETARY -> "Your calendar, your correspondence, and keeping the Council from walking in unannounced.";
         };
     }
 

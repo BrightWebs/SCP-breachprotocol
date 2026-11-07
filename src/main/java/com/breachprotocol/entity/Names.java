@@ -28,6 +28,19 @@ public final class Names {
             "Abernathy", "Brandt", "Carvalho", "Delacroix", "Eze", "Falk", "Gallagher", "Hosseini", "Ingram", "Jankowski",
             "Keane", "Lund", "Marchetti", "Ndiaye", "Ortega", "Pereira", "Rahman", "Sokolov", "Teague", "Wójcik"};
 
+    private static final String[] WOMEN = {"Amara", "Chiara", "Elena", "Greta", "Ines", "Kemi", "Mira", "Priya", "Rosa", "Tove", "Valentina", "Ximena",
+            "Zofia", "Adele", "Daria", "Freya", "Hana", "Jasmine", "Leona", "Nadia", "Paloma", "Sigrid", "Uma", "Willa", "Clara", "Isabelle", "Margot",
+            "Naomi", "Celeste", "Vivienne", "Aiko", "Lucia", "Helena", "Ophelia", "Simone", "Talia"};
+
+    /** A woman's first name and a surname, unused anywhere in this world. */
+    public static String woman(MinecraftServer s, RandomSource r) {
+        Data d = data(s);
+        for (int i = 0; ; i++) {
+            String n = WOMEN[r.nextInt(WOMEN.length)] + " " + (i > 400 ? (char) ('A' + r.nextInt(26)) + ". " : "") + LAST[r.nextInt(LAST.length)];
+            if (d.used.add(n)) { d.setDirty(); return n; }
+        }
+    }
+
     public static final class Data extends SavedData {
         final Set<String> used = new HashSet<>();
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
