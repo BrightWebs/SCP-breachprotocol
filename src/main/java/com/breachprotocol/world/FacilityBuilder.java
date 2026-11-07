@@ -362,6 +362,8 @@ public abstract class FacilityBuilder {
         // door: 2 wide in the middle of the corridor wall; the scanner is on the jamb to its right
         gate("containment_room_door", 2, 2, cx, wallZ, Y, out, c.clearance());
         int outZ = wallZ + out.getStepZ(), side = out == N ? cx + 2 : cx - 1;
+        // a hazard line just inside the door
+        for (int x = x0 + 1; x < x1; x++) set(x, Y, wallZ - out.getStepZ(), "containment_room_floor_marked[facing=" + f(out) + "]");
         // windows either side (none for SCP-096 and SCP-939)
         if (!c.extra().equals("dark")) {
             windows(p, x0 + 1, wallZ, x0 + 1, wallZ, Y);

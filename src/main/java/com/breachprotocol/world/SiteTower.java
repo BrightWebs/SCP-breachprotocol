@@ -47,8 +47,11 @@ import java.util.Map;
  *  2     Medical ward, treatment, pharmacy, medical reception
  *  1     Research labs A and B, greenhouse lab, research office, hazmat store
  *  G     Lobby with reception and waiting area, security checkpoint, security office, cafeteria
- *  B1    Light Containment Zone: six cells, D-Class holding, power plant, decontamination, storage
- *  B2    Heavy Containment Zone: eight cells, HCZ security, maintenance, hazmat store
+ *  B1    Light Containment: ten Safe / Euclid cells, D-Class holding, LCZ control, power plant
+ *  B2    Heavy Containment: twelve cells, HCZ security
+ *  B3    Keter wing: twelve cells, maintenance
+ *  B4    Deep containment: twelve cells, hazmat store
+ *        (every containment level has cells on both sides of its corridor)
  * </pre>
  * Every floor is joined by one stairwell in the north-east corner, opening onto a central corridor.
  */
@@ -57,26 +60,69 @@ public final class SiteTower extends FacilityBuilder {
     /** Tower footprint is 0..T on x and z; storeys are 6 blocks (floor, 4 clear, ceiling). */
     public static final int T = 32, STOREY = 6, TOP = 9, ROOF = 10;
     /** Basements reach further: x BX0..BX1. */
-    private static final int BX0 = -8, BX1 = 41;
+    private static final int BX0 = -8, BX1 = 41, NZ = 10, LOWEST = -4;
 
 
-    private static final List<CellSpec> LCZ = List.of(
-            new CellSpec(Unleashed.SCP_173, "SCP-173", "Euclid", "Never alone.", "Eyes on it.", 3, ""),
-            new CellSpec(Unleashed.SCP_131, "SCP-131", "Safe", "Friendly.", "Keep shut.", 2, "soft"),
-            new CellSpec(Unleashed.SCP_066, "SCP-066", "Euclid", "Ear protection", "required.", 3, "soft"),
-            new CellSpec(Unleashed.SCP_999, "SCP-999", "Safe", "Visits", "encouraged.", 2, "soft"),
-            new CellSpec("scp105_iris", "SCP-105", "Safe", "Resident.", "Be kind.", 2, "room"),
-            new CellSpec("scp529_cat", "SCP-529", "Safe", "Half a cat.", "Don't lift.", 2, "soft"));
+    private static CellSpec c(String e, String n, String cls, String a, String b, int lvl, String extra) { return new CellSpec(e, n, cls, a, b, lvl, extra); }
 
-    private static final List<CellSpec> HCZ = List.of(
-            new CellSpec(Unleashed.SCP_096, "SCP-096", "Euclid", "NO CAMERAS.", "NO WINDOWS.", 4, "dark"),
-            new CellSpec(Unleashed.SCP_106, "SCP-106", "Keter", "Forcefield.", "Never alone.", 5, "field"),
-            new CellSpec(Unleashed.SCP_682, "SCP-682", "Keter", "Do not speak", "to it.", 5, "heavy"),
-            new CellSpec(Unleashed.SCP_939, "SCP-939", "Keter", "Ignore voices", "you know.", 4, "dark"),
-            new CellSpec(Unleashed.SCP_049, "SCP-049", "Euclid", "Hazmat at", "all times.", 4, ""),
-            new CellSpec(Unleashed.SCP_457, "SCP-457", "Euclid", "No flammables", "on this floor.", 4, "fire"),
-            new CellSpec("scp008_zombie", "SCP-008", "Keter", "Biohazard.", "Decon after.", 5, "bio"),
-            new CellSpec("scp035_host", "SCP-035", "Keter", "Do not touch", "the mask.", 5, ""));
+    // B1 Light Containment: Safe and low-risk Euclid
+    private static final List<CellSpec> B1_S = List.of(
+            c(Unleashed.SCP_173, "SCP-173", "Euclid", "Never alone.", "Eyes on it.", 3, ""),
+            c(Unleashed.SCP_131, "SCP-131", "Safe", "Friendly.", "Keep shut.", 2, "soft"),
+            c(Unleashed.SCP_066, "SCP-066", "Euclid", "Ear protection", "required.", 3, "soft"),
+            c(Unleashed.SCP_999, "SCP-999", "Safe", "Visits", "encouraged.", 2, "soft"),
+            c("scp105_iris", "SCP-105", "Safe", "Resident.", "Be kind.", 2, "room"),
+            c("scp529_cat", "SCP-529", "Safe", "Half a cat.", "Don't lift.", 2, "soft"));
+    private static final List<CellSpec> B1_N = List.of(
+            c("scp343", "SCP-343", "Safe", "Polite at", "all times.", 2, "room"),
+            c("scp553_butterfly", "SCP-553", "Safe", "Glass wings.", "Gloves on.", 2, "soft"),
+            c("scp1762_dragon", "SCP-1762", "Safe", "Paper only.", "No flame.", 2, "soft"),
+            c("scp007", "SCP-007", "Safe", "Do not", "disturb.", 2, ""));
+    // B2 Heavy Containment: Euclid and the worst of them
+    private static final List<CellSpec> B2_S = List.of(
+            c(Unleashed.SCP_049, "SCP-049", "Euclid", "Hazmat at", "all times.", 4, ""),
+            c(Unleashed.SCP_457, "SCP-457", "Euclid", "No flammables", "on this floor.", 4, "fire"),
+            c("scp008_zombie", "SCP-008", "Euclid", "Biohazard.", "Decon after.", 4, "bio"),
+            c(Unleashed.SCP_939, "SCP-939", "Keter", "Ignore voices", "you know.", 5, "dark"),
+            c(Unleashed.SCP_106, "SCP-106", "Keter", "Forcefield.", "Never alone.", 5, "field"),
+            c(Unleashed.SCP_096, "SCP-096", "Euclid", "NO CAMERAS.", "NO WINDOWS.", 4, "dark"),
+            c("scp087_face", "SCP-087", "Euclid", "Do not follow", "it down.", 4, "dark"));
+    private static final List<CellSpec> B2_N = List.of(
+            c("scp035_host", "SCP-035", "Keter", "Do not touch", "the mask.", 5, ""),
+            c("scp111_snail", "SCP-111", "Euclid", "Fire-proof", "gear only.", 3, "fire"),
+            c("scp178_watcher", "SCP-178", "Euclid", "Remove the", "glasses.", 3, ""),
+            c("scp205_devil", "SCP-205", "Euclid", "Keep lamps", "lit.", 3, ""),
+            c("scp513_stalker", "SCP-513", "Euclid", "Don't ring", "the bell.", 3, "dark"));
+    // B3 Keter wing
+    private static final List<CellSpec> B3_S = List.of(
+            c(Unleashed.SCP_682, "SCP-682", "Keter", "Do not speak", "to it.", 5, "heavy"),
+            c("scp076", "SCP-076", "Keter", "Sarcophagus", "stays shut.", 5, "heavy"),
+            c("scp017_shadow", "SCP-017", "Keter", "Lights on.", "Always.", 5, ""),
+            c("scp280_shade", "SCP-280", "Keter", "Never let", "it go dark.", 5, "dark"),
+            c("scp303_doorman", "SCP-303", "Keter", "Don't open", "the door.", 5, ""),
+            c("scp323", "SCP-323", "Keter", "Skull stays", "locked away.", 5, "heavy"),
+            c("scp352", "SCP-352", "Keter", "Cut hair", "on sight.", 5, ""));
+    private static final List<CellSpec> B3_N = List.of(
+            c("scp372", "SCP-372", "Euclid", "Look straight", "ahead.", 4, ""),
+            c("scp469_angel", "SCP-469", "Keter", "No pain", "inside.", 5, ""),
+            c("scp538_shadow_spider", "SCP-538", "Keter", "Shadows are", "dangerous.", 5, "dark"),
+            c("scp428", "SCP-428", "Keter", "Avoid eye", "contact.", 5, ""),
+            c("scp3199", "SCP-3199", "Keter", "Destroy all", "eggs.", 5, "bio"));
+    // B4 deep containment
+    private static final List<CellSpec> B4_S = List.of(
+            c("scp058_heart", "SCP-058", "Keter", "Do not", "listen.", 5, "heavy"),
+            c("scp082_fernand", "SCP-082", "Keter", "Never let", "him hungry.", 5, "room"),
+            c("scp098_crab", "SCP-098", "Keter", "Count every", "crab.", 5, "bio"),
+            c("scp149_fly", "SCP-149", "Keter", "Sealed hive.", "No skin.", 5, "bio"),
+            c("scp439_queen", "SCP-439", "Keter", "Hive queen.", "Burn breaches.", 5, "bio"),
+            c("scp016_brute", "SCP-016", "Keter", "Biohazard 4.", "Full suit.", 5, "bio"),
+            c("scp027_vermin_god", "SCP-027", "Keter", "Vermin seal.", "No food.", 5, ""));
+    private static final List<CellSpec> B4_N = List.of(
+            c("scp019_brute", "SCP-019", "Keter", "The vase", "stays sealed.", 5, "heavy"),
+            c("scp009_statue", "SCP-009", "Keter", "No liquids", "near it.", 5, ""),
+            c("scp548_ice_spider", "SCP-548", "Euclid", "Keep it", "frozen.", 4, ""),
+            c("scp327_siren", "SCP-327", "Euclid", "Ignore the", "song.", 4, ""),
+            c("scp2845", "SCP-2845", "Keter", "Sigils hold", "it. Repair.", 5, "heavy"));
 
     private SiteTower(ServerLevel l, BlockPos o) { super(l, o); }
 
@@ -90,12 +136,14 @@ public final class SiteTower extends FacilityBuilder {
         int gy = l.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, centre.getX(), centre.getZ());
         BlockPos o = new BlockPos(centre.getX() - T / 2, gy, centre.getZ() - T / 2);
         for (int cx = (o.getX() + BX0 - 4) >> 4; cx <= (o.getX() + BX1 + 4) >> 4; cx++)
-            for (int cz = (o.getZ() - 6) >> 4; cz <= (o.getZ() + T + 6) >> 4; cz++)
+            for (int cz = (o.getZ() - NZ - 6) >> 4; cz <= (o.getZ() + T + 6) >> 4; cz++)
                 l.getChunk(cx, cz);
         SiteTower b = new SiteTower(l, o);
         b.groundworks();
-        b.b2();
-        b.b1();
+        b.containmentLevel(-4, HCZP, "DEEP", B4_S, B4_N);
+        b.containmentLevel(-3, HCZP, "KETER", B3_S, B3_N);
+        b.containmentLevel(-2, HCZP, "HEAVY", B2_S, B2_N);
+        b.containmentLevel(-1, LCZP, "LIGHT", B1_S, B1_N);
         b.ground();
         b.research();
         b.medical();
@@ -145,107 +193,94 @@ public final class SiteTower extends FacilityBuilder {
         for (int x : new int[]{-3, 9, 23, T + 3}) { set(x, 1, T + 3, "ez_planter[facing=south]"); set(x, 1, -3, "ez_planter[facing=north]"); }
         for (int z : new int[]{4, 16, 28}) { set(-3, 1, z, "ez_planter[facing=west]"); set(T + 3, 1, z, "ez_planter[facing=east]"); }
         // basement shell
-        fill(BX0 - 1, y(-2) - 1, -1, BX1 + 1, -2, T + 1, "facility_concrete");
+        fill(BX0 - 1, y(LOWEST) - 1, -NZ - 1, BX1 + 1, -2, T + 1, "facility_concrete");
     }
 
-    // ================================================================== B2: Heavy Containment
+    // ================================================================== containment levels B1-B4
 
-    private void b2() {
-        int Y = y(-2);
-        fill(BX0, Y, 0, BX1, Y + 5, T, "facility_concrete");
-        // north band
-        cell(HCZ.get(7), BX0, 0, 5, 8, Y, S);
-        room(HCZP, 5, 0, 15, 8, Y, true);                   // HCZ security
-        room(HCZP, 15, 0, 26, 8, Y, true);                  // maintenance
-        room(HCZP, 32, 0, BX1, 8, Y, true);                 // hazmat store
-        // seven cells on the south side, 6 wide inside
-        for (int i = 0; i < 7; i++) cell(HCZ.get(i), BX0 + i * 7, 14, BX0 + i * 7 + 7, T, Y, N);
-        corridor(HCZP, BX0, BX1, Y);
-        // pipes along the corridor ceiling
-        for (int x = BX0 + 1; x < BX1; x++) { setIfAir(x, Y + 4, 9, "decor_pipe[axis=x]"); setIfAir(x, Y + 4, 13, "decor_pipe[axis=x]"); }
-        for (int x = BX0 + 2; x < BX1; x += 6) setIfAir(x, Y + 3, 9, "hcz_caged_lamp[facing=south,part=single]");
-        sign2("facility_sign_heavy_containment", 22, Y + 3, 9, S, "none", false);
-        plate(24, Y + 2, 9, S, "HEAVY", "CONTAINMENT", "ZONE", "B2");
+    /**
+     * One containment level: a corridor (z 8..14) with cells on both sides. Seven cells to the south
+     * (z 14..32), four to the north (z -10..8) plus one beyond the stairwell, and a zone room
+     * (control / security / maintenance / hazmat) beside the stairs. Cells come first, then the
+     * corridor is dressed, so nothing overwrites a door.
+     */
+    private void containmentLevel(int s, Pal zone, String name, List<CellSpec> south, List<CellSpec> north) {
+        int Y = y(s);
+        fill(BX0, Y, -NZ, BX1, Y + 5, T, "facility_concrete");
+        corridor(zone, BX0, BX1, Y);
+        for (int i = 0; i < south.size(); i++) cell(south.get(i), BX0 + i * 7, 14, BX0 + i * 7 + 7, T, Y, N);
+        if (s == -1) dclassHolding(BX0 + 42, Y);
+        for (int i = 0; i < 4 && i < north.size(); i++) cell(north.get(i), BX0 + i * 7, -NZ, BX0 + i * 7 + 7, 8, Y, S);
+        if (s == -1) powerPlant(Y);
+        else if (north.size() > 4) cell(north.get(4), 32, -NZ, BX1, 8, Y, S);
+        zoneRoom(s, zone, Y);
 
-        // HCZ security: monitor desks facing the cells' feeds
-        gate("hcz_room_door", 2, 2, 9, 8, Y, S, 3);
-        desksX("metal_desk", 7, 13, 2, Y, S, "security_monitor[facing=$,lit=true,screen=3]");
-        for (int x = 7; x <= 13; x += 3) stack(x, Y + 1, 6, "hcz_monitor_console", S, 1);
-        plate(7, Y + 2, 9, S, "HCZ", "SECURITY");
-
-        // maintenance: pipe manifolds and valve panels
-        buttoned("hcz_room_door", 2, 2, 20, 8, Y, S);
-        for (int x = 16; x <= 25; x += 3) stack(x, Y + 1, 1, "hcz_pipe_manifold", S, 4);
-        for (int x = 17; x <= 24; x += 3) set(x, Y + 2, 1, "hcz_valve_panel[facing=south]");
-        stack(16, Y + 1, 6, "hcz_steam_vent", E, 2);
-        stack(25, Y + 1, 6, "hcz_steam_vent", W, 2);
-        set(16, Y + 2, 4, "fire_extinguisher[facing=east,wall=true]");
-        plate(19, Y + 2, 9, S, "MAINTENANCE");
-
-        // hazmat store
-        buttoned("hcz_room_door", 2, 2, 36, 8, Y, S);
-        for (int x = 33; x <= 40; x++) if (x != 36 && x != 37) tall(x, Y + 1, 1, "locker", S);
-        stack(33, Y + 1, 6, "hcz_hazard_crate", E, 2);
-        stack(40, Y + 1, 6, "hcz_hazard_crate", W, 2);
-        chest(38, Y + 1, 6, W,
-                ui("hazmat_hood", Items.LEATHER_HELMET, 4), ui("hazmat_suit", Items.LEATHER_CHESTPLATE, 4), ui("hazmat_trousers", Items.LEATHER_LEGGINGS, 4),
-                ui("hazmat_boots", Items.LEATHER_BOOTS, 4), ui("gas_mask", Items.LEATHER_HELMET, 4), ui("scp096_bag", Items.LEATHER, 2),
-                ui("stasis_pod_severe", Items.GLASS_BOTTLE, 2), ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 1));
-        plate(35, Y + 2, 9, S, "HAZMAT", "STORE");
+        // corridor dressing: pipes or wall pipes, arrows toward the stairs, zone signs at both ends
+        for (int x = BX0 + 1; x < BX1; x++) {
+            if (zone == HCZP) { setIfAir(x, Y + 4, 10, "decor_pipe[axis=x]"); setIfAir(x, Y + 4, 12, "decor_pipe[axis=x]"); }
+            if ((x - BX0) % 6 == 3 && x != 28 && x != 29) set(x, Y, 11, zone.floor().replace("_floor", "_floor_arrow") + "[facing=" + (x < 28 ? "east" : "west") + "]");
+        }
+        String zs = s == -1 ? "facility_sign_light_containment" : "facility_sign_heavy_containment";
+        sign2(zs, BX0 + 1, Y + 3, 11, E, "none", false);
+        sign2(zs, BX1 - 1, Y + 3, 11, W, "none", false);
+        plate(BX0 + 1, Y + 2, 12, E, name, "CONTAINMENT", "LEVEL B" + (-s));
+        plate(BX1 - 1, Y + 2, 10, W, name, "CONTAINMENT", "LEVEL B" + (-s));
+        set(BX0 + 1, Y + 1, 9, "fire_extinguisher[facing=east,wall=true]");
+        set(BX1 - 1, Y + 1, 13, "fire_extinguisher[facing=west,wall=true]");
     }
 
-    // ================================================================== B1: Light Containment
+    /** The room beside the stairwell (x 20..26, north side), different on each level. */
+    private void zoneRoom(int s, Pal zone, int Y) {
+        int x0 = 20, x1 = 26, z0 = -NZ, z1 = 8;
+        room(zone, x0, z0, x1, z1, Y, true);
+        switch (s) {
+            case -1 -> {   // LCZ control
+                gate("lcz_room_door", 2, 2, 22, z1, Y, S, 2);
+                desksZ("metal_desk", 21, -6, 4, Y, E, "security_monitor[facing=$,lit=true,screen=1]");
+                for (int z = -8; z <= 6; z += 2) set(25, Y + 2, z, "wall_monitor[facing=west,hanging=false,lit=true,screen=" + Math.floorMod(z, 10) + "]");
+                plate(21, Y + 2, 9, S, "LCZ", "CONTROL");
+            }
+            case -2 -> {   // HCZ security
+                gate("hcz_room_door", 2, 2, 22, z1, Y, S, 3);
+                desksZ("metal_desk", 21, -6, 4, Y, E, "security_monitor[facing=$,lit=true,screen=3]");
+                for (int z = -8; z <= 6; z += 3) stack(25, Y + 1, z, "hcz_monitor_console", W, 2);
+                chest(25, Y + 1, -9, W, ui("mtf_signal_radio", Items.COMPASS, 2), ui("scramble_goggles", Items.CARVED_PUMPKIN, 4), ui("scp096_bag", Items.LEATHER, 2));
+                plate(21, Y + 2, 9, S, "HCZ", "SECURITY");
+            }
+            case -3 -> {   // maintenance
+                buttoned("hcz_room_door", 2, 2, 22, z1, Y, S);
+                for (int z = -9; z <= 6; z += 3) { stack(21, Y + 1, z, "hcz_pipe_manifold", E, 4); stack(25, Y + 1, z, "hcz_steam_vent", W, 2); }
+                for (int z = -8; z <= 5; z += 3) set(25, Y + 3, z, "hcz_valve_panel[facing=west]");
+                plate(21, Y + 2, 9, S, "MAINTENANCE");
+            }
+            default -> {   // hazmat store
+                buttoned("hcz_room_door", 2, 2, 22, z1, Y, S);
+                for (int z = -9; z <= 6; z++) if (z % 3 != 0) tall(21, Y + 1, z, "locker", E);
+                for (int z = -9; z <= 6; z += 3) stack(25, Y + 1, z, "hcz_hazard_crate", W, 2);
+                chest(25, Y + 1, 7, W,
+                        ui("hazmat_hood", Items.LEATHER_HELMET, 4), ui("hazmat_suit", Items.LEATHER_CHESTPLATE, 4), ui("hazmat_trousers", Items.LEATHER_LEGGINGS, 4),
+                        ui("hazmat_boots", Items.LEATHER_BOOTS, 4), ui("gas_mask", Items.LEATHER_HELMET, 4), ui("stasis_pod_severe", Items.GLASS_BOTTLE, 4),
+                        ui("stasis_pod_abyssal", Items.GLASS_BOTTLE, 2), ui("rift_extractor", Items.SPYGLASS, 2), ui("rift_detector", Items.COMPASS, 2),
+                        ui("energum_dust", Items.GLOWSTONE_DUST, 64));
+                plate(21, Y + 2, 9, S, "HAZMAT", "STORE");
+            }
+        }
+    }
 
-    private void b1() {
-        int Y = y(-1);
-        fill(BX0, Y, 0, BX1, Y + 5, T, "facility_concrete");
-        room(POWER, BX0, 0, 5, 8, Y, true);                  // power plant
-        room(LCZP.floor("facility_shower_tile"), 5, 0, 15, 8, Y, true); // decontamination / lockers
-        room(LCZP, 15, 0, 26, 8, Y, true);                   // storage
-        room(LCZP, 32, 0, BX1, 8, Y, true);                  // LCZ control
-        for (int i = 0; i < 6; i++) cell(LCZ.get(i), BX0 + i * 7, 14, BX0 + i * 7 + 7, T, Y, N);
-        dclassHolding(BX0 + 42, Y);
-        corridor(LCZP, BX0, BX1, Y);
-        for (int x = BX0 + 2; x < BX1; x += 7) setIfAir(x, Y + 3, 13, "lcz_wall_pipes[facing=north]");
-        sign2("facility_sign_light_containment", 22, Y + 3, 9, S, "none", false);
-        plate(24, Y + 2, 9, S, "LIGHT", "CONTAINMENT", "ZONE", "B1");
-
-        // power plant: generator housings along the back wall, breaker panels, the control console, creative supply
-        buttoned("lcz_room_door", 2, 2, -2, 8, Y, S);
-        for (int x = BX0 + 2; x <= 3; x += 3) stackBlocks(x, Y + 1, 1, "power_generator_housing", S, 3);
-        for (int z = 2; z <= 6; z += 2) stackBlocks(BX0 + 1, Y + 1, z, "power_breaker_panel", E, 3);
-        put(-1, Y + 1, 4, "power_control_console", Blocks.LECTERN, S);
-        for (int x = BX0 + 3; x <= 4; x += 3) if (x != -2) set(x, Y + 1, 6, "creative_outlet");
-        for (int x = BX0 + 1; x < 5; x++) set(x, Y + 4, 4, "cable_tray[orientation=down_x]");
-        chest(4, Y + 1, 2, W,
+    /** B1's power plant, east of the stairwell: generators, breakers, the control console, creative supply. */
+    private void powerPlant(int Y) {
+        room(POWER, 32, -NZ, BX1, 8, Y, true);
+        buttoned("lcz_room_door", 2, 2, 36, 8, Y, S);
+        for (int z = -8; z <= 5; z += 3) stackBlocks(BX1 - 1, Y + 1, z, "power_generator_housing", W, 3);
+        for (int x = 34; x <= 39; x += 2) stackBlocks(x, Y + 1, -NZ + 1, "power_breaker_panel", S, 3);
+        put(36, Y + 1, -3, "power_control_console", Blocks.LECTERN, S);
+        for (int z = -7; z <= 4; z += 4) set(33, Y + 1, z, "creative_outlet");
+        for (int z = -NZ + 1; z < 8; z++) set(37, Y + 4, z, "cable_tray[orientation=down_z]");
+        chest(33, Y + 1, 6, E,
                 ui("creative_outlet", Items.REDSTONE_BLOCK, 16), ui("creative_energy_source", Items.REDSTONE_BLOCK, 4), ui("creative_wire", Items.STRING, 64),
                 ui("wire_coil", Items.STRING, 64), ui("power_cable_spool", Items.STRING, 16), ui("battery", Items.REDSTONE_BLOCK, 8));
-        plate(-4, Y + 2, 9, S, "POWER", "PLANT");
-
-        // decontamination and lockers
-        ezDoorOr("lcz_room_door", 9, 8, Y, S);
-        for (int x = 6; x <= 14; x++) if (x < 9 || x > 10) tall(x, Y + 1, 1, "locker", S);
-        for (int z = 3; z <= 6; z++) { set(6, Y + 1, z, "cafeteria_chair[facing=east]"); set(14, Y + 1, z, "cafeteria_chair[facing=west]"); }
-        set(12, Y + 3, 9, "facility_sign_decontamination_small[facing=south]");
-
-        // storage
-        buttoned("lcz_room_door", 2, 2, 20, 8, Y, S);
-        for (int x = 16; x <= 25; x++) set(x, Y + 1, 1, "steel_shelf[facing=south]");
-        for (int x = 16; x <= 18; x++) stack(x, Y + 1, 4, "lcz_supply_locker", E, 3);
-        for (int x = 23; x <= 25; x++) stack(x, Y + 1, 4, "hcz_hazard_crate", W, 2);
-        chest(17, Y + 1, 7, N, ui("stasis_pod_faint", Items.GLASS_BOTTLE, 8), ui("stasis_pod_wavering", Items.GLASS_BOTTLE, 6),
-                ui("stasis_pod_volatile", Items.GLASS_BOTTLE, 4), ui("rift_extractor", Items.SPYGLASS, 2), ui("rift_detector", Items.COMPASS, 2),
-                ui("energum_dust", Items.GLOWSTONE_DUST, 64), ui("scramble_goggles", Items.CARVED_PUMPKIN, 4));
-        plate(19, Y + 2, 9, S, "STORAGE");
-
-        // LCZ control
-        gate("lcz_room_door", 2, 2, 36, 8, Y, S, 2);
-        desksX("metal_desk", 34, 39, 2, Y, S, "security_monitor[facing=$,lit=true,screen=1]");
-        set(40, Y + 2, 5, "wall_clock[facing=west]");
-        plate(35, Y + 2, 9, S, "LCZ", "CONTROL");
+        plate(34, Y + 2, 9, S, "POWER", "PLANT");
     }
-
-    private void ezDoorOr(String kind, int x, int z, int Y, Direction out) { buttoned(kind, 2, 2, x, z, Y, out); }
 
     /** D-Class holding: bunks in a locked room (scanner outside, button inside). */
     private void dclassHolding(int x0, int Y) {
@@ -253,6 +288,7 @@ public final class SiteTower extends FacilityBuilder {
         gate("lcz_room_door", 2, 2, x0 + 3, 14, Y, N, 1);
         for (int z = 17; z <= 29; z += 3) { put(x0 + 1, Y + 1, z, "lcz_cell_bunk", Blocks.ORANGE_BED, E); put(BX1 - 1, Y + 1, z, "lcz_cell_bunk", Blocks.ORANGE_BED, W); }
         table("cafeteria_table", "cafeteria_chair", x0 + 3, 22, x0 + 4, 24, Y, 2);
+        for (int z = 15; z <= 16; z++) tall(BX1 - 1, Y + 1, z, "locker", W);
         plate(x0 + 5, Y + 2, 13, N, "D-CLASS", "HOLDING");
     }
 
@@ -835,7 +871,7 @@ public final class SiteTower extends FacilityBuilder {
      * corridor (the roof door opens onto the deck). Floors 8 and 9 are keyed at Level 5.
      */
     private void stairwell() {
-        int bottom = y(-2), top = y(ROOF);
+        int bottom = y(LOWEST), top = y(ROOF);
         // shaft walls
         for (int yy = bottom; yy <= top + 5; yy++) {
             for (int x = 26; x <= T; x++) { set(x, yy, 0, "facility_painted_concrete"); set(x, yy, 8, "facility_painted_concrete"); }
@@ -845,7 +881,7 @@ public final class SiteTower extends FacilityBuilder {
         air(27, bottom + 1, 1, 31, top + 4, 7);
         fill(27, bottom, 1, 31, bottom, 7, "facility_concrete");
         fill(26, top + 5, 0, T, top + 5, 8, "facility_precast_concrete");
-        for (int s = -2; s <= ROOF; s++) {
+        for (int s = LOWEST; s <= ROOF; s++) {
             int Y = y(s);
             // floor landing (v 0..1 -> z 7..6) and the arrival step from below (u 3..4, v 2 -> x 30..31, z 5)
             fill(27, Y, 6, 31, Y, 7, "facility_concrete");
@@ -853,6 +889,7 @@ public final class SiteTower extends FacilityBuilder {
             set(28, Y + (s == ROOF ? 4 : 5), 7, "fluorescent_light[face=ceiling,facing=east,lit=true]");
             // the floor's own sign beside the door
             String label = switch (s) {
+                case -4 -> "B4  DEEP CONT."; case -3 -> "B3  KETER WING";
                 case -2 -> "B2  HEAVY CONT."; case -1 -> "B1  LIGHT CONT."; case 0 -> "G  ENTRANCE";
                 case 1 -> "1  RESEARCH"; case 2 -> "2  MEDICAL"; case 3 -> "3  SECURITY"; case 4 -> "4  ARCHIVE";
                 case 5 -> "5  OFFICES"; case 6 -> "6  SERVERS"; case 7 -> "7  LAUNCH CTRL"; case 8 -> "8  O5 COUNCIL";
