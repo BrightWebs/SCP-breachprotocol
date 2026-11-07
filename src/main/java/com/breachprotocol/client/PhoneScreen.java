@@ -203,7 +203,10 @@ public class PhoneScreen extends Screen {
     /** Every line of text is kept inside the screen: anything too long is shortened with "...". */
     private void text(GuiGraphics g, String s, int x, int y, int c) {
         int room = SX + SW - 4 - x;
-        g.drawString(font, room > 8 ? ellipsize(s, room) : s, x, y, Terminal.map(c), false);
+        String shown = room > 8 ? ellipsize(s, room) : s;
+        g.drawString(font, shown, x, y, Terminal.map(c), false);
+        // cut short? point at it to read the whole thing
+        if (!shown.equals(s) && over(x, y - 1, room, 10)) hover = s;
     }
     private void textC(GuiGraphics g, String s, int cx, int y, int c) {
         int room = 2 * Math.min(cx - SX - 5, SX + SW - 5 - cx);
@@ -257,6 +260,7 @@ public class PhoneScreen extends Screen {
         RAW = false;
         String lbl = ellipsize(label, w - 8);
         g.drawString(font, lbl, x + w / 2 - font.width(lbl) / 2, y + (h - 8) / 2, !enabled ? Terminal.DIM : danger ? 0xFFFFB3B3 : Terminal.BRIGHT, false);
+        if (!lbl.equals(label) && over(x, y, w, h)) hover = label;
         if (enabled) hit(x, y, w, h, action);
     }
 
@@ -2226,7 +2230,7 @@ public class PhoneScreen extends Screen {
             for (int k = 0; k < appts.size(); k++) if (appts.getCompound(k).getLong("at") / 24000 == day) has = true;
             rbox(g, bx, y, cw, 26, 3, i == 0 ? 0xFF0E3A1E : 0xFF08180E, i == 0 ? Terminal.BRIGHT : 0xFF163D24);
             textC(g, String.valueOf(day + 1), bx + cw / 2, y + 4, i == 0 ? Terminal.BRIGHT : Terminal.GREEN);
-            small(g, i == 0 ? "TODAY" : DOW[(int) (day % 7)].toUpperCase(Locale.ROOT), bx + cw / 2, y + 15, day % 7 == 1 ? AMBER : Terminal.DIM);
+            small(g, i == 0 ? "NOW" : DOW[(int) (day % 7)].toUpperCase(Locale.ROOT), bx + cw / 2, y + 15, day % 7 == 1 ? AMBER : Terminal.DIM);
             if (has) circle(g, bx + cw - 4, y + 4, 2, AMBER);
         }
         y += 30;
@@ -2266,23 +2270,16 @@ public class PhoneScreen extends Screen {
         for (CompoundTag a : booked) {
             if (a.getInt("seat") == 0) {
                 boolean late = a.getBoolean("tx");
-                rbox(g, x, y, w, 40, 4, late ? 0xFF2E0E0E : 0xFF0E2A16, late ? 0xFFB84848 : AMBER);
+                rbox(g, x, y, w, 56, 4, late ? 0xFF2E0E0E : 0xFF0E2A16, late ? 0xFFB84848 : AMBER);
                 text(g, (late ? "LATE · " : "") + when(a.getLong("at")) + "  ·  " + until(a.getLong("at")), x + 6, y + 4, late ? 0xFFFFB3B3 : AMBER);
                 ListTag ag = t.getList("agendaTitles", Tag.TAG_STRING);
                 text(g, ellipsize("Council session, Site-01 · " + (ag.isEmpty() ? "SCP-173 cell + the week's business" : ag.size() + " added: " + ag.getString(0) + (ag.size() > 1 ? "…" : "")), w - 12), x + 6, y + 14, 0xFFE8EEF4);
-                int id = a.getInt("id"), q = (w - 14) / 4;
-                if (late) {
-                    pill(g, x + 4, y + 24, q, 13, "On my way", 0xFF2EA65A, true, () -> send("week_otw", id));
-                    pill(g, x + 6 + q, y + 24, q, 13, "Tomorrow", 0xFF2E9E57, true, () -> send("week_next", id));
-                    pill(g, x + 8 + 2 * q, y + 24, q, 13, "Skip week", 0xFFC0383F, true, () -> send("week_skip", id));
-                    pill(g, x + 10 + 3 * q, y + 24, q, 13, "Go now", 0xFF3C6FB8, true, () -> send("appt_now", id));
-                } else {
-                    pill(g, x + 4, y + 24, q, 13, "Keep", 0xFF2EA65A, true, () -> send("week_keep", id));
-                    pill(g, x + 6 + q, y + 24, q, 13, "Next day", 0xFF2E9E57, true, () -> send("week_next", id));
-                    pill(g, x + 8 + 2 * q, y + 24, q, 13, "Skip week", 0xFFC0383F, true, () -> send("week_skip", id));
-                    pill(g, x + 10 + 3 * q, y + 24, q, 13, "Go now", 0xFF3C6FB8, true, () -> send("appt_now", id));
-                }
-                y += 44;
+                int id = a.getInt("id"), half = (w - 14) / 2;
+                pill(g, x + 4, y + 24, half, 13, late ? "On my way" : "Keep", 0xFF2EA65A, true, () -> send(late ? "week_otw" : "week_keep", id));
+                pill(g, x + 10 + half, y + 24, half, 13, late ? "Tomorrow" : "Next day", 0xFF2E9E57, true, () -> send("week_next", id));
+                pill(g, x + 4, y + 40, half, 13, "Skip this week", 0xFFC0383F, true, () -> send("week_skip", id));
+                pill(g, x + 10 + half, y + 40, half, 13, "Go now", 0xFF3C6FB8, true, () -> { send("appt_now", id); goHome(); });
+                y += 60;
                 continue;
             }
             String from = com.breachprotocol.career.O5.seat(a.getInt("seat")).sender();

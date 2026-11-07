@@ -80,8 +80,9 @@ public final class Calendar {
             d.dirty = true;
             return;
         }
-        if (Council.inSession(p) && n >= w.at - 2 * HOUR) { // you're at the table: this week's session is happening
+        if (Council.inSession(p) && (n >= w.at - 2 * HOUR || (n / DAY) / 7 == (w.at / DAY) / 7)) { // you're at the table: this week's session is happening
             d.appts.remove(w);
+            d.skipWeek = (w.at / DAY) / 7;
             d.dirty = true;
             return;
         }
@@ -226,7 +227,14 @@ public final class Calendar {
             case "week_keep", "week_otw", "week_next", "week_skip" -> { week(p, action.substring(5)); return; }
             case "appt_accept" -> find(d, arg).ifPresent(a -> a.confirmed = true);
             case "appt_now" -> find(d, arg).ifPresent(a -> {
-                if (a.seat == 0) { Directives.run(p, "site01"); return; }
+                if (a.seat == 0) {
+                    // you're going now: it's off the calendar, and you're on your way
+                    d.appts.remove(a);
+                    d.skipWeek = (a.at / DAY) / 7;
+                    if (!com.breachprotocol.world.Site01.isInside(p)) Directives.run(p, "site01");
+                    p.displayClientMessage(Component.literal("▣ On your way to the Council. Sit in the head chair to open the session.").withStyle(ChatFormatting.AQUA), true);
+                    return;
+                }
                 if (d.call != null) return;
                 d.appts.remove(a);
                 Calls.start(p, a.topic, a.seat);

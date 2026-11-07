@@ -365,7 +365,10 @@ public class DialogueScreen extends Screen {
             String label = font.plainSubstrByWidth(o.getString("label"), w - 26);
             g.drawString(font, label, x + 20, y + 5, alpha(0xFF000000 | (hov ? brighten(c) : c), a), false);
             if (!wait) opts.add(new Opt(x, y, w, h, i));
-            if (hov) tip = o.getString("hover");
+            if (hov) {
+                String full = o.getString("label");
+                tip = !label.equals(full) ? full + (o.getString("hover").isEmpty() ? "" : "\n" + o.getString("hover")) : o.getString("hover");
+            }
         }
         if (box != null) {
             int bx = px + pw - 80, by = box.getY();
@@ -373,7 +376,11 @@ public class DialogueScreen extends Screen {
             g.fill(bx, by, bx + 68, by + 18, hov ? 0xFF2E5A3A : 0xFF1D3B24);
             g.drawCenteredString(font, "Say", bx + 34, by + 5, 0xE8FFE8);
         }
-        if (!tip.isEmpty()) g.renderTooltip(font, font.split(Component.literal(tip), 200), mouseX, mouseY);
+        if (!tip.isEmpty()) {
+            List<FormattedCharSequence> tl = new ArrayList<>();
+            for (String part : tip.split("\n")) tl.addAll(font.split(Component.literal(part), 220));
+            g.renderTooltip(font, tl, mouseX, mouseY);
+        }
     }
 
     private static int brighten(int c) {
