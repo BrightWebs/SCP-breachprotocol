@@ -28,6 +28,38 @@ public final class Calls {
 
     public record Option(String label, Effect effect) {}
 
+    /**
+     * The option that leaves the Foundation best off (the most stability for the least risk), for
+     * when the Administrator tells the Council to decide for themselves.
+     */
+    public static int best(String id, net.minecraft.server.level.ServerPlayer p) {
+        return switch (id) {
+            case "termination_096", "declassify_207" -> 1;
+            case "gate_stirs" -> Career.isAscended(p) ? 1 : 0;
+            default -> 0;
+        };
+    }
+
+    /** Why that option is the best one, as the Council would put it. */
+    public static String bestReason(String id) {
+        return switch (id) {
+            case "termination_096" -> "Every attempt to kill it has made things worse. We keep it contained.";
+            case "mtf_expand" -> "More task forces means fewer breaches. Approve.";
+            case "budget" -> "Containment first. Research is worthless if the walls fail.";
+            case "insurgency_spy" -> "Turning a spy is a gamble. An amnestic sweep is certain.";
+            case "cafeteria_999" -> "It lifts morale at no risk. Approve.";
+            case "cell_173" -> "A dirty cell is a weak cell. It gets cleaned, under full protocol.";
+            case "femur_breaker" -> "It is the only procedure that has ever worked. Authorise it.";
+            case "goc_jointop" -> "Sharing intelligence keeps the Coalition on our side of the table.";
+            case "declassify_207" -> "Nothing is gained by opening that file. It stays sealed.";
+            case "network_code" -> "We cannot study what is already inside our network. Purge it.";
+            case "gate_stirs" -> "Seal the levels. We do not provoke the Gate.";
+            case "dclass_supply" -> "Death row only. Widening the net costs more than it gives.";
+            case "global_lockdown" -> "A global lockdown is costly, but it is the only option that guarantees containment.";
+            default -> "It is the course that leaves the Foundation strongest.";
+        };
+    }
+
     public record Template(String id, int caller, boolean adminOnly, String text, List<Option> options) {}
 
     private static final Map<String, Template> TEMPLATES = new LinkedHashMap<>();

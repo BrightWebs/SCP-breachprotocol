@@ -5,6 +5,8 @@ import com.breachprotocol.entity.O5MemberEntity;
 import com.breachprotocol.entity.Seats;
 import com.breachprotocol.world.Site01;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.breachprotocol.entity.Dialogue;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.BlockPos;
@@ -25,7 +27,6 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
-import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.util.*;
@@ -128,19 +129,16 @@ public final class Council {
                     if (s != null) s.decide(-1);
                     return 1;
                 }))
-                .then(Commands.literal("interject").executes(c -> {
+                .then(Commands.literal("best").executes(c -> {
                     Session s = SESSIONS.get(c.getSource().getPlayerOrException().getUUID());
-                    if (s != null) s.interject();
+                    if (s != null) s.best();
                     return 1;
-                })));
-    }
-
-    @SubscribeEvent
-    public static void chat(ServerChatEvent event) {
-        Session s = SESSIONS.get(event.getPlayer().getUUID());
-        if (s == null || !s.listening) return;
-        event.setCanceled(true);
-        s.heard(event.getRawText());
+                }))
+                .then(Commands.literal("say").then(Commands.argument("text", StringArgumentType.greedyString()).executes(c -> {
+                    Session s = SESSIONS.get(c.getSource().getPlayerOrException().getUUID());
+                    if (s != null) s.say(StringArgumentType.getString(c, "text"));
+                    return 1;
+                }))));
     }
 
     // ================================================================== sessions
@@ -153,7 +151,7 @@ public final class Council {
         final Deque<long[]> waits = new ArrayDeque<>();
         final Deque<Runnable> steps = new ArrayDeque<>();
         long nextAt;
-        boolean done, awaiting, listening;
+        boolean done, awaiting;
         long deadline;
         final Random rnd = new Random();
 
@@ -188,6 +186,14 @@ public final class Council {
 
         void close() {
             for (O5MemberEntity m : members.values()) m.holdSeated(0);
+            if (Dialogue.active(p, "council")) {
+                if (Council.seatOf(l, p) < 0 && mustSit()) Dialogue.close(p);
+                else {
+                    Dialogue.clearOptions(p);
+                    Dialogue.option(p, "Leave the table", "close", "Close the window", 0x9AA4B2);
+                    Dialogue.send(p, false);
+                }
+            }
             COOLDOWN.put(p.getUUID(), l.getGameTime() + 20 * 20);
         }
 
@@ -203,7 +209,7 @@ public final class Council {
                 return;
             }
             if (awaiting) {
-                if (!listening && now >= deadline) { awaiting = false; onTimeout(); }
+                if (now >= deadline) { awaiting = false; Dialogue.clearOptions(p); onTimeout(); }
                 return;
             }
             while (!steps.isEmpty() && now >= nextAt) {
@@ -226,15 +232,29 @@ public final class Council {
         void decide(int option) {
             if (!awaiting) return;
             awaiting = false;
-            listening = false;
+            Dialogue.clearOptions(p);
             onDecide(option);
         }
 
-        void interject() {
+        /** "Decide for yourselves, as long as it's best for the Foundation." */
+        void best() {
             if (!awaiting) return;
-            listening = true;
-            tell(Component.literal("Speak, then. (Type what you say in chat.)").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+            awaiting = false;
+            Dialogue.clearOptions(p);
+            onBest();
         }
+
+        void onBest() { onTimeout(); }
+
+        /** The player speaks to the Council (typed in the window). */
+        void say(String text) {
+            if (!awaiting || text.isBlank()) return;
+            awaiting = false;
+            Dialogue.clearOptions(p);
+            heard(text);
+        }
+
+        void push() { if (Dialogue.active(p, "council")) Dialogue.send(p, false); }
 
         void await(int seconds) {
             awaiting = true;
@@ -248,12 +268,22 @@ public final class Council {
             return out;
         }
 
-        void tell(Component c) { for (ServerPlayer q : audience()) q.sendSystemMessage(c); }
+        /** Others nearby read it in chat; the player at the table sees it in the council window. */
+        void tell(Component c) {
+            for (ServerPlayer q : audience()) if (q != p || !Dialogue.active(p, "council")) q.sendSystemMessage(c);
+            if (Dialogue.active(p, "council")) { Dialogue.line(p, "", c.getString(), 0); push(); }
+        }
 
         void speak(int seat, String text) {
             O5 who = O5.seat(seat);
-            tell(Component.literal(who.sender() + ": ").withStyle(ChatFormatting.DARK_RED).append(Component.literal(text).withStyle(ChatFormatting.GRAY)));
             O5MemberEntity m = members.get(seat);
+            Component c = Component.literal(who.sender() + ": ").withStyle(ChatFormatting.DARK_RED).append(Component.literal(text).withStyle(ChatFormatting.GRAY));
+            for (ServerPlayer q : audience()) if (q != p || !Dialogue.active(p, "council")) q.sendSystemMessage(c);
+            if (Dialogue.active(p, "council")) {
+                if (m != null) Dialogue.entity(p, m.getId());
+                Dialogue.line(p, who.sender(), text, 0xE05050);
+                push();
+            }
             if (m != null) {
                 m.getLookControl().setLookAt(p, 30, 30);
                 m.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
@@ -263,13 +293,26 @@ public final class Council {
 
         void playerSays(String text) {
             String who = Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p) ? "The Administrator" : "O5-13 (" + p.getName().getString() + ")";
-            tell(Component.literal(who + ": ").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal(text).withStyle(ChatFormatting.WHITE)));
+            Component c = Component.literal(who + ": ").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal(text).withStyle(ChatFormatting.WHITE));
+            for (ServerPlayer q : audience()) if (q != p || !Dialogue.active(p, "council")) q.sendSystemMessage(c);
+            if (Dialogue.active(p, "council")) { Dialogue.line(p, "You", text, 0xD08CFF); push(); }
         }
 
-        static MutableComponent button(String label, String cmd, String hover, ChatFormatting colour) {
-            return Component.literal("[" + label + "]").withStyle(s -> s.withColor(colour).withBold(true)
-                    .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, cmd))
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
+        /** Opens the council window for the player at the table. */
+        void window(String subtitle) {
+            Dialogue.begin(p, "council", "The O5 Council · Site-01", subtitle, -1);
+            Dialogue.send(p, true);
+        }
+
+        /** Ready for a choice: reopens the window if the player closed it. */
+        void reopen() {
+            if (!Dialogue.active(p, "council")) Dialogue.begin(p, "council", "The O5 Council · Site-01", "In session", -1);
+            Dialogue.clearOptions(p);
+        }
+
+        void choices(boolean input) {
+            if (input) Dialogue.input(p, "/council say {text}");
+            Dialogue.send(p, true);
         }
 
         void title(String t, String sub) {
@@ -300,6 +343,7 @@ public final class Council {
         void begin() {
             gather();
             title("THE COUNCIL IS IN SESSION", admin ? "The Administrator presides" : "O5-13 takes their seat");
+            window(admin ? "In session · the Administrator presides" : "In session · O5-13 is seated");
             p.playNotifySound(SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 0.8F, 0.6F);
             List<Integer> s = seated();
             int chair = s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0);
@@ -326,8 +370,10 @@ public final class Council {
             caller = s.contains(item.caller()) ? item.caller() : s.get(rnd.nextInt(s.size()));
             votes = new int[item.options().size()];
             stance.clear();
+            final int itemNo = items;
             then(70, () -> {
-                tell(Component.literal("— Item " + items + " —").withStyle(ChatFormatting.DARK_GRAY));
+                Dialogue.subtitle(p, "Agenda item " + itemNo + " of " + Math.min(3, pool.size()) + (admin ? " · the Administrator presides" : " · O5-13 is seated"));
+                tell(Component.literal("— Item " + itemNo + " —").withStyle(ChatFormatting.DARK_GRAY));
                 speak(caller, item.text());
             });
             s.remove((Integer) caller);
@@ -372,13 +418,37 @@ public final class Council {
         }
 
         void prompt() {
-            MutableComponent c = Component.literal(admin ? "Your ruling, Administrator:  " : "Your vote, Thirteen:  ").withStyle(ChatFormatting.LIGHT_PURPLE);
-            for (int i = 0; i < item.options().size(); i++)
-                c.append(button(item.options().get(i).label(), "/council decide " + i, admin ? "Overrule the Council: your ruling stands" : "Cast your vote", ChatFormatting.AQUA)).append(" ");
-            c.append(button(admin ? "Let the vote stand" : "Abstain", "/council stand", admin ? "The Council's majority decides" : "Leave it to the Council", ChatFormatting.GRAY)).append(" ");
-            c.append(button("Interject", "/council interject", "Say something to the Council first", ChatFormatting.GOLD));
-            p.sendSystemMessage(c);
-            await(30);
+            reopen();
+            for (int i = 0; i < item.options().size(); i++) {
+                String label = item.options().get(i).label();
+                Dialogue.option(p, (admin ? "Rule: " : "Vote: ") + label, "/council decide " + i,
+                        admin ? "Overrule the Council if need be: your ruling stands" : "Cast your vote", 0x7FE0FF);
+            }
+            Dialogue.option(p, admin ? "Let the vote stand" : "Abstain", "/council stand",
+                    admin ? "The Council's majority decides" : "Leave it to the Council", 0xC0C0C0);
+            if (admin) Dialogue.option(p, "Decide for yourselves: whatever is best", "/council best",
+                    "The Council chooses the option that leaves the Foundation best off", 0xFFC94D);
+            choices(true);
+            await(admin ? 60 : 40);
+        }
+
+        @Override
+        void onBest() {
+            playerSays("Decide among yourselves. Whatever leaves the Foundation better off.");
+            int best = Calls.best(item.id(), p);
+            if (best < 0 || best >= votes.length) best = 0;
+            final int b = best;
+            List<Integer> s = seated();
+            int lead = s.contains(7) ? 7 : s.isEmpty() ? caller : s.get(0);
+            then(50, () -> speak(lead, "Understood, Administrator. The Council has weighed it. " + Calls.bestReason(item.id())));
+            then(30, () -> {
+                // the Council falls in behind the best course
+                for (int n : s) stance.put(n, b);
+                Arrays.fill(votes, 0);
+                votes[b] = s.size();
+                tell(tally());
+            });
+            resolve(best, false, true);
         }
 
         @Override
@@ -392,17 +462,19 @@ public final class Council {
             if (option < 0 || option >= votes.length) { onTimeout(); return; }
             if (admin) {
                 playerSays(item.options().get(option).label() + ". That is my ruling.");
-                resolve(option, option != majority());
+                resolve(option, option != majority(), false);
             } else {
                 playerSays("I vote \"" + item.options().get(option).label() + "\".");
                 votes[option]++;
                 int best = 0;
                 for (int i = 1; i < votes.length; i++) if (votes[i] > votes[best] || votes[i] == votes[best] && i == option) best = i;
-                resolve(best, false);
+                resolve(best, false, false);
             }
         }
 
-        void resolve(int option, boolean overruled) {
+        void resolve(int option, boolean overruled) { resolve(option, overruled, false); }
+
+        void resolve(int option, boolean overruled, boolean delegated) {
             Calls.Option chosen = item.options().get(option);
             tell(Component.literal("Decided: " + chosen.label()).withStyle(ChatFormatting.GOLD));
             if (overruled) {
@@ -423,7 +495,7 @@ public final class Council {
                 for (Map.Entry<Integer, Integer> en : stance.entrySet()) if (en.getValue() == option) sup.add(en.getKey());
                 if (sup.isEmpty() && !overruled) sup.add(caller);
                 WorldNews.record(p.server, WorldNews.Kind.DECISION, item.id() + "|" + chosen.label(), WorldNews.headline(item.id(), chosen.label()),
-                        Career.data(p).stability - before, overruled ? "the Administrator, over the Council" : admin ? "the Council" : "the Council, with O5-13", sup);
+                        Career.data(p).stability - before, overruled ? "the Administrator, over the Council" : delegated ? "the Council, at the Administrator's direction" : admin ? "the Council" : "the Council, with O5-13", sup);
                 Career.sync(p);
             });
             then(80, () -> {});
@@ -432,7 +504,6 @@ public final class Council {
 
         @Override
         void heard(String text) {
-            listening = false;
             playerSays(text);
             String low = text.toLowerCase(Locale.ROOT);
             int swayed = -1;
@@ -478,6 +549,7 @@ public final class Council {
             candidates = seated();
             if (candidates.isEmpty()) { done = true; return; }
             title("THE COUNCIL CONVENES", "A seat must be made");
+            window("A seat must be made");
             int lead = candidates.contains(7) ? 7 : candidates.get(0);
             then(60, () -> speak(lead, "Thirteen. Welcome to Site-01. Sit anywhere you like... except you can't. There are no empty chairs."));
             int founder = candidates.contains(1) ? 1 : lead;
@@ -496,12 +568,13 @@ public final class Council {
                 for (int i = 5; i < speakers.size(); i++) tally.merge(nominee(speakers.get(i)), 1, Integer::sum);
                 tell(Component.literal("The rest vote in silence.").withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
                 show();
-                MutableComponent c = Component.literal("Your vote counts twice, Thirteen:  ").withStyle(ChatFormatting.LIGHT_PURPLE);
-                List<Integer> top = top();
-                for (int n : top) c.append(button("O5-" + n, "/council decide " + n, "Vote to unseat O5-" + n + " (" + O5.seat(n).nickname + ")", ChatFormatting.AQUA)).append(" ");
-                c.append(button("Leave it to them", "/council stand", "Don't vote", ChatFormatting.GRAY));
-                p.sendSystemMessage(c);
-                await(30);
+                reopen();
+                Dialogue.subtitle(p, "Seat vote · your vote counts twice");
+                for (int n : top()) Dialogue.option(p, "Unseat O5-" + n + " \"" + O5.seat(n).nickname + "\" (" + tally.getOrDefault(n, 0) + ")",
+                        "/council decide " + n, "Your vote counts twice", 0x7FE0FF);
+                Dialogue.option(p, "Leave it to the Council", "/council stand", "Don't vote", 0xC0C0C0);
+                choices(false);
+                await(45);
             });
         }
 
@@ -544,6 +617,9 @@ public final class Council {
             }
             conclude();
         }
+
+        @Override
+        void heard(String text) { playerSays(text); conclude(); }
 
         @Override
         void onTimeout() {

@@ -262,44 +262,70 @@ public final class Talk {
         return base;
     }
 
-    // ================================================================== the menu
+    // ================================================================== the window
 
-    private static MutableComponent button(String label, String cmd, String hover, ChatFormatting colour) {
-        return Component.literal("[" + label + "]").withStyle(st -> st.withColor(colour)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, cmd))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
-    }
+    private static final int STAFF_C = 0x66CCFF, O5_C = 0xE05050, YOU_C = 0xB8E07A, ORDER_C = 0xFFC94D;
+
+    private static String sess(Entity e) { return "npc:" + e.getId(); }
 
     private static void say(ServerPlayer p, Entity who, String line) {
-        ChatFormatting c = who instanceof O5MemberEntity ? ChatFormatting.DARK_RED : ChatFormatting.AQUA;
-        p.sendSystemMessage(Component.literal(who.getName().getString() + ": ").withStyle(c).append(Component.literal(line).withStyle(ChatFormatting.GRAY)));
+        Dialogue.line(p, who.getName().getString(), line, who instanceof O5MemberEntity ? O5_C : STAFF_C);
         if (who instanceof Mob m) m.getLookControl().setLookAt(p, 30, 30);
     }
 
+    private static void you(ServerPlayer p, String line) { Dialogue.line(p, "You", line, YOU_C); }
+
+    private static void note(ServerPlayer p, String line) { Dialogue.line(p, "", line, 0); }
+
+    private static void opt(ServerPlayer p, Entity e, String label, String what, String hover, int c) {
+        Dialogue.option(p, label, "/talk " + e.getId() + " " + what, hover, c);
+    }
+
+    private static String staffSubtitle(FoundationStaff s) {
+        return s.role().title + " · age " + s.age() + " · " + Math.min(years(s), Math.max(1, s.age() - 21)) + " years with the Foundation"
+                + (s.illness().isEmpty() ? "" : " · unwell");
+    }
+
+    private static String o5Subtitle(O5MemberEntity m) {
+        return "Overseer Council · age " + m.age() + (m.isUnseated() ? " · no longer seated" : "");
+    }
+
+    private static void ensure(ServerPlayer p, Entity e) {
+        if (Dialogue.active(p, sess(e))) return;
+        if (e instanceof FoundationStaff s) Dialogue.begin(p, sess(e), s.getName().getString(), staffSubtitle(s), e.getId());
+        else if (e instanceof O5MemberEntity m) Dialogue.begin(p, sess(e), m.getSeat() == null ? m.getName().getString() : m.getSeat().sender(), o5Subtitle(m), e.getId());
+    }
+
+    private static void mainMenu(ServerPlayer p, Entity e) {
+        Dialogue.clearOptions(p);
+        if (e instanceof FoundationStaff) {
+            opt(p, e, "How are things?", "how", "Ask how they're doing", 0);
+            opt(p, e, "Tell me about yourself", "story", "Ask about their life", 0);
+            opt(p, e, "Heard anything?", "rumour", "What people are saying", 0);
+            opt(p, e, "What do you make of the Council?", "council", "Their view of the latest decision", 0);
+            opt(p, e, "Orders", "orders", "Tell them what to do", ORDER_C);
+        } else {
+            opt(p, e, "How did you vote?", "vote", "Their vote on the latest decision", 0);
+            opt(p, e, "Your work on the Council", "story", "Their role on the Council", 0);
+            opt(p, e, "What worries you?", "worry", "The Council's concerns", 0);
+            if (mayCommand(p, e)) opt(p, e, "Orders", "orders", "Tell them what to do", ORDER_C);
+        }
+        opt(p, e, "Goodbye", "bye", "End the conversation", 0x9AA4B2);
+    }
+
     public static void open(ServerPlayer p, FoundationStaff s) {
-        String name = s.getName().getString();
-        p.sendSystemMessage(Component.literal("— " + name + ", " + s.role().title + ", age " + s.age() + ", " + Math.min(years(s), Math.max(1, s.age() - 21)) + " years with the Foundation"
-                + (s.illness().isEmpty() ? "" : ", unwell") + " —").withStyle(ChatFormatting.DARK_AQUA));
+        Dialogue.begin(p, sess(s), s.getName().getString(), staffSubtitle(s), s.getId());
         say(p, s, howAreThings(s, p));
-        String id = " " + s.getId() + " ";
-        MutableComponent m = Component.literal("  ")
-                .append(button("About you", "/talk" + id + "story", "Ask about their life", ChatFormatting.WHITE)).append(" ")
-                .append(button("Heard anything?", "/talk" + id + "rumour", "What people are saying", ChatFormatting.WHITE)).append(" ")
-                .append(button("The Council?", "/talk" + id + "council", "Their view of the latest decision", ChatFormatting.WHITE)).append(" ")
-                .append(button("Orders", "/talk" + id + "orders", "Tell them what to do", ChatFormatting.GOLD));
-        p.sendSystemMessage(m);
+        mainMenu(p, s);
+        Dialogue.send(p, true);
     }
 
     public static void openO5(ServerPlayer p, O5MemberEntity m) {
         O5 me = m.getSeat();
-        p.sendSystemMessage(Component.literal("— " + me.sender() + ", age " + m.age() + (m.isUnseated() ? ", no longer on the Council" : "") + " —").withStyle(ChatFormatting.DARK_RED));
-        String id = " " + m.getId() + " ";
-        MutableComponent c = Component.literal("  ")
-                .append(button("Your vote", "/talk" + id + "vote", "How they voted on the latest decision", ChatFormatting.WHITE)).append(" ")
-                .append(button("About you", "/talk" + id + "story", "Their role on the Council", ChatFormatting.WHITE)).append(" ")
-                .append(button("What worries you?", "/talk" + id + "worry", "The Council's concerns", ChatFormatting.WHITE));
-        if (Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p)) c.append(" ").append(button("Orders", "/talk" + id + "orders", "Tell them what to do", ChatFormatting.GOLD));
-        p.sendSystemMessage(c);
+        Dialogue.begin(p, sess(m), me.sender(), o5Subtitle(m), m.getId());
+        say(p, m, Career.rank(p) == Rank.ADMINISTRATOR ? "Administrator." : "Yes?");
+        mainMenu(p, m);
+        Dialogue.send(p, true);
     }
 
     private static final String[][] O5_STORY = {
@@ -352,30 +378,35 @@ public final class Talk {
         };
     }
 
-    private static void orders(ServerPlayer p, Entity who) {
+    /** Shows the orders choices (or a refusal). Returns false if refused. */
+    private static boolean orders(ServerPlayer p, Entity who) {
         if (!mayCommand(p, who)) {
             Rank r = Career.rank(p);
             say(p, who, r == Rank.CLASS_D ? "You don't give orders, D-Class. Back to your block." : "With respect, you don't have the clearance to give me orders.");
-            return;
+            mainMenu(p, who);
+            return false;
         }
-        String id = " " + who.getId() + " ";
-        MutableComponent m = Component.literal("  ")
-                .append(button("Follow me", "/talk" + id + "follow", "They come with you", ChatFormatting.AQUA)).append(" ")
-                .append(button("Wait here", "/talk" + id + "stay", "They stay where they are", ChatFormatting.AQUA)).append(" ")
-                .append(button("Back to your post", "/talk" + id + "post", "They return to their work", ChatFormatting.AQUA)).append(" ")
-                .append(button("Take a seat", "/talk" + id + "sit", "They sit on the nearest free chair", ChatFormatting.AQUA));
+        Dialogue.clearOptions(p);
         if (who instanceof FoundationStaff s) {
+            opt(p, who, "Follow me", "follow", "They come with you", ORDER_C);
+            opt(p, who, "Wait here", "stay", "They stay where they are", ORDER_C);
+            opt(p, who, "Back to your post", "post", "They return to their work", ORDER_C);
+            opt(p, who, "Take a seat", "sit", "They sit on the nearest free chair", ORDER_C);
             String[] job = switch (s.role()) {
                 case MEDIC -> new String[]{"Patch me up", "job", "Heal your wounds"};
-                case CLERK -> new String[]{"Any assignments?", "job", "Your open assignments"};
-                case RESEARCHER -> new String[]{"Look at this", "job", "Ask about what you're holding"};
+                case CLERK -> new String[]{"Any assignments for me?", "job", "Your open assignments"};
+                case RESEARCHER -> new String[]{"Look at what I'm holding", "job", "Ask about the item in your hand"};
                 case TECHNICIAN -> new String[]{"Check the power", "job", "A report on the site's power"};
                 case GUARD -> new String[]{"Stand guard here", "stay", "They hold this spot"};
                 case JANITOR -> new String[]{"Clean this up", "job", "Sweeps up dropped items nearby"};
             };
-            m.append(" ").append(button(job[0], "/talk" + id + job[1], job[2], ChatFormatting.GOLD));
+            opt(p, who, job[0], job[1], job[2], ORDER_C);
+        } else {
+            opt(p, who, "Walk with me", "follow", "They come with you", ORDER_C);
+            opt(p, who, "Return to your seat", "post", "Back to the council table", ORDER_C);
         }
-        p.sendSystemMessage(m);
+        opt(p, who, "Back", "menu", "Other topics", 0x9AA4B2);
+        return true;
     }
 
     private static void job(ServerPlayer p, FoundationStaff s) {
@@ -392,7 +423,7 @@ public final class Talk {
                 else {
                     say(p, s, "You have " + d.missions.size() + " open assignment" + (d.missions.size() == 1 ? "" : "s") + ":");
                     for (int i = 0; i < Math.min(4, d.missions.size()); i++)
-                        p.sendSystemMessage(Component.literal("   • " + d.missions.get(i).description).withStyle(ChatFormatting.GRAY));
+                        note(p, "• " + d.missions.get(i).description);
                 }
             }
             case RESEARCHER -> {
@@ -441,15 +472,33 @@ public final class Talk {
                 }))));
     }
 
+    private static final Map<String, String> ASKED = Map.ofEntries(
+            Map.entry("how", "How are things?"), Map.entry("story", "Tell me about yourself."), Map.entry("rumour", "Heard anything?"),
+            Map.entry("council", "What do you make of the Council?"), Map.entry("follow", "Follow me."), Map.entry("stay", "Wait here."),
+            Map.entry("post", "Back to your post."), Map.entry("sit", "Take a seat."), Map.entry("vote", "How did you vote?"),
+            Map.entry("worry", "What worries you?"), Map.entry("bye", "Goodbye."));
+
     private static void handle(ServerPlayer p, Entity e, String what) {
+        ensure(p, e);
+        String asked = ASKED.get(what);
+        if (asked != null) you(p, e instanceof O5MemberEntity && what.equals("post") ? "Return to your seat." : e instanceof O5MemberEntity && what.equals("follow") ? "Walk with me." : asked);
+        boolean showOrders = false;
+        if (what.equals("bye")) {
+            say(p, e, e instanceof O5MemberEntity ? "Administrator." : pick(new Random(), "Take care.", "See you around.", "Mind how you go.", "Stay safe out there."));
+            Dialogue.send(p, false);
+            Dialogue.close(p);
+            return;
+        }
         if (e instanceof FoundationStaff s) {
             switch (what) {
+                case "how" -> say(p, s, howAreThings(s, p));
                 case "story" -> say(p, s, story(s, s.role(), p));
                 case "rumour" -> say(p, s, rumour(s, p));
                 case "council" -> say(p, s, councilView(s, p));
-                case "orders" -> orders(p, s);
+                case "orders" -> { you(p, "I have something for you."); showOrders = orders(p, s); }
+                case "menu" -> {}
                 case "follow", "stay", "post", "sit" -> {
-                    if (!mayCommand(p, s)) { orders(p, s); return; }
+                    if (!mayCommand(p, s)) { orders(p, s); break; }
                     s.order(what, p);
                     say(p, s, switch (what) {
                         case "follow" -> pick(new Random(), "Right behind you.", "Lead the way.", "On you.");
@@ -457,10 +506,12 @@ public final class Talk {
                         case "post" -> "Back to work, then.";
                         default -> "Don't mind if I do.";
                     });
+                    showOrders = true;
                 }
                 case "job" -> {
-                    if (!mayCommand(p, s) && !(s.role() == FoundationStaff.Role.MEDIC && Career.rank(p) != Rank.CLASS_D)) { orders(p, s); return; }
+                    if (!mayCommand(p, s) && !(s.role() == FoundationStaff.Role.MEDIC && Career.rank(p) != Rank.CLASS_D)) { orders(p, s); break; }
                     job(p, s);
+                    showOrders = mayCommand(p, s);
                 }
                 default -> {}
             }
@@ -476,17 +527,15 @@ public final class Talk {
                     m.getPersistentData().putInt(key, ch + 1);
                 }
                 case "worry" -> say(p, m, o5Worry(p));
-                case "orders" -> {
-                    if (!mayCommand(p, m)) return;
-                    String id = " " + m.getId() + " ";
-                    p.sendSystemMessage(Component.literal("  ").append(button("Walk with me", "/talk" + id + "follow", "They come with you", ChatFormatting.AQUA)).append(" ")
-                            .append(button("Return to your seat", "/talk" + id + "post", "Back to the council table", ChatFormatting.AQUA)));
-                }
-                case "follow" -> { if (mayCommand(p, m)) { m.follow(p); say(p, m, "As you wish, Administrator."); } }
-                case "post" -> { if (mayCommand(p, m)) { m.follow(null); say(p, m, "I'll be at the table."); } }
+                case "orders" -> showOrders = orders(p, m);
+                case "follow" -> { if (mayCommand(p, m)) { m.follow(p); say(p, m, "As you wish."); showOrders = true; } }
+                case "post" -> { if (mayCommand(p, m)) { m.follow(null); say(p, m, "I'll be at the table."); showOrders = true; } }
                 default -> {}
             }
         }
+        if (showOrders) orders(p, e);
+        else if (!what.equals("orders") || !mayCommand(p, e)) mainMenu(p, e);
+        Dialogue.send(p, true);
     }
 
     // ================================================================== overheard

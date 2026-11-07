@@ -26,6 +26,12 @@ public final class ModNetwork {
                 ctx.enqueueWork(() -> {
                     if (ctx.player() instanceof ServerPlayer sp) com.breachprotocol.career.PhotoStore.request(sp, payload.img());
                 }));
+        registrar.playToClient(DialoguePayload.TYPE, DialoguePayload.STREAM_CODEC, (payload, ctx) ->
+                ctx.enqueueWork(() -> ClientDialogueBridge.received(payload.tag())));
+        registrar.playToServer(DialogueActionPayload.TYPE, DialogueActionPayload.STREAM_CODEC, (payload, ctx) ->
+                ctx.enqueueWork(() -> {
+                    if (ctx.player() instanceof ServerPlayer sp) com.breachprotocol.entity.Dialogue.action(sp, payload.action(), payload.text());
+                }));
         registrar.playToClient(PhotoDataPayload.TYPE, PhotoDataPayload.STREAM_CODEC, (payload, ctx) ->
                 ctx.enqueueWork(() -> ClientPhotoBridge.received(payload.img(), payload.png())));
     }

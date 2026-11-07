@@ -102,35 +102,39 @@ public final class GatePass {
         data(p.server).setDirty();
     }
 
-    /** The choices shown when the Ascendant right-clicks the Guardian. */
-    public static void menu(ServerPlayer p) {
-        MutableComponent c = Component.literal("Bring someone through the Gate:").withStyle(ChatFormatting.LIGHT_PURPLE);
-        p.sendSystemMessage(c);
+    /** The window shown when the Ascendant right-clicks the Guardian. */
+    public static void menu(ServerPlayer p) { menu(p, -1); }
+
+    public static void menu(ServerPlayer p, int guardian) {
+        if (!com.breachprotocol.entity.Dialogue.active(p, "gate")) {
+            com.breachprotocol.entity.Dialogue.begin(p, "gate", "SCP-001-1 · The Gate Guardian", "It waits for your word, Master", guardian);
+            com.breachprotocol.entity.Dialogue.line(p, "", "The Guardian lowers its blades. Who may pass the Gate?", 0);
+        }
+        com.breachprotocol.entity.Dialogue.clearOptions(p);
         int shown = 0;
         for (ServerPlayer q : p.server.getPlayerList().getPlayers()) {
             if (q == p) continue;
             String n = q.getGameProfile().getName();
             boolean full = data(p.server).full.contains(q.getUUID().toString());
-            MutableComponent row = Component.literal("  " + n + "  ").withStyle(ChatFormatting.WHITE)
-                    .append(button("Escort", "/gate escort " + n, "One trip in and out, while they stay with you", ChatFormatting.AQUA)).append(" ")
-                    .append(full ? button("Revoke access", "/gate revoke " + n, "The Guardian will no longer spare them", ChatFormatting.RED)
-                            : button("Full access", "/gate grant " + n, "The Guardian spares them always", ChatFormatting.GOLD));
-            p.sendSystemMessage(row);
+            com.breachprotocol.entity.Dialogue.option(p, "Escort " + n, "/gate escort " + n, "One trip in and out, while they stay with you", 0x7FE0FF);
+            if (full) com.breachprotocol.entity.Dialogue.option(p, "Revoke " + n + "'s access", "/gate revoke " + n, "The Guardian will no longer spare them", 0xFF7070);
+            else com.breachprotocol.entity.Dialogue.option(p, "Full access for " + n, "/gate grant " + n, "The Guardian spares them always", 0xFFC94D);
             shown++;
         }
-        if (shown == 0) p.sendSystemMessage(Component.literal("  Nobody else is online.").withStyle(ChatFormatting.DARK_GRAY));
+        if (shown == 0) com.breachprotocol.entity.Dialogue.line(p, "", "Nobody else is online to bring through.", 0);
         Escort e = ESCORTS.get(p.getUUID());
         if (e != null) {
             ServerPlayer g = p.server.getPlayerList().getPlayer(e.guest());
-            p.sendSystemMessage(Component.literal("  Escorting: " + (g == null ? "(offline)" : g.getGameProfile().getName()) + "  ").withStyle(ChatFormatting.GRAY)
-                    .append(button("End escort", "/gate end", "Their pass ends now", ChatFormatting.RED)));
+            com.breachprotocol.entity.Dialogue.option(p, "End " + (g == null ? "the" : g.getGameProfile().getName() + "'s") + " escort", "/gate end", "Their pass ends now", 0xFF7070);
         }
+        com.breachprotocol.entity.Dialogue.option(p, "That is all", "close", "Close", 0x9AA4B2);
+        com.breachprotocol.entity.Dialogue.send(p, true);
     }
 
-    private static MutableComponent button(String label, String cmd, String hover, ChatFormatting colour) {
-        return Component.literal("[" + label + "]").withStyle(s -> s.withColor(colour).withBold(true)
-                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, cmd))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(hover))));
+    private static void refresh(ServerPlayer p, String note) {
+        if (!com.breachprotocol.entity.Dialogue.active(p, "gate")) return;
+        com.breachprotocol.entity.Dialogue.line(p, "", note, 0);
+        menu(p);
     }
 
     @SubscribeEvent
@@ -144,6 +148,7 @@ public final class GatePass {
                     Escort old = ESCORTS.put(p.getUUID(), new Escort(g.getUUID(), false));
                     if (old != null && !old.guest().equals(g.getUUID())) release(p.server.getPlayerList().getPlayer(old.guest()));
                     p.sendSystemMessage(Component.literal("You are escorting " + g.getGameProfile().getName() + ". Keep them within 16 blocks.").withStyle(ChatFormatting.LIGHT_PURPLE));
+                    refresh(p, "You are escorting " + g.getGameProfile().getName() + ". Keep them within 16 blocks.");
                     g.sendSystemMessage(Component.literal(p.getGameProfile().getName() + " will take you past the Gate Guardian. Stay close to them, in and out. One trip.").withStyle(ChatFormatting.LIGHT_PURPLE));
                     return 1;
                 })))
@@ -156,6 +161,7 @@ public final class GatePass {
                     d.banished.remove(g.getUUID().toString());
                     d.setDirty();
                     p.sendSystemMessage(Component.literal(g.getGameProfile().getName() + " may pass the Gate freely.").withStyle(ChatFormatting.GOLD));
+                    refresh(p, g.getGameProfile().getName() + " may pass the Gate freely.");
                     g.sendSystemMessage(Component.literal("The Ascendant has given you full access. The Gate Guardian will let you pass.").withStyle(ChatFormatting.GOLD));
                     return 1;
                 })))
@@ -167,12 +173,14 @@ public final class GatePass {
                     data(p.server).setDirty();
                     release(g);
                     p.sendSystemMessage(Component.literal(g.getGameProfile().getName() + "'s access is revoked.").withStyle(ChatFormatting.RED));
+                    refresh(p, g.getGameProfile().getName() + "'s access is revoked.");
                     return 1;
                 })))
                 .then(Commands.literal("end").executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
                     Escort e = ESCORTS.remove(p.getUUID());
                     if (e != null) release(p.server.getPlayerList().getPlayer(e.guest()));
+                    refresh(p, "The escort is over.");
                     return 1;
                 })));
     }

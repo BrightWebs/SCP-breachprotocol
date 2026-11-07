@@ -59,8 +59,8 @@ public class FoundationStaff extends PathfinderMob {
     private double fountainAt = -100;
     private boolean declined;
 
-    private static final String[] SURNAMES = {"Mbeki", "Okafor", "Lindqvist", "Tanaka", "Morales", "Kowalski", "Haddad", "Novak", "Reyes", "Ivanova",
-            "Clef", "Bright", "Gears", "Glass", "Kondraki", "Light", "Rights", "King", "Crow", "Everwood", "Harrow", "Vance", "Mercer", "Osei"};
+    /** Whether they've been given their own (world-unique) name. */
+    private boolean named;
 
     private final Map<UUID, Long> greeted = new HashMap<>();
     private BlockPos post;
@@ -117,9 +117,7 @@ public class FoundationStaff extends PathfinderMob {
         entityData.set(ROLE, role.ordinal());
         entityData.set(VARIANT, random.nextInt(3));
         this.post = post;
-        String sur = SURNAMES[random.nextInt(SURNAMES.length)];
-        setCustomName(Component.literal((role.prefix.isEmpty() ? "" : role.prefix + " ") + sur).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
-        setCustomNameVisible(false);
+        name(role);
         setAge(22 + random.nextInt(36));
         restrictTo(post, 12);
     }
@@ -278,9 +276,19 @@ public class FoundationStaff extends PathfinderMob {
 
     private String name() { return getCustomName() == null ? role().title : getCustomName().getString(); }
 
+    /** Gives them a first and last name no one else in the world has. */
+    private void name(Role role) {
+        if (!(level() instanceof net.minecraft.server.level.ServerLevel sl)) return;
+        String n = Names.person(sl.getServer(), random);
+        setCustomName(Component.literal((role.prefix.isEmpty() ? "" : role.prefix + " ") + n).withStyle(role == Role.GUARD ? ChatFormatting.DARK_AQUA : ChatFormatting.WHITE));
+        setCustomNameVisible(false);
+        named = true;
+    }
+
     @Override
     public void aiStep() {
         super.aiStep();
+        if (!named && !level().isClientSide) name(role());
         if (!level().isClientSide && tickCount % 20 == 1 && com.breachprotocol.world.Site01.stale(this)) { Seats.stand(this); discard(); return; }
         if (level().isClientSide || tickCount % 20 != 0) return;
         if (tickCount % 200 == 0 && !getTags().contains(com.breachprotocol.career.RiftTeams.CREW_TAG)) {
@@ -384,6 +392,7 @@ public class FoundationStaff extends PathfinderMob {
         tag.putInt("Locket", locketUses);
         tag.putDouble("Fountain", fountainAt);
         tag.putBoolean("Declined", declined);
+        tag.putBoolean("Named", named);
         if (leader != null) tag.putUUID("Leader", leader);
         if (stayAt != null) { tag.putInt("StayX", stayAt.getX()); tag.putInt("StayY", stayAt.getY()); tag.putInt("StayZ", stayAt.getZ()); }
     }
@@ -401,6 +410,7 @@ public class FoundationStaff extends PathfinderMob {
         locketUses = tag.getInt("Locket");
         fountainAt = tag.contains("Fountain") ? tag.getDouble("Fountain") : -100;
         declined = tag.getBoolean("Declined");
+        named = tag.getBoolean("Named");
         if (tag.hasUUID("Leader")) leader = tag.getUUID("Leader");
         if (tag.contains("StayX")) { stayAt = new BlockPos(tag.getInt("StayX"), tag.getInt("StayY"), tag.getInt("StayZ")); if ("stay".equals(mode)) restrictTo(stayAt, 1); }
         if ("follow".equals(mode)) clearRestriction();

@@ -244,6 +244,7 @@ public final class SiteTower extends FacilityBuilder {
                 BlockPos p = at(sp[0], sp[1], sp[2]);
                 d.moveTo(p.getX() + 0.5, p.getY(), p.getZ() + 0.5, l.random.nextFloat() * 360F, 0);
                 if (d instanceof net.minecraft.world.entity.Mob mob) mob.setPersistenceRequired();
+                d.setCustomName(net.minecraft.network.chat.Component.literal(com.breachprotocol.entity.Names.dclass(l.getServer(), l.random)).withStyle(net.minecraft.ChatFormatting.GOLD));
                 l.addFreshEntity(d);
             }
         });
