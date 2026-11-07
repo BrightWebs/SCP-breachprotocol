@@ -1679,7 +1679,7 @@ public class PhoneScreen extends Screen {
             long cd = t().getLong("mtfCd");
             card(g, x, y, w, 30);
             text(g, "Mobile Task Force", x + 8, y + 5, 0xFFFFFFFF);
-            text(g, cd > 0 ? "Regrouping: " + clock(cd) : "Command is ready", x + 8, y + 17, cd > 0 ? AMBER : 0xFF5BE36F);
+            text(g, cd > 0 ? "Regrouping: " + clock((int) cd) : "Command is ready", x + 8, y + 17, cd > 0 ? AMBER : 0xFF5BE36F);
             y += 36;
             label(g, "Spend an Unstable Fragment", x + 2, y);
             y += 12;
