@@ -391,6 +391,7 @@ final class Converse {
             List<Thread> all = new ArrayList<>();
             add(all, used, order(p, s, r));
             add(all, used, recall(p, s, r));
+            add(all, used, life(p, s, r));
             add(all, used, news(p, s, r));
             add(all, used, work(p, s, r));
             add(all, used, aboutYou(p, s, r));
@@ -543,6 +544,25 @@ final class Converse {
             return new Thread("you", List.of(), Talk.pick(r, "So what brought you to the Foundation? Everyone's got a story.", "How long have you been here, anyway?"),
                     List.of(rep("I saw something I shouldn't have.", Att.GRIM, "mem:top=GRIM"), rep("I wanted to protect people.", Att.HOPE, "mem:top=HOPE"),
                             rep("They made me an offer I couldn't refuse.", Att.JOKE, "mem:top=JOKE"), rep("Long enough.", Att.DUTY, "mem:top=DUTY")));
+        }
+
+        /** Their life right now: a baby on the way, a new one at home, an engagement, a loss. */
+        static Thread life(ServerPlayer p, FoundationStaff s, Random r) {
+            Registry.Rec me = Lifecycle.ensure(s);
+            long now = s.level().getGameTime();
+            if (me.due > 0 && !me.player) return new Thread("life", List.of(Convo.trust(s, p) >= 3 ? "Can I tell you something? I'm expecting. " + (me.due - now < Lifecycle.PREGNANCY / 3 ? "Any day now, actually." : "Early days.") : "I'm- well. Expecting. Don't tell the canteen."),
+                    "Do you think this is any place to raise a family?", List.of(rep("It's the safest place in the world.", Att.HOPE, "mem:baby=safe"), rep("Nowhere is safe. That's why we're here.", Att.GRIM, "mem:baby=grim"), rep("Congratulations. Truly.", Att.CARE, "mem:baby=care")));
+            for (Registry.Rec k : Registry.children(s.getServer(), me.id))
+                if (k.alive() && now - k.born < FoundationStaff.YEAR) return new Thread("life", List.of("We had the baby. " + k.name.split(" ")[0] + ". I haven't slept in a week. I've never been happier."),
+                        "Do you want to see a picture?", List.of(rep("Of course!", Att.CARE, "mem:pic=yes"), rep("Maybe later.", Att.DUTY, "mem:pic=no")));
+            if (me.rel.equals("engaged") && !me.player && me.partner != null) {
+                Registry.Rec o = Registry.find(s.getServer(), me.partner);
+                if (o != null && !o.player) return new Thread("life", List.of("I'm engaged! To " + o.name + ". Yes, the one from " + (o.job.isEmpty() ? "upstairs" : o.job) + ". Don't make that face."),
+                        "Will you come to the wedding?", List.of(rep("I wouldn't miss it.", Att.CARE, "mem:wed=yes"), rep("If the Council lets me.", Att.DUTY, "mem:wed=maybe")));
+            }
+            if (Lifecycle.bereaved(s)) return new Thread("life", List.of("My " + s.getPersistentData().getString("bp_loss_rel") + " died. " + s.getPersistentData().getString("bp_loss_who") + ". At home. I couldn't be there. They thought I was at a conference."),
+                    null, List.of());
+            return null;
         }
 
         static Thread family(ServerPlayer p, FoundationStaff s, Random r) {

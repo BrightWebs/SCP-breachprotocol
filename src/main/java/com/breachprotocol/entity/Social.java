@@ -456,14 +456,24 @@ public final class Social {
         } else if (f.getBoolean("parents")) {
             b.append("My parents. They think I work for ").append(cover).append(". I visit when I'm allowed, and I lie about the weather. ");
         } else b.append(Talk.pick(r, "No. This place is the family. That's either very sad or very Foundation.", "Not anymore. It's easier, in this job.")).append(' ');
-        if (!kids.isEmpty()) {
-            String[] k = kids.getString(r.nextInt(kids.size())).split(":");
-            boolean girl = k.length > 1 && k[1].equals("f");
-            int age = k.length > 2 ? Integer.parseInt(k[2]) : 6;
-            b.append(kids.size() == 1 ? "One " : kids.size() + " kids. My ").append(girl ? "daughter" : "son").append(kids.size() == 1 ? ", " : " ").append(k[0]).append(", is ").append(age).append(". ")
-                    .append(age < 13 ? Talk.pick(r, "Draws me pictures of monsters. I put them on my desk and never tell " + (girl ? "her" : "him") + " how close " + (girl ? "she" : "he") + " gets.", "Thinks my job is boring. Best thing anyone's ever thought about me.")
-                    : Talk.pick(r, "Wants to know what I really do. One day the answer will be a Class-A amnestic.", "Old enough to notice I come home quiet."));
+        // children, from the registry (they grow up)
+        Registry.Rec me = Lifecycle.ensure(s);
+        List<Registry.Rec> ks = Registry.children(s.getServer(), me.id);
+        if (!ks.isEmpty()) {
+            long now = s.getServer().overworld().getGameTime();
+            Registry.Rec k = ks.get(r.nextInt(ks.size()));
+            boolean girl = k.female;
+            int age = k.age(now);
+            String first = k.name.split(" ")[0];
+            b.append(ks.size() == 1 ? "One " : ks.size() + " kids. My ").append(girl ? "daughter" : "son").append(ks.size() == 1 ? ", " : " ").append(first).append(", is ").append(age).append(". ");
+            if (!k.alive()) b.append("Was. I don't talk about it.");
+            else if (k.status.equals("active")) b.append(Scene.cap(girl ? "she" : "he")).append(" works here now. ").append(k.job).append(". I worry every single day.");
+            else if (age < 2) b.append("Still not sleeping through the night. Neither am I.");
+            else if (age < 13) b.append(Talk.pick(r, "Draws me pictures of monsters. I put them on my desk and never tell " + (girl ? "her" : "him") + " how close " + (girl ? "she" : "he") + " gets.", "Thinks my job is boring. Best thing anyone's ever thought about me."));
+            else if (age < 22) b.append(Talk.pick(r, "Wants to know what I really do. One day the answer will be a Class-A amnestic.", "Old enough to notice I come home quiet."));
+            else b.append("Graduated. Talking about applying here. I don't know whether to be proud or terrified.");
         }
+        if (me.due > 0) b.append(" And- well. There's another on the way.");
         return b.toString().trim();
     }
 

@@ -62,9 +62,9 @@ public final class FamilyTree {
             node(nodes, seen, s, par, par.female ? "mother" : "father", -1, now);
             for (Registry.Rec gp : Registry.parents(s, par)) node(nodes, seen, s, gp, gp.female ? "grandmother" : "grandfather", -2, now);
         }
-        for (Registry.Rec k : Registry.children(s, focus)) {
+        for (Registry.Rec k : Registry.children(s, focus.id)) {
             node(nodes, seen, s, k, k.female ? "daughter" : "son", 1, now);
-            for (Registry.Rec gk : Registry.children(s, k)) node(nodes, seen, s, gk, gk.female ? "granddaughter" : "grandson", 2, now);
+            for (Registry.Rec gk : Registry.children(s, k.id)) node(nodes, seen, s, gk, gk.female ? "granddaughter" : "grandson", 2, now);
         }
         CompoundTag t = new CompoundTag();
         t.putBoolean("tree", true);
