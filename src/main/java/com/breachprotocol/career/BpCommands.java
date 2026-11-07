@@ -136,6 +136,11 @@ public final class BpCommands {
                     if (!p.getInventory().add(s)) p.drop(s, false);
                     return ok(c, "Phone issued.");
                 }))
+                .then(Commands.literal("gardenpardon").executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    GatePass.pardon(p);
+                    return done(p, c, "The Garden's banishment is lifted.");
+                }))
                 .then(Commands.literal("reset").executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
                     p.removeTag(CareerEvents.GATE_SPARED);

@@ -79,9 +79,27 @@ public final class GatePass {
         return s.overworld().getDataStorage().computeIfAbsent(Data.FACTORY, "breachprotocol_gate");
     }
 
+    /** Banished for eating from the Tree of Knowledge (real time, so it lasts a real day). */
     public static boolean banished(ServerPlayer p) {
         Long until = data(p.server).banished.get(p.getUUID().toString());
-        return until != null && p.server.overworld().getGameTime() < until;
+        return until != null && System.currentTimeMillis() < until;
+    }
+
+    /** Cast out: every pass is gone, and the Guardian keeps them away until {@code untilMs}. */
+    public static void banish(ServerPlayer p, long untilMs) {
+        Data d = data(p.server);
+        String id = p.getUUID().toString();
+        d.banished.put(id, untilMs);
+        d.full.remove(id);
+        d.setDirty();
+        ESCORTS.values().removeIf(e -> e.guest().equals(p.getUUID()));
+        release(p);
+    }
+
+    /** Lifts a banishment early (command). */
+    public static void pardon(ServerPlayer p) {
+        data(p.server).banished.remove(p.getUUID().toString());
+        data(p.server).setDirty();
     }
 
     /** The choices shown when the Ascendant right-clicks the Guardian. */
@@ -206,6 +224,19 @@ public final class GatePass {
             }
         }
         for (ServerPlayer g : s.getPlayerList().getPlayers()) {
+            if (banished(g) && !Career.isAscended(g)) {
+                release(g);
+                // the Guardian pushes the banished away from the Gate
+                for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(70), UnleashedApi::isGateGuardian)) {
+                    net.minecraft.world.phys.Vec3 away = g.position().subtract(e.position()).multiply(1, 0, 1).normalize().scale(1.4).add(0, 0.45, 0);
+                    g.setDeltaMovement(away);
+                    g.hurtMarked = true;
+                    if (s.getTickCount() % 60 == 0)
+                        g.displayClientMessage(Component.literal("The Guardian will not let you return.").withStyle(ChatFormatting.RED, ChatFormatting.BOLD), true);
+                    break;
+                }
+                continue;
+            }
             if (covered.contains(g.getUUID())) continue;
             boolean full = d.full.contains(g.getUUID().toString()) && !banished(g);
             if (full && guardianDistance(g) <= REACH) protect(g);

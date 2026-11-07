@@ -12,5 +12,16 @@
   "subtitles.breachprotocol.breach.alarm": "Breach alarm",
   "subtitles.breachprotocol.phone.ring": "Phone rings",
   "subtitles.breachprotocol.phone.message": "Phone buzzes",
-  "subtitles.breachprotocol.ascension": "Something ascends"
+  "subtitles.breachprotocol.ascension": "Something ascends",
+  "item.breachprotocol.fig": "Fig",
+  "item.breachprotocol.pomegranate": "Pomegranate",
+  "item.breachprotocol.olive": "Olives",
+  "item.breachprotocol.grapes": "Grapes",
+  "item.breachprotocol.date": "Dates",
+  "item.breachprotocol.pear": "Pear",
+  "item.breachprotocol.peach": "Peach",
+  "item.breachprotocol.plum": "Plum",
+  "item.breachprotocol.fruit_of_life": "Fruit of the Tree of Life",
+  "item.breachprotocol.fruit_of_knowledge": "Fruit of the Tree of Knowledge of Good and Evil",
+  "effect.breachprotocol.immortal": "Immortal"
 }

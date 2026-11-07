@@ -22,5 +22,23 @@ public final class ModItems {
     public static final DeferredItem<DeferredSpawnEggItem> O5_MEMBER_EGG = ITEMS.register("o5_member_spawn_egg",
             () -> new DeferredSpawnEggItem(ModEntities.O5_MEMBER, 0x111114, 0x8B0000, new Item.Properties()));
 
+    // fruits of the Garden
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> FIG = fruit("fig", 4, 0.5F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> POMEGRANATE = fruit("pomegranate", 5, 0.6F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> OLIVE = fruit("olive", 2, 0.4F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> GRAPES = fruit("grapes", 3, 0.4F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> DATE = fruit("date", 4, 0.8F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> PEAR = fruit("pear", 4, 0.5F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> PEACH = fruit("peach", 4, 0.5F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> PLUM = fruit("plum", 4, 0.5F);
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> FRUIT_OF_LIFE = ITEMS.register("fruit_of_life",
+            () -> new com.breachprotocol.item.FruitItem(com.breachprotocol.item.FruitItem.Kind.LIFE, 10, 1.2F, new Item.Properties().stacksTo(4).rarity(Rarity.EPIC)));
+    public static final DeferredItem<com.breachprotocol.item.FruitItem> FRUIT_OF_KNOWLEDGE = ITEMS.register("fruit_of_knowledge",
+            () -> new com.breachprotocol.item.FruitItem(com.breachprotocol.item.FruitItem.Kind.KNOWLEDGE, 6, 0.8F, new Item.Properties().stacksTo(1).rarity(Rarity.EPIC)));
+
+    private static DeferredItem<com.breachprotocol.item.FruitItem> fruit(String id, int food, float sat) {
+        return ITEMS.register(id, () -> new com.breachprotocol.item.FruitItem(com.breachprotocol.item.FruitItem.Kind.PLAIN, food, sat, new Item.Properties()));
+    }
+
     private ModItems() {}
 }
