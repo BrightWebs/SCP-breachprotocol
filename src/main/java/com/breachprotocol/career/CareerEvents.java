@@ -70,8 +70,10 @@ public final class CareerEvents {
         if (p.tickCount % 20 != 0) return;
         Career.tick(p);
         if (d.ascended) {
-            // SCP Unleashed's Gate Guardian spares anything carrying its avoid marker (Scp001GateAvoid.Marker)
-            if (!p.getTags().contains(GATE_SPARED)) p.addTag(GATE_SPARED);
+            // SCP Unleashed's Gate Guardian spares anything invulnerable (Scp001GateStrike.immortal),
+            // and only shoves away things that carry its avoid marker - which SCP-Omega must not have.
+            if (p.getTags().contains(GATE_SPARED)) p.removeTag(GATE_SPARED);
+            if (!p.isInvulnerable()) p.setInvulnerable(true);
             p.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 60, 1, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, 1, true, false, false));
@@ -102,11 +104,12 @@ public final class CareerEvents {
         if (d.ritualTicks <= 0) ascend(p, d);
     }
 
-    /** SCP Unleashed's own "the Gate Guardian leaves this one alone" tag. */
+    /** SCP Unleashed's gate-avoider tag: avoiders get pushed out of the Gate. Removed from SCP-Omega. */
     public static final String GATE_SPARED = "scp001gate_avoider";
 
     public static void ascend(ServerPlayer p, CareerData d) {
-        p.addTag(GATE_SPARED);
+        p.removeTag(GATE_SPARED);
+        p.setInvulnerable(true);
         d.ascended = true;
         d.stability = 100;
         d.missions.clear();
@@ -196,6 +199,19 @@ public final class CareerEvents {
         if (Unleashed.isAnomaly(event.getEntity()) && event.getNewAboutToBeSetTarget() instanceof Player p && Career.isAscended(p)) {
             event.setCanceled(true);
         }
+    }
+
+    /** As SCP-Omega, right-click SCP-001-1, the Gate Guardian: it lowers its blades and lets you into the Garden. */
+    @SubscribeEvent
+    public static void onGuardian(PlayerInteractEvent.EntityInteract event) {
+        if (event.getLevel().isClientSide || event.getHand() != InteractionHand.MAIN_HAND) return;
+        if (!(event.getEntity() instanceof ServerPlayer p) || !Career.isAscended(p)) return;
+        if (!com.breachprotocol.compat.UnleashedApi.isGateGuardian(event.getTarget())) return;
+        com.breachprotocol.compat.UnleashedApi.calmGuardian(event.getTarget(), 20 * 300);
+        p.serverLevel().sendParticles(ParticleTypes.END_ROD, event.getTarget().getX(), event.getTarget().getY() + 6, event.getTarget().getZ(), 60, 1.5, 4, 1.5, 0.04);
+        p.displayClientMessage(Component.literal("SCP-001-1 lowers its blades. The way into the Garden is open, Master.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        event.setCanceled(true);
+        event.setCancellationResult(InteractionResult.SUCCESS);
     }
 
     /** As SCP-Ω, sneak + right-click an anomaly with an empty hand to make it kneel (10 minutes). */
