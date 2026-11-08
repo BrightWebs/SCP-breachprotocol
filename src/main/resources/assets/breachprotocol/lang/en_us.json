@@ -211,5 +211,6 @@
   "dialogue.foundation.re.app_breach.menu": "Something else",
   "dialogue.foundation.menu": "...",
   "key.breachprotocol.power1": "Power slot 1",
-  "key.breachprotocol.power2": "Power slot 2"
+  "key.breachprotocol.power2": "Power slot 2",
+  "key.breachprotocol.console": "Open the implant console"
 }

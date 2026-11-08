@@ -467,6 +467,7 @@ public class CommandScreen extends Screen {
         // on the Targets tab letters are for the search, the answer key's included: Esc closes
         if (tab == 2 && key != org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) return super.keyPressed(key, scan, mods);
         if (DialogueHud.ANSWER.matches(key, scan)) { CommandStance.suppress = true; onClose(); return true; }
+        if (PowerKeys.CONSOLE.matches(key, scan)) { onClose(); return true; }
         return super.keyPressed(key, scan, mods);
     }
 }

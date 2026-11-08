@@ -73,7 +73,7 @@ public final class CommandStance {
         else if (held > 0) {
             if (!acted && held < HOLD) {
                 // Shift + the key: the console. The key alone: answer whoever's waiting (your secretary, the Council)
-                if (shiftAtPress && dom() > 0) mc.setScreen(new CommandScreen());
+                if (shiftAtPress) PowerKeys.openConsole();
                 else if (DialogueHud.pending()) mc.setScreen(DialogueScreen.open(DialogueHud.hud));
             }
             held = 0;

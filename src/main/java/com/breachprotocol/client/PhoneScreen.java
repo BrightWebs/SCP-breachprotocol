@@ -62,7 +62,9 @@ public class PhoneScreen extends Screen {
     private static final App CALENDAR = new App("app_calendar", "Calendar", View.CALENDAR, 0xFFC0383F, c -> false);
     private static final App FORCES = new App("app_forces", "Recruitment", View.FORCES, 0xFF2E8F4A, c -> false);
     private static final App SECURITY = new App("app_security", "Site Security", View.SECURITY, 0xFFA8323A, c -> false);
-    private static final List<App> GRID = List.of(CALENDAR, STAFF_APP, FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
+    /** Not a phone screen: the implant's console (powers, targets, temperament, orders). */
+    private static final App IMPLANT = new App("app_implant", "Implant", View.HOME, 0xFFB070FF, c -> false);
+    private static final List<App> GRID = List.of(IMPLANT, CALENDAR, STAFF_APP, FORCES, SECURITY, CAMERA, MAP, GALLERY, ARCHIVE, CONTAIN, PERSONNEL, COMMAND, NETWORK, SITE, SETTINGS);
     private static final List<App> DOCK = List.of(PHONE, MESSAGES, MISSIONS, CAMERA);
 
     private static final Deque<App> RECENT = new ArrayDeque<>();
@@ -114,6 +116,7 @@ public class PhoneScreen extends Screen {
     private static int rank() { return t().getInt("rank"); }
 
     private static boolean allowed(App a) {
+        if (a == IMPLANT) return t().getInt("dom") >= 1; // the Administrator and SCP-Ω
         if (a == SITE) return rank() >= 6 || t().getBoolean("ascended"); // the Council and the Administrator
         if (a == FORCES || a == SECURITY) return false; // checked per screen in allowedHere
         if (a == CALENDAR) return rank() >= 6 || t().getBoolean("ascended");
@@ -634,6 +637,10 @@ public class PhoneScreen extends Screen {
     private void openApp(App a) {
         if (a == CAMERA) {
             CameraMode.start();
+            return;
+        }
+        if (a == IMPLANT) {
+            minecraft.setScreen(new CommandScreen());
             return;
         }
         if (a == PHONE) send("refresh", 0);

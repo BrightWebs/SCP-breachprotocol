@@ -52,10 +52,23 @@ public final class PowerKeys {
             new KeyMapping("key.breachprotocol.power1", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_Z, "key.categories.breachprotocol"),
             new KeyMapping("key.breachprotocol.power2", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_X, "key.categories.breachprotocol")};
 
+    /** The console on a key of its own (G by default), besides Shift + the answer key and the phone's Implant app. */
+    public static final KeyMapping CONSOLE = new KeyMapping("key.breachprotocol.console", InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G, "key.categories.breachprotocol");
+
+    /** Opens the console, or says plainly why it won't open. */
+    static void openConsole() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        if (dom() >= 1) { mc.setScreen(new CommandScreen()); return; }
+        mc.player.displayClientMessage(net.minecraft.network.chat.Component.literal("No implant: the console belongs to the Site Administrator and SCP-Ω.")
+                .withStyle(net.minecraft.ChatFormatting.GRAY), true);
+        mc.player.playSound(SoundEvents.NOTE_BLOCK_BASS.value(), 0.4F, 0.5F);
+    }
+
     @EventBusSubscriber(modid = BreachProtocol.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Keys {
         @SubscribeEvent
-        public static void register(RegisterKeyMappingsEvent event) { for (KeyMapping k : SLOTS) event.register(k); }
+        public static void register(RegisterKeyMappingsEvent event) { for (KeyMapping k : SLOTS) event.register(k); event.register(CONSOLE); }
     }
 
     // ================================================================== the loadout (client-side, saved to config)
@@ -176,6 +189,7 @@ public final class PowerKeys {
         if (flash0 > 0) flash0--;
         if (flash1 > 0) flash1--;
         if (mc.level != null && mc.player != null && mc.player.tickCount % 40 == 0) look(mc);
+        while (CONSOLE.consumeClick()) if (mc.screen == null) openConsole();
         for (int i = 0; i < 2; i++) {
             KeyMapping k = SLOTS[i];
             while (k.consumeClick()) { }
