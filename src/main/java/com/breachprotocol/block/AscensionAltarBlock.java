@@ -26,8 +26,9 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
- * The Altar beyond the Gate. The Administrator who offers SCP-500 here stops being human:
- * they become SCP-Ω, The Ascendant - immortal, and master of every anomaly.
+ * The Altar beyond the Gate. The Administrator who swears before it, pays its price (see
+ * career.Altar) and offers SCP-500 stops being human: they become SCP-Ω, The Ascendant - immortal,
+ * and master of every anomaly.
  */
 public class AscensionAltarBlock extends Block {
     public static final MapCodec<AscensionAltarBlock> CODEC = simpleCodec(AscensionAltarBlock::new);
@@ -51,29 +52,21 @@ public class AscensionAltarBlock extends Block {
     protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit) {
         if (level.isClientSide) return ItemInteractionResult.SUCCESS;
         if (!(player instanceof ServerPlayer sp)) return ItemInteractionResult.FAIL;
-        if (Career.isAscended(sp)) {
-            sp.displayClientMessage(Component.literal("You are already everything the altar can make you.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        if (!Career.isAscended(sp) && Career.rank(sp) == Rank.ADMINISTRATOR && stack.is(Unleashed.scp500())) {
+            // the cure, offered once the Altar's price is paid
+            if (com.breachprotocol.career.Altar.offer(sp)) {
+                stack.consume(1, sp);
+                CareerEvents.beginRitual(sp);
+            }
             return ItemInteractionResult.SUCCESS;
         }
-        if (Career.rank(sp) != Rank.ADMINISTRATOR) {
-            sp.displayClientMessage(Component.literal("The altar does not answer you.").withStyle(ChatFormatting.DARK_GRAY), true);
-            return ItemInteractionResult.SUCCESS;
-        }
-        if (!stack.is(Unleashed.scp500())) {
-            sp.displayClientMessage(Component.literal("The altar wants the cure for all things. Offer it SCP-500.").withStyle(ChatFormatting.GOLD), true);
-            return ItemInteractionResult.SUCCESS;
-        }
-        stack.consume(1, sp);
-        CareerEvents.beginRitual(sp);
+        com.breachprotocol.career.Altar.touched(sp);
         return ItemInteractionResult.SUCCESS;
     }
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hit) {
-        if (!level.isClientSide) {
-            player.displayClientMessage(Component.literal(Career.rank(player) == Rank.ADMINISTRATOR
-                    ? "Offer SCP-500 to become immortal." : "The altar does not answer you.").withStyle(ChatFormatting.GOLD), true);
-        }
+        if (!level.isClientSide && player instanceof ServerPlayer sp) com.breachprotocol.career.Altar.touched(sp);
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
 

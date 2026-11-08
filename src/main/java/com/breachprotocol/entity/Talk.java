@@ -252,6 +252,7 @@ public final class Talk {
             case KNOWLEDGE -> pick(r, "You've been to the Garden, " + a + ". I won't ask.", "Whatever you learned in the Garden, " + a + ", we're glad you're back.");
             case BANISHED -> "I heard the Gate turned you away. I'm sorry, " + a + ".";
             case TREATMENT -> "Thank you for looking after our people, " + a + ".";
+            case CONTAINED -> pick(r, "They say it's back in its cell because of you, " + a + ". The whole wing slept last night.", "Containment logged it as your doing, " + a + ". Thank you.");
             case DECISION -> i.mood() >= 0 ? pick(r, "Your ruling is already paying off, " + a + ".", "The site's steadier since your decision, " + a + ".")
                     : pick(r, "We're carrying out your ruling, " + a + ". It's been a hard few days, but we'll manage.", "Your orders are being followed, " + a + ".");
             default -> i.mood() >= 0 ? "Thank you, " + a + ". People have noticed." : "It's been a difficult stretch, " + a + ". We're with you.";

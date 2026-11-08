@@ -62,7 +62,7 @@ public final class Calls {
             case "w_breach" -> "The breach";
             case "w_stability" -> "Emergency measures";
             case "w_rift" -> "The lost rift crew";
-            default -> t.id().startsWith("w_short_") ? "Under-strength garrison" : "Council business";
+            default -> t.id().startsWith("w_short_") ? "Under-strength garrison" : t.id().startsWith("c_") ? Containment.title(t.id()) : t.id().startsWith("m_") ? Motions.title(t.id()) : "Council business";
         };
     }
 

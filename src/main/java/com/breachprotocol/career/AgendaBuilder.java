@@ -62,8 +62,11 @@ public final class AgendaBuilder {
                             }),
                             opt("Keep working. We can't stop", (q, x) -> stab(q, -2, "Understood. They'll work. They won't forget.")))));
         }
+        // ------------------------------------------------------------ the containment registry: what's loose, what keeps getting out
+        List<Calls.Template> live = Containment.agenda(p, 3);
+        out.addAll(live);
         WorldNews.Item breach = week.stream().filter(i -> i.kind() == WorldNews.Kind.BREACH).findFirst().orElse(null);
-        if (breach != null) {
+        if (breach != null && live.stream().noneMatch(t -> t.id().startsWith("c_loose_"))) {
             out.add(new Calls.Template("w_breach", 9, true,
                     "The breach " + WorldNews.ago(p.server, breach) + ": " + breach.headline() + ". It should never have happened. What do we change?",
                     List.of(opt("Rebuild the containment chamber", (q, x) -> stab(q, 4, "Engineering has the new specification. It'll hold this time.")),
@@ -112,6 +115,9 @@ public final class AgendaBuilder {
                             opt("D-Class are expendable", (q, x) -> stab(q, -2, "That's... the official position. It won't help morale.")))));
         }
 
+        // ------------------------------------------------------------ the Altar, if the Administrator has sworn before it
+        out.addAll(0, Motions.agenda(p, true));
+
         // ------------------------------------------------------------ appointments: lost heads of department
         out.addAll(com.breachprotocol.entity.Management.agenda(p));
 
@@ -142,6 +148,28 @@ public final class AgendaBuilder {
         int room = Math.max(0, 5 - out.size());
         out.addAll(fresh.subList(0, Math.min(room, Math.min(2, fresh.size()))));
         return out;
+    }
+
+    /**
+     * An Overseer's own sitting (the Administrator absent): what's live at the sites first, then the
+     * Council's ordinary business, three items in all.
+     */
+    public static List<Calls.Template> forOverseer(ServerPlayer p) {
+        CareerData d = Career.data(p);
+        List<Calls.Template> out = new ArrayList<>(Motions.agenda(p, false));
+        out.addAll(Containment.agenda(p, 2));
+        long day = p.server.overworld().getDayTime() / 24000;
+        List<Calls.Template> fresh = new ArrayList<>();
+        for (Calls.Template t : Calls.councilPool(false)) {
+            if (out.stream().anyMatch(x -> x.id().equals(t.id()))) continue;
+            Long last = d.agendaUsed.get(t.id());
+            if (last != null && day - last < 7) continue;
+            fresh.add(t);
+        }
+        if (fresh.isEmpty()) fresh.addAll(Calls.councilPool(false));
+        Collections.shuffle(fresh, new Random());
+        for (Calls.Template t : fresh) { if (out.size() >= 3) break; out.add(t); }
+        return out.subList(0, Math.min(out.size(), 4));
     }
 
     private static String attackerOrg(String headline) {

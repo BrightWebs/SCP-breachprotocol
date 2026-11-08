@@ -130,6 +130,12 @@ public class O5MemberEntity extends PathfinderMob implements Person {
         restrict();
     }
 
+    /** Their chair is theirs again (the player who took it has left the Council): they walk back to it. */
+    public void reseat() {
+        unseated = false;
+        restrict();
+    }
+
     /** Keep them seated (during a council session) for a while. */
     public void holdSeated(int ticks) { holdUntil = level().getGameTime() + ticks; }
 

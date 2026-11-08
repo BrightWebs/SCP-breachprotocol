@@ -77,7 +77,10 @@ public final class Council {
         if (event.getServer().getTickCount() % 5 != 0) return;
         ServerLevel ow = event.getServer().overworld();
         long now = ow.getGameTime();
+        Site01.Data sd = Site01.data(event.getServer());
         for (ServerPlayer p : event.getServer().getPlayerList().getPlayers()) {
+            if (Site01.isAdministrator(p) && now - sd.adminSeen > 1200) { sd.adminSeen = now; sd.setDirty(); }
+            Motions.checkDeposed(p);
             Session s = SESSIONS.get(p.getUUID());
             if (s != null) {
                 if (s.done || p.level() != ow) { s.close(); SESSIONS.remove(p.getUUID()); continue; }
@@ -85,16 +88,84 @@ public final class Council {
                 continue;
             }
             if (p.level() == ow && Site01.isInside(p) && Site01.needsRebuild(p.server)) Site01.ensureBuilt(ow);
-            if (p.level() != ow || !Site01.isInside(p) || now < COOLDOWN.getOrDefault(p.getUUID(), 0L)) continue;
+            if (p.level() == ow && Site01.isInside(p) && !sd.returning.isEmpty()) returnSeats(ow);
+            if (p.level() != ow || !Site01.isInside(p)) continue;
             Rank r = Career.rank(p);
-            Site01.Data d = Site01.data(p.server);
             int seat = seatOf(ow, p);
             boolean admin = r == Rank.ADMINISTRATOR || Career.isAscended(p);
-            if (seat == 0 && admin) start(p, new Agenda(p, true));
-            else if (seat > 0 && p.getUUID().toString().equals(d.holders.get(seat))) start(p, new Agenda(p, false));
-            else if (r == Rank.OVERSEER && !admin && !d.holders.containsValue(p.getUUID().toString()) && inChamber(ow, p) && d.holders.size() < 12)
+            boolean holder = seat > 0 && p.getUUID().toString().equals(sd.holders.get(seat));
+            // the Administrator has priority: an Overseer who sits down while the Administrator presides joins that session
+            if (holder && !admin && PRESIDING != null && !PRESIDING.done) { PRESIDING.join(p); continue; }
+            if (now < COOLDOWN.getOrDefault(p.getUUID(), 0L)) continue;
+            if (seat == 0 && admin) {
+                // an Overseer's sitting gives way to the Administrator's
+                for (Session o : new ArrayList<>(SESSIONS.values())) if (o instanceof Agenda a && !a.admin && !a.done) a.defer();
+                start(p, new Agenda(p, true));
+            } else if (holder) start(p, new Agenda(p, false));
+            else if (r == Rank.OVERSEER && !admin && !sd.holders.containsValue(p.getUUID().toString()) && inChamber(ow, p) && sd.holders.size() < 12)
                 start(p, new SeatVote(p));
         }
+    }
+
+    /** The Administrator's sitting, while one is under way: Overseers join it rather than starting their own. */
+    private static Agenda PRESIDING;
+
+    /**
+     * A player gives up their Council chair (they became the Administrator, or ascended): the Overseer
+     * they displaced walks back to it, or a successor is appointed if that Overseer is gone.
+     */
+    public static void vacate(ServerPlayer p) {
+        Site01.Data d = Site01.data(p.server);
+        String me = p.getUUID().toString();
+        boolean any = false;
+        for (Iterator<Map.Entry<Integer, String>> it = d.holders.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Integer, String> e = it.next();
+            if (!e.getValue().equals(me)) continue;
+            d.returning.add(e.getKey());
+            it.remove();
+            any = true;
+        }
+        if (!any) return;
+        d.setDirty();
+        if (d.built) returnSeats(p.server.overworld());
+    }
+
+    /** Seats given back: their Overseers walk back to the table (when Site-01 is loaded). */
+    static void returnSeats(ServerLevel ow) {
+        Site01.Data d = Site01.data(ow.getServer());
+        if (d.returning.isEmpty() || !d.built) return;
+        BlockPos o = Site01.origin(ow);
+        for (Iterator<Integer> it = d.returning.iterator(); it.hasNext(); ) {
+            int n = it.next();
+            BlockPos chair = o.offset(Site01.seatChair(n));
+            if (!ow.isLoaded(chair)) continue;
+            O5MemberEntity m = null;
+            for (O5MemberEntity e : ow.getEntitiesOfClass(O5MemberEntity.class, new AABB(o).inflate(120)))
+                if (e.getSeat() != null && e.getSeat().seat == n) m = e;
+            String line;
+            if (m != null) {
+                m.reseat();
+                line = O5.seat(n).sender() + " walks back to the Council table and takes their chair again.";
+                WorldNews.record(ow.getServer(), WorldNews.Kind.SEAT_VOTE, "return" + n, O5.seat(n).sender() + " returned to the Council", 1, "", Set.of(n));
+            } else {
+                // the one who was voted out is gone: the Foundation appoints a successor to the seat
+                m = com.breachprotocol.registry.ModEntities.O5_MEMBER.get().create(ow);
+                if (m == null) continue;
+                m.setSeat(O5.seat(n));
+                m.setHome(chair, false);
+                BlockPos hall = Site01.arrival(o);
+                m.moveTo(hall.getX() + 0.5, hall.getY(), hall.getZ() + 0.5, 0, 0);
+                m.setPersistenceRequired();
+                m.getPersistentData().putInt(Site01.GEN_KEY, d.gen);
+                ow.addFreshEntity(m);
+                line = "A successor arrives for the empty chair of O5-" + n + ". The Council is twelve again.";
+                WorldNews.record(ow.getServer(), WorldNews.Kind.SEAT_VOTE, "successor" + n, "a successor took the empty chair of O5-" + n, 1, "", Set.of(n));
+            }
+            for (ServerPlayer q : ow.players()) if (q.blockPosition().closerThan(o.offset(27, 0, 9), 80))
+                q.sendSystemMessage(Component.literal(line).withStyle(ChatFormatting.DARK_RED, ChatFormatting.ITALIC));
+            it.remove();
+        }
+        d.setDirty();
     }
 
     /** Whether this player is sitting in a Council session right now. */
@@ -126,15 +197,28 @@ public final class Council {
     public static void commands(RegisterCommandsEvent event) {
         event.getDispatcher().register(Commands.literal("council")
                 .then(Commands.literal("decide").then(Commands.argument("option", IntegerArgumentType.integer(0, 12)).executes(c -> {
-                    Session s = SESSIONS.get(c.getSource().getPlayerOrException().getUUID());
+                    ServerPlayer q = c.getSource().getPlayerOrException();
+                    Session s = SESSIONS.get(q.getUUID());
                     if (s != null) s.decide(IntegerArgumentType.getInteger(c, "option"));
+                    else if (PRESIDING != null && PRESIDING.guests.containsKey(q.getUUID())) PRESIDING.guestDecide(q, IntegerArgumentType.getInteger(c, "option"));
                     return 1;
                 })))
                 .then(Commands.literal("stand").executes(c -> {
-                    Session s = SESSIONS.get(c.getSource().getPlayerOrException().getUUID());
+                    ServerPlayer q = c.getSource().getPlayerOrException();
+                    Session s = SESSIONS.get(q.getUUID());
                     if (s != null) s.decide(-1);
+                    else if (PRESIDING != null && PRESIDING.guests.containsKey(q.getUUID())) PRESIDING.guestDecide(q, -1);
                     return 1;
                 }))
+                .then(Commands.literal("motion").then(Commands.argument("what", StringArgumentType.word()).executes(c -> {
+                    ServerPlayer q = c.getSource().getPlayerOrException();
+                    String what = StringArgumentType.getString(c, "what");
+                    Agenda a = SESSIONS.get(q.getUUID()) instanceof Agenda own ? own : null;
+                    if (a == null && PRESIDING != null && PRESIDING.guests.containsKey(q.getUUID())) a = PRESIDING;
+                    if (a == null) a = Motions.awaitingAnswerFrom(q);
+                    if (a != null) a.motion(q, what);
+                    return 1;
+                })))
                 .then(Commands.literal("best").executes(c -> {
                     Session s = SESSIONS.get(c.getSource().getPlayerOrException().getUUID());
                     if (s != null) s.best();
@@ -149,7 +233,7 @@ public final class Council {
 
     // ================================================================== sessions
 
-    private abstract static class Session {
+    abstract static class Session {
         final ServerPlayer p;
         final ServerLevel l;
         final BlockPos o;
@@ -157,7 +241,9 @@ public final class Council {
         final Deque<long[]> waits = new ArrayDeque<>();
         final Deque<Runnable> steps = new ArrayDeque<>();
         long nextAt;
-        boolean done, awaiting;
+        boolean done, awaiting, noCooldown;
+        /** Overseers seated in their own chairs while the Administrator presides: they vote, the chair rules. */
+        final Map<UUID, ServerPlayer> guests = new LinkedHashMap<>();
         long deadline;
         final Random rnd = new Random();
 
@@ -193,7 +279,27 @@ public final class Council {
         void close() {
             for (O5MemberEntity m : members.values()) m.holdSeated(0);
             if (Dialogue.active(p, "council")) Dialogue.close(p);
-            COOLDOWN.put(p.getUUID(), l.getGameTime() + 20 * 20);
+            for (ServerPlayer g : guests.values()) if (Dialogue.active(g, "council")) Dialogue.close(g);
+            guests.clear();
+            if (PRESIDING == this) PRESIDING = null;
+            if (!noCooldown) COOLDOWN.put(p.getUUID(), l.getGameTime() + 20 * 20);
+        }
+
+        List<ServerPlayer> viewers() {
+            List<ServerPlayer> v = new ArrayList<>();
+            v.add(p);
+            v.addAll(guests.values());
+            return v;
+        }
+
+        static boolean windowed(ServerPlayer q) { return Dialogue.active(q, "council"); }
+
+        void push(ServerPlayer q) { if (windowed(q)) Dialogue.send(q, false); }
+
+        /** The chair who speaks for the Council (O5-7 if seated). */
+        int lead() {
+            List<Integer> s = seated();
+            return s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0);
         }
 
         abstract void begin();
@@ -202,6 +308,14 @@ public final class Council {
         void heard(String text) {}
 
         void tick(long now) {
+            // guests who stand up, or log off, leave the sitting
+            for (Iterator<ServerPlayer> it = guests.values().iterator(); it.hasNext(); ) {
+                ServerPlayer g = it.next();
+                if (g.hasDisconnected() || Council.seatOf(l, g) <= 0) {
+                    if (windowed(g)) Dialogue.close(g);
+                    it.remove();
+                }
+            }
             if (mustSit() && Council.seatOf(l, p) < 0) {
                 tell(Component.literal("The session is suspended.").withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
                 done = true;
@@ -253,7 +367,7 @@ public final class Council {
             heard(text);
         }
 
-        void push() { if (Dialogue.active(p, "council")) Dialogue.send(p, false); }
+        void push() { push(p); }
 
         void await(int seconds) {
             awaiting = true;
@@ -269,19 +383,21 @@ public final class Council {
 
         /** Others nearby read it in chat; the player at the table sees it in the council window. */
         void tell(Component c) {
-            for (ServerPlayer q : audience()) if (q != p || !Dialogue.active(p, "council")) q.sendSystemMessage(c);
-            if (Dialogue.active(p, "council")) { Dialogue.line(p, "", c.getString(), 0); push(); }
+            List<ServerPlayer> v = viewers();
+            for (ServerPlayer q : audience()) if (!v.contains(q) || !windowed(q)) q.sendSystemMessage(c);
+            for (ServerPlayer q : v) if (windowed(q)) { Dialogue.line(q, "", c.getString(), 0); push(q); }
         }
 
         void speak(int seat, String text) {
             O5 who = O5.seat(seat);
             O5MemberEntity m = members.get(seat);
             Component c = Component.literal(who.sender() + ": ").withStyle(ChatFormatting.DARK_RED).append(Component.literal(text).withStyle(ChatFormatting.GRAY));
-            for (ServerPlayer q : audience()) if (q != p || !Dialogue.active(p, "council")) q.sendSystemMessage(c);
-            if (Dialogue.active(p, "council")) {
-                if (m != null) Dialogue.entity(p, m.getId());
-                Dialogue.line(p, who.sender(), text, 0xE05050);
-                push();
+            List<ServerPlayer> v = viewers();
+            for (ServerPlayer q : audience()) if (!v.contains(q) || !windowed(q)) q.sendSystemMessage(c);
+            for (ServerPlayer q : v) if (windowed(q)) {
+                if (m != null) Dialogue.entity(q, m.getId());
+                Dialogue.line(q, who.sender(), text, 0xE05050);
+                push(q);
             }
             if (m != null) {
                 m.getLookControl().setLookAt(p, 30, 30);
@@ -290,11 +406,15 @@ public final class Council {
             l.playSound(null, m != null ? m.blockPosition() : p.blockPosition(), SoundEvents.VILLAGER_AMBIENT, SoundSource.NEUTRAL, 0.25F, 0.6F);
         }
 
-        void playerSays(String text) {
-            String who = Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p) ? "The Administrator" : "O5-13 (" + p.getName().getString() + ")";
-            Component c = Component.literal(who + ": ").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal(text).withStyle(ChatFormatting.WHITE));
-            for (ServerPlayer q : audience()) if (q != p || !Dialogue.active(p, "council")) q.sendSystemMessage(c);
-            if (Dialogue.active(p, "council")) { Dialogue.line(p, "You", text, 0xD08CFF); push(); }
+        void playerSays(String text) { says(p, text); }
+
+        /** A player at the table speaks: the others in the window see their name, they see "You". */
+        void says(ServerPlayer who, String text) {
+            String name = Career.rank(who) == Rank.ADMINISTRATOR || Career.isAscended(who) ? "The Administrator" : "O5-13 (" + who.getName().getString() + ")";
+            Component c = Component.literal(name + ": ").withStyle(ChatFormatting.LIGHT_PURPLE).append(Component.literal(text).withStyle(ChatFormatting.WHITE));
+            List<ServerPlayer> v = viewers();
+            for (ServerPlayer q : audience()) if (!v.contains(q) || !windowed(q)) q.sendSystemMessage(c);
+            for (ServerPlayer q : v) if (windowed(q)) { Dialogue.line(q, q == who ? "You" : name, text, 0xD08CFF); push(q); }
         }
 
         /** Opens the council window for the player at the table. */
@@ -330,7 +450,7 @@ public final class Council {
 
     // ---------------------------------------------------------------- the agenda
 
-    private static final class Agenda extends Session {
+    static final class Agenda extends Session {
         final boolean admin;
         final List<Calls.Template> pool;
         final Set<String> used = new HashSet<>();
@@ -347,28 +467,112 @@ public final class Council {
             super(p);
             this.admin = admin;
             this.pool = Calls.councilPool(admin);
-            this.agenda = admin ? new ArrayList<>(AgendaBuilder.build(p)) : null;
+            // the Administrator's sitting covers the week; an Overseer's takes up what's live at the sites, then ordinary business
+            this.agenda = new ArrayList<>(admin ? AgendaBuilder.build(p) : AgendaBuilder.forOverseer(p));
         }
 
         int total() { return agenda != null ? agenda.size() : Math.min(3, pool.size()); }
+
+        /** Votes the guests cast on the current item. */
+        final Map<UUID, Integer> guestVotes = new HashMap<>();
+        /** After the agenda: motions from the floor. */
+        boolean motionStage;
+        /** A succession motion waiting for the Administrator's leave (or a vote). */
+        ServerPlayer mover;
 
         @Override
         void close() {
             super.close();
             if (agenda != null && !covered.isEmpty()) AgendaBuilder.done(p, covered);
+            Motions.forget(this);
+            // the Administrator hears what the Council decided without them
+            if (!admin && !covered.isEmpty()) {
+                ServerPlayer chief = Motions.admin(p.server);
+                if (chief != null && chief != p) {
+                    StringBuilder b = new StringBuilder("The Council sat with O5-13 (" + p.getGameProfile().getName() + ") while you were away: ");
+                    for (int i = 0; i < covered.size(); i++) {
+                        Calls.Template t = Calls.get(covered.get(i));
+                        b.append(i == 0 ? "" : "; ").append(t != null ? Calls.title(t) : Calls.title(new Calls.Template(covered.get(i), 0, false, "", List.of())));
+                    }
+                    Career.message(chief, O5.O5_7, b + ". The chair has priority: raise anything you want overturned at your next sitting.");
+                }
+            }
+        }
+
+        /** The Administrator sits at the head while this Overseer's session runs: the Council rises for the chair. */
+        void defer() {
+            awaiting = false;
+            Dialogue.clearOptions(p);
+            speak(lead(), "The Administrator has entered the chamber. This sitting defers to the chair. Thirteen, keep your seat: you'll vote in the Administrator's session.");
+            noCooldown = true;
+            done = true;
+        }
+
+        /** An Overseer sits down in their own chair while the Administrator presides. */
+        void join(ServerPlayer g) {
+            if (guests.containsKey(g.getUUID()) || g == p) return;
+            guests.put(g.getUUID(), g);
+            Dialogue.begin(g, "council", "The O5 Council · Site-01", "In session · the Administrator presides · you vote", -1);
+            Dialogue.hud(g, true);
+            Dialogue.send(g, true);
+            CareerData gd = Career.data(g);
+            if (!gd.inducted) {
+                speak(lead(), "Let the record show that " + g.getGameProfile().getName() + " takes a chair at this table for the first time, in the presence of the Administrator.");
+                List<Integer> s = seated();
+                if (s.contains(1)) speak(1, "Welcome, Thirteen. Sit straight. The Administrator is watching how you vote, and so am I.");
+                gd.inducted = true;
+                gd.dirty = true;
+            } else {
+                speak(lead(), "The Council recognises O5-13, " + g.getGameProfile().getName() + ". The Administrator presides; you have a vote.");
+            }
+            if (awaiting && !motionStage && item != null) promptGuest(g);
+        }
+
+        void promptGuest(ServerPlayer g) {
+            Dialogue.clearOptions(g);
+            if (item == null) return;
+            for (int i = 0; i < item.options().size(); i++)
+                Dialogue.option(g, "Vote: " + item.options().get(i).label(), "/council decide " + i, "Your vote counts; the Administrator rules", 0x7FE0FF);
+            Dialogue.option(g, "Abstain", "/council stand", "Leave it to the chair", 0xC0C0C0);
+            Dialogue.send(g, true);
+        }
+
+        void guestDecide(ServerPlayer g, int option) {
+            if (!awaiting || guestVotes.containsKey(g.getUUID())) return;
+            Dialogue.clearOptions(g);
+            if (motionStage) { if (option < 0) { says(g, "No motion from me."); push(g); } return; }
+            guestVotes.put(g.getUUID(), option);
+            if (option < 0 || item == null || option >= votes.length) { says(g, "I abstain."); return; }
+            votes[option]++;
+            says(g, "I vote \"" + item.options().get(option).label() + "\".");
+            tell(tally());
         }
 
         @Override
         void begin() {
             gather();
+            if (admin) PRESIDING = this;
             title("THE COUNCIL IS IN SESSION", admin ? "The Administrator presides" : "O5-13 takes their seat");
             window(admin ? "In session · the Administrator presides" : "In session · O5-13 is seated");
             faceTable();
             p.playNotifySound(SoundEvents.BELL_BLOCK, SoundSource.BLOCKS, 0.8F, 0.6F);
             List<Integer> s = seated();
             int chair = s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0);
+            CareerData pd = Career.data(p);
+            if (!admin && !pd.inducted) {
+                // the first sitting in a new chair: the Council acknowledges its newest member
+                int chairNo = -1;
+                for (Map.Entry<Integer, String> e : Site01.data(p.server).holders.entrySet()) if (e.getValue().equals(p.getUUID().toString())) chairNo = e.getKey();
+                final int cn = chairNo;
+                then(50, () -> speak(chair, "Before business. Let the record show that " + p.getGameProfile().getName() + " takes the chair " + (cn > 0 ? "of O5-" + cn : "at this table") + " today, and sits as O5-13."));
+                if (s.contains(1)) then(60, () -> speak(1, "Welcome, Thirteen. Every one of us sat down in that chair for the first time once. Most of us have regretted it since. Vote with your conscience; we'll argue with it."));
+                if (s.contains(3)) then(50, () -> speak(3, "> NEW MEMBER LOGGED. VOTING RIGHTS: FULL. SEAT BINDING: UNTIL REMOVAL OR DEATH."));
+                then(40, () -> tell(Component.literal("The Council acknowledges O5-13.").withStyle(ChatFormatting.GOLD)));
+                pd.inducted = true;
+                pd.dirty = true;
+            }
             then(50, () -> speak(chair, admin ? "The Administrator is seated. This session of the O5 Council is called to order. We have " + total() + " item" + (total() == 1 ? "" : "s") + " before us."
-                    : "Thirteen is seated. We have a quorum. Let's begin."));
+                    : "Thirteen is seated. We have a quorum. " + (total() == 0 ? "Nothing pressing on the books." : total() + " item" + (total() == 1 ? "" : "s") + " before us. Let's begin.")));
             if (agenda != null && !agenda.isEmpty()) {
                 StringBuilder b = new StringBuilder("On the agenda: ");
                 for (int i = 0; i < agenda.size(); i++) b.append(i == 0 ? "" : "; ").append(i + 1).append(". ").append(Calls.title(agenda.get(i)));
@@ -379,14 +583,11 @@ public final class Council {
 
         void next() {
             if (agenda != null ? items >= agenda.size() : items >= 3 || pool.isEmpty()) {
-                then(0, () -> {
-                    List<Integer> s = seated();
-                    speak(s.contains(7) ? 7 : s.isEmpty() ? 7 : s.get(0), "That concludes the agenda. This session is adjourned.");
-                    done = true;
-                });
+                then(0, this::motions);
                 return;
             }
             items++;
+            guestVotes.clear();
             if (agenda != null) {
                 item = agenda.get(items - 1);
             } else {
@@ -458,6 +659,7 @@ public final class Council {
             if (admin) Dialogue.option(p, "Decide for yourselves: whatever is best", "/council best",
                     "The Council chooses the option that leaves the Foundation best off", 0xFFC94D);
             choices(true);
+            for (ServerPlayer g : guests.values()) promptGuest(g);
             await(admin ? 60 : 40);
         }
 
@@ -482,12 +684,14 @@ public final class Council {
 
         @Override
         void onTimeout() {
+            if (motionStage) { adjourn(); return; }
             tell(Component.literal(admin ? "The Administrator lets the vote stand." : "Thirteen abstains.").withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.ITALIC));
             resolve(majority(), false);
         }
 
         @Override
         void onDecide(int option) {
+            if (motionStage) { adjourn(); return; }
             if (option < 0 || option >= votes.length) { onTimeout(); return; }
             if (admin) {
                 playerSays(item.options().get(option).label() + ". That is my ruling.");
@@ -506,6 +710,7 @@ public final class Council {
         void resolve(int option, boolean overruled, boolean delegated) {
             Calls.Option chosen = item.options().get(option);
             covered.add(item.id());
+            for (ServerPlayer g : guests.values()) { Dialogue.clearOptions(g); push(g); }
             tell(Component.literal("Decided: " + chosen.label()).withStyle(ChatFormatting.GOLD));
             if (overruled) {
                 List<Integer> s = seated();
@@ -532,8 +737,73 @@ public final class Council {
             next();
         }
 
+        // ------------------------------------------------------------ motions from the floor
+
+        /** The agenda is done: before adjourning, the floor may raise motions. */
+        void motions() {
+            boolean ownMotion = !admin && Motions.canMove(p);
+            List<ServerPlayer> movers = new ArrayList<>();
+            if (admin) for (ServerPlayer g : guests.values()) if (Motions.canMove(g)) movers.add(g);
+            if (!ownMotion && movers.isEmpty()) { adjourn(); return; }
+            motionStage = true;
+            speak(lead(), "That concludes the agenda. Are there any motions before we adjourn?");
+            reopen();
+            if (ownMotion) {
+                Dialogue.option(p, "Move that I succeed the Administrator", "/council motion succession", Motions.hint(p), 0xD08CFF);
+                Dialogue.option(p, "No motions. Adjourn.", "/council stand", "", 0xC0C0C0);
+            } else {
+                Dialogue.option(p, "Adjourn the session", "/council stand", "Overseers may still raise motions", 0xC0C0C0);
+            }
+            choices(false);
+            for (ServerPlayer g : movers) {
+                Dialogue.clearOptions(g);
+                Dialogue.option(g, "Move that I succeed the Administrator", "/council motion succession", Motions.hint(g) + " The Administrator presides and may deny it.", 0xD08CFF);
+                Dialogue.option(g, "No motion", "/council stand", "", 0xC0C0C0);
+                Dialogue.send(g, true);
+            }
+            await(45);
+        }
+
+        void adjourn() {
+            awaiting = false;
+            motionStage = false;
+            for (ServerPlayer g : guests.values()) { Dialogue.clearOptions(g); push(g); }
+            then(0, () -> {
+                speak(lead(), "This session is adjourned.");
+                done = true;
+            });
+        }
+
+        /** /council motion succession | allow | deny */
+        void motion(ServerPlayer who, String what) {
+            switch (what) {
+                case "succession" -> {
+                    if (!motionStage || mover != null || !Motions.canMove(who)) return;
+                    awaiting = false;
+                    for (ServerPlayer v : viewers()) Dialogue.clearOptions(v);
+                    mover = who;
+                    Motions.raise(this, who);
+                }
+                case "allow", "deny" -> Motions.answer(this, who, what.equals("allow"));
+                default -> {}
+            }
+        }
+
+        // the Motions helper drives these
+        void sayChair(String text) { speak(lead(), text); }
+        void sayAs(int seat, String text) { speak(seat, text); }
+        void announce(Component c) { tell(c); }
+        void queue(long after, Runnable r) { then(after, r); }
+        void hold(int seconds) { await(seconds); }
+        void finish() { adjourn(); }
+        List<Integer> chairs() { return seated(); }
+        Random dice() { return rnd; }
+        ServerPlayer chairPlayer() { return p; }
+        boolean presided() { return admin; }
+
         @Override
         void heard(String text) {
+            if (motionStage) { says(p, text); return; }
             playerSays(text);
             String low = text.toLowerCase(Locale.ROOT);
             int swayed = -1;
@@ -689,7 +959,11 @@ public final class Council {
                 d.setDirty();
                 if (m != null) m.unseat();
                 int lead = seated().contains(7) ? 7 : seated().isEmpty() ? gone : seated().get(0);
-                speak(lead, "Thirteen, the chair of O5-" + gone + " is yours. Sit, and the Council will sit with you.");
+                speak(lead, "Thirteen, the chair of O5-" + gone + " is yours. Sit, and the Council sits with you: we begin the moment you do.");
+                CareerData cd = Career.data(p);
+                cd.inducted = false;
+                cd.dirty = true;
+                noCooldown = true;
                 p.sendSystemMessage(Component.literal("Your council chair: the one O5-" + gone + " left, " + side(gone) + ".").withStyle(ChatFormatting.LIGHT_PURPLE));
                 done = true;
             });

@@ -1509,9 +1509,10 @@ public class PhoneScreen extends Screen {
     private int drawContainment(GuiGraphics g, int y) {
         int x = SX + 6, w = SW - 12;
         ListTag list = t().getList("nearby", Tag.TAG_COMPOUND), rifts = t().getList("rifts", Tag.TAG_COMPOUND);
-        String[] tabs = {"Anomalies " + list.size(), "Rifts" + (hasLink("rifts") ? " " + rifts.size() : "")};
-        int tw = (w - 3) / 2;
-        for (int i = 0; i < 2; i++) {
+        ListTag reg = t().getList("registry", Tag.TAG_COMPOUND);
+        String[] tabs = {"Nearby " + list.size(), "Registry" + (t().getInt("regLoose") > 0 ? " !" : ""), "Rifts" + (hasLink("rifts") ? " " + rifts.size() : "")};
+        int tw = (w - 6) / 3;
+        for (int i = 0; i < 3; i++) {
             int bx = x + i * (tw + 3);
             boolean sel = containTab == i, hov = over(bx, y, tw, 14);
             rbox(g, bx, y, tw, 14, 7, sel ? Terminal.SELECT : 0xFF08180E, sel || hov ? Terminal.SELECT : 0xFF163D24);
@@ -1521,7 +1522,8 @@ public class PhoneScreen extends Screen {
             hit(bx, y, tw, 14, () -> { containTab = idx; scroll = 0; });
         }
         y += 20;
-        if (containTab == 1) return drawRifts(g, y, rifts);
+        if (containTab == 2) return drawRifts(g, y, rifts);
+        if (containTab == 1) return drawRegistry(g, y, reg);
         String siteHere = t().getString("siteHere");
         small(g, siteHere.isEmpty() ? "NOT AT A SITE  \u00B7  CELLS HERE DON'T COUNT" : "AT " + siteHere.toUpperCase(Locale.ROOT), SX + SW / 2, y - 2, siteHere.isEmpty() ? AMBER : 0xFF5BE36F);
         y += 9;
@@ -1547,6 +1549,65 @@ public class PhoneScreen extends Screen {
             y += h + 4;
         }
         small(g, "TAP AN ANOMALY FOR GUIDANCE", SX + SW / 2, y + 2, Terminal.DIM);
+        return y + 12;
+    }
+
+    /** The containment registry: everything held, loose or put down at the Foundation's sites, and designating new cells. */
+    private int drawRegistry(GuiGraphics g, int y, ListTag reg) {
+        int x = SX + 6, w = SW - 12;
+        int held = t().getInt("regHeld"), loose = t().getInt("regLoose"), gone = t().getInt("regGone");
+        // the tally
+        card(g, x, y, w, 30);
+        int cw = w / 3;
+        String[][] stat = {{String.valueOf(held), "HELD"}, {String.valueOf(loose), "LOOSE"}, {String.valueOf(t().getInt("regCells")), "CELLS"}};
+        int[] col = {0xFF7FD6FF, loose > 0 ? 0xFFFF6B6B : 0xFF7A8794, 0xFFB8C6D6};
+        for (int i = 0; i < 3; i++) {
+            int cx = x + cw * i + cw / 2;
+            g.drawString(font, stat[i][0], cx - font.width(stat[i][0]) / 2, y + 5, Terminal.map(col[i]), false);
+            small(g, stat[i][1], cx, y + 19, MUTED);
+        }
+        y += 34;
+        int empty = t().getInt("regEmpty");
+        if (empty > 0) { small(g, empty + " DESIGNATED CELL" + (empty == 1 ? "" : "S") + " STAND EMPTY", SX + SW / 2, y, AMBER); y += 9; }
+        // designating the room you're standing in
+        String siteHere = t().getString("siteHere");
+        pill(g, x, y, w, 16, siteHere.isEmpty() ? "Cells only count inside a site" : "Designate this room as a cell", 0xFF156E8F, !siteHere.isEmpty(), () -> send("cell_designate", 0));
+        y += 20;
+        if (reg.isEmpty()) {
+            empty(g, y - 16, "Registry empty", "Anomalies held at your sites are entered automatically. Breaches are detected the same way.");
+            return y + 60;
+        }
+        for (Tag tg : reg) {
+            CompoundTag e = (CompoundTag) tg;
+            int st = e.getInt("st");
+            int h = 30;
+            boolean isLoose = st == 1, dead = st == 2;
+            rbox(g, x, y, w, h, 8, isLoose ? 0xFF2A0C0E : 0xFF08180E, isLoose ? 0xFF7A2328 : 0xFF163D24);
+            circle(g, x + 10, y + 15, 4, isLoose ? RED : dead ? 0xFF5A6470 : TEAL);
+            String nm = e.getString("dk").isEmpty() ? e.getString("d") : Component.translatable(e.getString("dk")).getString();
+            String title = e.getString("d") + (nm.equals(e.getString("d")) ? "" : " \u00B7 " + nm);
+            text(g, ellipsize(title, w - 70), x + 20, y + 5, dead ? 0xFF8A96A2 : 0xFFFFFFFF);
+            String cls = e.getString("o");
+            if (!cls.isEmpty()) {
+                int cc = cls.equals("Safe") ? 0xFF3AA860 : cls.equals("Euclid") ? 0xFFC8A030 : 0xFFC0383F;
+                rrect(g, x + w - 8 - font.width(cls) - 6, y + 4, font.width(cls) + 6, 10, 4, cc);
+                text(g, cls, x + w - 5 - font.width(cls) - 6, y + 5, 0xFFFFFFFF);
+            }
+            int days = e.getInt("days"), br = e.getInt("br");
+            String ord = e.getString("ord");
+            String line = switch (st) {
+                case 1 -> (e.getBoolean("w") ? "UNREGISTERED, LOOSE AT " : "LOOSE AT ") + e.getString("site") + " \u00B7 " + (days == 0 ? "TODAY" : days + "D")
+                        + (ord.equals("hunt") ? " \u00B7 RECAPTURE TEAM SENT" : ord.equals("terminate") ? " \u00B7 TERMINATION ORDERED" : br > 0 ? " \u00B7 " + br + " BREACH" + (br == 1 ? "" : "ES") : "");
+                case 2 -> "NEUTRALISED \u00B7 " + e.getString("k");
+                default -> (e.getString("cell").isEmpty() ? e.getString("site") : e.getString("cell")) + " \u00B7 " + (days == 0 ? "TODAY" : days + " DAY" + (days == 1 ? "" : "S"))
+                        + (ord.equals("transfer") ? " \u00B7 TRANSFER ORDERED" : br > 0 ? " \u00B7 " + br + " BREACH" + (br == 1 ? "" : "ES") : "");
+            };
+            line = ellipsize(line.toUpperCase(Locale.ROOT), (int) ((w - 30) / 0.75F));
+            small(g, line, x + 20 + (int) (font.width(line) * 0.375F), y + 18, isLoose ? 0xFFFF7A7A : dead ? 0xFF7A8794 : 0xFF7FD6FF);
+            if (e.getInt("seen") >= 2 && st == 0) small(g, "LAST CHECKED " + e.getInt("seen") + "D AGO", x + w - 8 - (int) (font.width("LAST CHECKED " + e.getInt("seen") + "D AGO") * 0.375F), y + 25, AMBER);
+            y += h + 4;
+        }
+        small(g, "THE COUNCIL DEBATES BREACHES AND TRANSFERS", SX + SW / 2, y + 2, Terminal.DIM);
         return y + 12;
     }
 

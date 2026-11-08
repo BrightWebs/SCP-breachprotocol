@@ -70,6 +70,12 @@ public final class Site01 {
         public boolean tidyTable;
         /** Overseer seats (1-12) given up to players, and which player holds each. */
         public final java.util.Map<Integer, String> holders = new java.util.HashMap<>();
+        /** Seats given back (their player became the Administrator or ascended): their Overseer walks back to them. */
+        public final java.util.Set<Integer> returning = new java.util.TreeSet<>();
+        /** When the Administrator was last online (game time): an absent Administrator can be voted out. */
+        public long adminSeen;
+        /** The player who ascended at the Altar: SCP-Ω can't be voted out. */
+        public String ascendant = "";
 
         public static final SavedData.Factory<Data> FACTORY = new SavedData.Factory<>(Data::new, Data::load, null);
 
@@ -82,6 +88,9 @@ public final class Site01 {
             d.tidyTable = tag.getBoolean("tidyTable");
             CompoundTag h = tag.getCompound("holders");
             for (String k : h.getAllKeys()) d.holders.put(Integer.parseInt(k), h.getString(k));
+            for (int n : tag.getIntArray("returning")) d.returning.add(n);
+            d.adminSeen = tag.getLong("adminSeen");
+            d.ascendant = tag.getString("ascendant");
             return d;
         }
 
@@ -95,6 +104,9 @@ public final class Site01 {
             CompoundTag h = new CompoundTag();
             holders.forEach((k, v) -> h.putString(String.valueOf(k), v));
             tag.put("holders", h);
+            tag.putIntArray("returning", returning.stream().mapToInt(Integer::intValue).toArray());
+            tag.putLong("adminSeen", adminSeen);
+            tag.putString("ascendant", ascendant);
             return tag;
         }
     }

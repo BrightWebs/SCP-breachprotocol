@@ -112,6 +112,11 @@ public final class CareerEvents {
         p.setInvulnerable(true);
         d.ascended = true;
         d.stability = 100;
+        // SCP-Ω isn't one of the thirteen any more: any chair at the table goes back to its Overseer
+        Council.vacate(p);
+        com.breachprotocol.world.Site01.Data sd = com.breachprotocol.world.Site01.data(p.server);
+        sd.ascendant = p.getUUID().toString();
+        sd.setDirty();
         d.missions.clear();
         d.dirty = true;
         LightningBolt bolt = EntityType.LIGHTNING_BOLT.create(p.serverLevel());

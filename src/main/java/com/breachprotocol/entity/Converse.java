@@ -392,6 +392,7 @@ final class Converse {
             add(all, used, order(p, s, r));
             add(all, used, recall(p, s, r));
             add(all, used, life(p, s, r));
+            add(all, used, contain(p, s, r));
             add(all, used, news(p, s, r));
             add(all, used, work(p, s, r));
             add(all, used, aboutYou(p, s, r));
@@ -630,10 +631,35 @@ final class Converse {
             if (t.ordinal() <= Scene.Tier.JUNIOR.ordinal())
                 return new Thread("rumour", List.of("People say there's a council above the directors. Thirteen of them. Nobody's ever met one.", "If they're real, they decide whether we live or die. If they're not, someone's doing a great impression."),
                         "Do you think they exist?", List.of(rep("I'm sure of it.", Att.GRIM, "mem:myth=yes"), rep("It's a story to keep us in line.", Att.DOUBT, "mem:myth=no"), rep("Better not to ask.", Att.DUTY, "mem:myth=hush")));
+            if (t.ordinal() >= Scene.Tier.ADMIN.ordinal() && com.breachprotocol.career.Career.data(p).trial == 1)
+                return new Thread("rumour", List.of("Forgive me. You've been... different, since Site-01. People notice what the Administrator carries.", "Nobody says the word Gate. Nobody has to."),
+                        "Is it something we should be afraid of?", List.of(new Reply("No. It's mine to carry.", Att.DUTY, "mem:gate=mine", "...Yes. Of course."),
+                        new Reply("Ask me again when it's done.", Att.GRIM, "mem:gate=later", "I will. If I'm still here to ask."), new Reply("You shouldn't have heard about it.", Att.DOUBT, "mem:gate=hush", "I didn't. I'll forget I did.")));
+            if (t.ordinal() >= Scene.Tier.DIRECTOR.ordinal() && r.nextInt(4) == 0)
+                return new Thread("rumour", List.of("There's a room at Site-01 that isn't on any plan. Past the Gate. The staff there don't talk about it, and the ones who did aren't staff any more."),
+                        "Do you know what's in it?", List.of(rep("Yes. And you don't want to.", Att.GRIM, "mem:gate=know"), rep("No. And I'm not asking.", Att.DUTY, "mem:gate=no"), rep("It's a rumour. Drop it.", Att.DOUBT, "mem:gate=hush")));
             if (t == Scene.Tier.STAFF)
                 return new Thread("rumour", List.of("Somebody in Records swears the Ethics Committee overruled an Overseer last month. I didn't know anyone could."),
                         "Do you think anyone watches the watchers?", List.of(rep("Someone has to.", Att.HOPE, "mem:ethics=yes"), rep("Nobody. That's the point.", Att.GRIM, "mem:ethics=no")));
             return null;
+        }
+
+        /** What's held at their site: the containment registry, as the people who work beside it see it. */
+        static Thread contain(ServerPlayer p, FoundationStaff s, Random r) {
+            if (!(s.level() instanceof net.minecraft.server.level.ServerLevel sl)) return null;
+            String g = com.breachprotocol.career.Containment.gossip(sl, s.blockPosition(), r);
+            if (g == null) return null;
+            Scene.Tier t = Scene.tier(p);
+            boolean loose = g.contains(" is out.") || g.contains("wandering");
+            if (loose) {
+                return new Thread("contain", List.of(g), "Is anyone going after it?", t.ordinal() >= Scene.Tier.DIRECTOR.ordinal()
+                        ? List.of(new Reply("A team's on it. I'll see it back in its cell.", Att.HOPE, "promise", "Thank you. I'll sleep when I hear it's done."),
+                                rep("Stay off that wing until it's back.", Att.DUTY, "mem:loose=duty"), rep("We all knew the risks.", Att.GRIM, "mem:loose=grim"))
+                        : List.of(rep("Someone will. They always do.", Att.HOPE, "mem:loose=hope"), rep("Keep your head down.", Att.DUTY, "mem:loose=duty"), rep("Are you alright?", Att.CARE, "mem:loose=care")));
+            }
+            return new Thread("contain", List.of(g), Talk.pick(r, "Do you ever go down to the cells?", "Have you seen it? In person?"),
+                    List.of(rep("When I have to.", Att.DUTY, "mem:cells=duty"), rep("Every day. Someone should.", Att.HOPE, "mem:cells=hope"),
+                            rep("Never if I can help it.", Att.JOKE, "mem:cells=joke"), rep("Does it frighten you?", Att.CARE, "mem:cells=care")));
         }
 
         static Thread small(ServerPlayer p, FoundationStaff s, Random r) {

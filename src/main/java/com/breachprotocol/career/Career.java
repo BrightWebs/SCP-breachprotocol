@@ -201,6 +201,8 @@ public final class Career {
                         .append(Component.literal(p.getName().getString() + " has taken the seat of O5-13.").withStyle(ChatFormatting.RED)));
             }
             case ADMINISTRATOR -> {
+                // the head of the table: the Council chair they held goes back to the Overseer they took it from
+                Council.vacate(p);
                 WorldNews.record(p.server, WorldNews.Kind.PROMOTION, "admin", p.getGameProfile().getName() + " became the Administrator", 5, p.getGameProfile().getName());
                 ServerLevel overworld = p.server.overworld();
                 p.sendSystemMessage(Component.literal("Site-01 is being prepared...").withStyle(ChatFormatting.DARK_PURPLE, ChatFormatting.ITALIC));
@@ -972,6 +974,9 @@ public final class Career {
         com.breachprotocol.network.Command.addToSync(p, t);
         Contacts.addToSync(p, t);
         Sites.addToSync(p, t);
+        Containment.addToSync(p, t);
+        t.putInt("trial", data(p).trial);
+        t.putInt("trialKills", data(p).trialKills);
         if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) Forces.addToSync(p, t);
         RiftTeams.addToSync(p, t);
         PacketDistributor.sendToPlayer(p, new CareerSyncPayload(t));

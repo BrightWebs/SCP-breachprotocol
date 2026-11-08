@@ -141,6 +141,10 @@ public class CareerData implements INBTSerializable<CompoundTag> {
     public int rank;
     public int xp;
     public boolean ascended;
+    /** Anomalies this player has put down while they were loose; the Altar's trial (0 none, 1 sworn) and its count since swearing. */
+    public int anomalyKills, trial, trialKills;
+    /** Welcomed to the Council table (the first session after taking a chair). */
+    public boolean inducted;
     public int stability = 70;
     public final List<Message> messages = new ArrayList<>();
     public final List<Mission> missions = new ArrayList<>();
@@ -226,6 +230,10 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         t.putInt("xp", xp);
         t.putBoolean("commendations", true);
         t.putBoolean("ascended", ascended);
+        t.putInt("anomalyKills", anomalyKills);
+        t.putInt("trial", trial);
+        t.putInt("trialKills", trialKills);
+        t.putBoolean("inducted", inducted);
         t.putInt("stability", stability);
         t.putInt("tests", testCounter);
         t.putBoolean("tower", builtTower);
@@ -304,6 +312,10 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         xp = t.getInt("xp");
         if (!t.getBoolean("commendations")) xp = Rank.values()[Math.max(0, Math.min(Rank.values().length - 1, t.getInt("rank")))].xpRequired; // old XP saves
         ascended = t.getBoolean("ascended");
+        anomalyKills = t.getInt("anomalyKills");
+        trial = t.getInt("trial");
+        trialKills = t.getInt("trialKills");
+        inducted = t.getBoolean("inducted");
         stability = t.contains("stability") ? t.getInt("stability") : 70;
         testCounter = t.getInt("tests");
         builtTower = t.getBoolean("tower");

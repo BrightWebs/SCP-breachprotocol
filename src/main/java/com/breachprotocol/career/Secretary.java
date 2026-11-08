@@ -254,6 +254,8 @@ public final class Secretary {
                 if (weekly != null) parts.add("The Council sits " + Calendar.when(weekly.at) + ", as usual" + (d.agenda.isEmpty() ? "." : ", with " + d.agenda.size() + " item" + (d.agenda.size() == 1 ? "" : "s") + " added so far, on top of the week's business and Peanut's cell."));
                 Defence.Alert al = Defence.alertAt(deskOf(p) == null ? "" : deskOf(p).name);
                 if (al != null) parts.add("And security reports " + al.org + " on the grounds. They're handling it.");
+                int held = Containment.heldCount(p.server), loose = Containment.looseCount(p.server);
+                if (held + loose > 0) parts.add("Containment: " + held + " anomal" + (held == 1 ? "y" : "ies") + " held across the Foundation" + (loose > 0 ? ", and " + loose + " loose. Security has the details." : ", nothing loose."));
                 String people = com.breachprotocol.entity.Management.summary(p.server);
                 if (!people.isEmpty()) parts.add(people);
                 Dialogue.line(p, me, greeting(p) + " " + String.join(" ", parts), c);
@@ -296,7 +298,24 @@ public final class Secretary {
                 Sites.Site s = deskOf(p);
                 String name = s == null ? "this site" : s.name;
                 int armed = s == null ? 0 : Forces.data(p.server).station(s.name).members.size();
-                Dialogue.line(p, me, name + ": " + armed + " armed personnel on duty, stability at " + d.stability + "%." + (Defence.alertAt(name) != null ? " We are under attack." : " No incidents."), c);
+                int held = 0, loose = 0;
+                for (Containment.Entry e : Containment.at(p.server, name)) { if (e.status == Containment.HELD) held++; else if (e.status == Containment.LOOSE) loose++; }
+                Dialogue.line(p, me, name + ": " + armed + " armed personnel on duty, stability at " + d.stability + "%, " + held + " anomal" + (held == 1 ? "y" : "ies") + " in its cells"
+                        + (loose > 0 ? " and " + loose + " loose." : ".") + (Defence.alertAt(name) != null ? " We are under attack." : loose > 0 ? "" : " No incidents."), c);
+            }
+            case "brief_cells" -> {
+                Dialogue.line(p, "You", "What's in containment?", 0xB8E07A);
+                List<Containment.Entry> all = Containment.all(p.server);
+                all.removeIf(e -> e.status == Containment.NEUTRALISED);
+                all.sort(Comparator.comparingInt((Containment.Entry e) -> e.status == Containment.LOOSE ? 0 : 1).thenComparing(e -> e.site));
+                if (all.isEmpty()) Dialogue.line(p, me, "The registry is empty. Nothing is held at any of our sites yet. Designate a cell from your phone and put something in it.", c);
+                for (int i = 0; i < Math.min(6, all.size()); i++) {
+                    Containment.Entry e = all.get(i);
+                    long days = Containment.days(p.server, e.since);
+                    Dialogue.line(p, me, e.status == Containment.LOOSE ? e.designation + " is loose at " + e.site + ", since " + WorldNews.ago(p.server, e.since) + "." + (e.order.equals("hunt") ? " A recapture team is on it." : e.order.equals("terminate") ? " There's a termination order on it." : "")
+                            : e.designation + ", " + e.where() + ", " + (days == 0 ? "since today" : days + " day" + (days == 1 ? "" : "s")) + (e.breaches > 0 ? ", " + e.breaches + " breach" + (e.breaches == 1 ? "" : "es") + " on file" : "") + ".", c);
+                }
+                if (all.size() > 6) Dialogue.line(p, me, "And " + (all.size() - 6) + " more. The full registry is on your phone, under Containment.", c);
             }
             default -> {}
         }
@@ -314,6 +333,7 @@ public final class Secretary {
         if (d.appts.stream().anyMatch(a -> !a.confirmed)) Dialogue.option(p, "Accept the meeting requests", "/talk " + f.getId() + " brief_accept", "", 0x9FD8FF);
         Dialogue.option(p, "Anything I should know?", "/talk " + f.getId() + " brief_news", "", 0x9FD8FF);
         Dialogue.option(p, "How is the site?", "/talk " + f.getId() + " brief_site", "", 0x9FD8FF);
+        Dialogue.option(p, "What's in containment?", "/talk " + f.getId() + " brief_cells", "The registry: what's held where, and what's loose", 0x9FD8FF);
         Dialogue.option(p, "Personnel matters", "/talk " + f.getId() + " mg_page", "Hires, interviews, appointments and the registry", 0x9FD8FF);
         Dialogue.option(p, "That's all, thank you", "/talk " + f.getId() + " bye", "", 0xC8D0DA);
         Dialogue.send(p, true);

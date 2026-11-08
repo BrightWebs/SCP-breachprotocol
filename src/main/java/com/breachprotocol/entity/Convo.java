@@ -391,6 +391,13 @@ final class Convo {
         if (c != null) out.add("Nearest cell: the " + c.name + (Sites.get(sc.p.server).cells.isEmpty() ? "" : "") + ".");
         if (sc.loose != null) out.add(Unleashed.designation(sc.loose) + " is OUT, within twenty metres.");
         if (sc.site != null) {
+            int held = 0, loose = 0;
+            for (com.breachprotocol.career.Containment.Entry e : com.breachprotocol.career.Containment.at(sc.p.server, sc.site.name)) {
+                if (e.status == com.breachprotocol.career.Containment.HELD) held++; else if (e.status == com.breachprotocol.career.Containment.LOOSE) loose++;
+            }
+            if (held + loose > 0) out.add("Registry: " + held + " held here" + (loose > 0 ? ", " + loose + " loose." : "."));
+        }
+        if (sc.site != null) {
             Forces.Station st = Forces.data(sc.p.server).station(sc.site.name);
             int want = 0;
             for (Forces.Unit u : Forces.Unit.values()) want += st.wanted(u);
@@ -476,7 +483,7 @@ final class Convo {
                 menu(p, s);
                 return true;
             }
-            case "brief", "brief_msg", "brief_cal", "brief_news", "brief_accept", "brief_site" -> {
+            case "brief", "brief_msg", "brief_cal", "brief_news", "brief_accept", "brief_site", "brief_cells" -> {
                 if (s.role() != FoundationStaff.Role.SECRETARY) return false;
                 if (!Talk.topBrass(p)) { Talk.say(p, s, "I'm sorry. Briefings are for the Administrator."); menu(p, s); return true; }
                 Secretary.brief(p, s, what);
