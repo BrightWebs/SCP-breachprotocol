@@ -336,7 +336,11 @@ public final class Dominion {
         // the hunt comes first
         if (t.hasUUID(HUNT)) {
             Entity v = l.getEntity(t.getUUID(HUNT));
-            if (!(v instanceof LivingEntity victim) || !victim.isAlive()) { t.remove(HUNT); }
+            if (!(v instanceof LivingEntity victim) || !victim.isAlive()) {
+                t.remove(HUNT);
+                ServerPlayer master = Containment.player(l.getServer(), t.getString(FOLLOW));
+                if (master != null) tell(master, name(m) + (v == null || v.isAlive() ? " lost its prey" : " got its prey") + ", and comes back to you.");
+            }
             else {
                 m.setTarget(victim);
                 double d = m.distanceToSqr(victim);

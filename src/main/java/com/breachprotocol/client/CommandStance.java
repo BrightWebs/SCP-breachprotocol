@@ -47,7 +47,7 @@ public final class CommandStance {
             "Then look at its prey", "Back to its own nature", "It dies"};
     private static final int[] COLOURS = {0x7FE0A0, 0x9FD8FF, 0xC8D0DA, 0xFFB050, 0xB8B8B8, 0xFF5A5A};
 
-    private static int held, sel;
+    private static int held, sel, pickTicks;
     private static boolean shiftAtPress;
     /** The key closed a screen: ignore it until it's let go. */
     static boolean suppress;
@@ -78,12 +78,31 @@ public final class CommandStance {
             }
             held = 0;
             acted = false;
-            huntSubject = -1;
         }
         boolean was = active;
         active = down && held >= HOLD && dom() > 0 && !shiftAtPress;
         if (active && !was) mc.player.playSound(SoundEvents.AMETHYST_BLOCK_RESONATE, 0.5F, 0.6F);
-        looked = active ? aim(mc) : null;
+        // choosing prey outlives the key: it ends with a click, a right-click, or after twenty seconds
+        if (huntSubject >= 0) {
+            Entity s = mc.level == null ? null : mc.level.getEntity(huntSubject);
+            if (s == null || !s.isAlive() || ++pickTicks > 400) { huntSubject = -1; note("Hunt cancelled."); }
+            else if (mc.screen != null) huntSubject = -1;
+        }
+        boolean picking = huntSubject >= 0;
+        looked = active || picking ? aim(mc) : null;
+        if (picking && looked != null && looked.getId() == huntSubject) looked = null;
+        if (picking && looked != null && mc.level != null && mc.level.getGameTime() % 2 == 0) {
+            // the line from hunter to prey
+            Entity s = mc.level.getEntity(huntSubject);
+            if (s != null) {
+                Vec3 a = s.position().add(0, s.getBbHeight() * 0.7, 0), b = looked.position().add(0, looked.getBbHeight() * 0.6, 0);
+                int n = (int) Math.min(40, a.distanceTo(b) * 1.5);
+                for (int i = 0; i <= n; i++) {
+                    Vec3 q = a.lerp(b, i / (double) Math.max(1, n));
+                    mc.level.addParticle(new net.minecraft.core.particles.DustParticleOptions(new org.joml.Vector3f(1F, 0.15F, 0.15F), 0.8F), q.x, q.y, q.z, 0, 0, 0);
+                }
+            }
+        }
         if (looked != null && mc.level != null && mc.level.getGameTime() % 3 == 0) {
             Entity e = looked;
             for (int i = 0; i < 3; i++)
@@ -91,7 +110,7 @@ public final class CommandStance {
                         e.getX() + (mc.level.random.nextDouble() - 0.5) * e.getBbWidth() * 1.4, e.getY() + mc.level.random.nextDouble() * e.getBbHeight(),
                         e.getZ() + (mc.level.random.nextDouble() - 0.5) * e.getBbWidth() * 1.4, 0, 0.02, 0);
         }
-        if (active && huntSubject >= 0 && mc.level != null) {
+        if (picking && mc.level != null) {
             Entity s = mc.level.getEntity(huntSubject);
             if (s != null && mc.level.getGameTime() % 4 == 0) mc.level.addParticle(ParticleTypes.ANGRY_VILLAGER, s.getX(), s.getY() + s.getBbHeight() + 0.4, s.getZ(), 0, 0, 0);
         }
@@ -115,12 +134,12 @@ public final class CommandStance {
 
     @SubscribeEvent
     public static void click(InputEvent.InteractionKeyMappingTriggered event) {
-        if (!active) return;
+        if (!active && huntSubject < 0) return;
         event.setCanceled(true);
         event.setSwingHand(false);
         Minecraft mc = Minecraft.getInstance();
         if (event.isUseItem()) {
-            if (huntSubject >= 0) { huntSubject = -1; note("Hunt cancelled."); }
+            if (huntSubject >= 0) { huntSubject = -1; note("Hunt cancelled."); mc.player.playSound(SoundEvents.NOTE_BLOCK_BASS.value(), 0.4F, 0.6F); }
             return;
         }
         if (!event.isAttack()) return;
@@ -130,13 +149,15 @@ public final class CommandStance {
             if (looked.getId() == huntSubject) return;
             send("dom:hunt:" + looked.getId(), huntSubject);
             huntSubject = -1;
-            acted = true;
+            acted = held > 0;
             mc.player.playSound(SoundEvents.WARDEN_ANGRY, 0.4F, 1.6F);
             return;
         }
         if (order.equals("hunt")) {
             huntSubject = looked.getId();
-            note("Now look at its prey, and click.");
+            pickTicks = 0;
+            acted = true;
+            note("Now look at its prey and left-click. You can let go of " + DialogueHud.ANSWER.getTranslatedKeyMessage().getString() + ".");
             mc.player.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 0.7F, 0.8F);
             return;
         }
@@ -147,7 +168,7 @@ public final class CommandStance {
 
     @SubscribeEvent
     public static void scroll(InputEvent.MouseScrollingEvent event) {
-        if (!active) return;
+        if (!active && huntSubject < 0) return;
         event.setCanceled(true);
         if (huntSubject >= 0) return;
         sel = Math.floorMod(sel + (event.getScrollDeltaY() > 0 ? -1 : 1), ORDERS.length);
@@ -163,7 +184,7 @@ public final class CommandStance {
 
     @SubscribeEvent
     public static void render(RenderGuiEvent.Post event) {
-        if (!active) return;
+        if (!active && huntSubject < 0) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
         GuiGraphics g = event.getGuiGraphics();
@@ -178,9 +199,9 @@ public final class CommandStance {
         g.fill(cx + r - 4, cy - r, cx + r, cy - r + 1, rc); g.fill(cx + r - 1, cy - r, cx + r, cy - r + 4, rc);
         g.fill(cx - r, cy + r - 1, cx - r + 4, cy + r, rc); g.fill(cx - r, cy + r - 4, cx - r + 1, cy + r, rc);
         g.fill(cx + r - 4, cy + r - 1, cx + r, cy + r, rc); g.fill(cx + r - 1, cy + r - 4, cx + r, cy + r, rc);
-        // the orders, in a ring round the crosshair
+        // the orders, in a ring round the crosshair (not while choosing prey)
         int ring = 58;
-        for (int i = 0; i < ORDERS.length; i++) {
+        for (int i = 0; i < ORDERS.length && huntSubject < 0; i++) {
             double a = -Math.PI / 2 + i * (Math.PI * 2 / ORDERS.length);
             int ox = cx + (int) (Math.cos(a) * ring), oy = cy + (int) (Math.sin(a) * ring * 0.72);
             boolean on = i == sel && huntSubject < 0;
@@ -196,8 +217,8 @@ public final class CommandStance {
         String top, sub;
         if (huntSubject >= 0) {
             Entity s = mc.level == null ? null : mc.level.getEntity(huntSubject);
-            top = (s == null ? "It" : s.getName().getString()) + " will hunt...";
-            sub = looked == null ? "Look at its prey and click  ·  right-click to cancel" : looked.getName().getString();
+            top = "CHOOSE PREY FOR " + (s == null ? "IT" : s.getName().getString().toUpperCase(java.util.Locale.ROOT));
+            sub = looked == null ? "Look at what it should hunt" : "Left-click: " + (s == null ? "it" : s.getName().getString()) + " hunts " + looked.getName().getString();
         } else if (looked != null) {
             top = looked.getName().getString() + "  ·  " + (int) Math.ceil(looked.getHealth()) + " / " + (int) Math.ceil(looked.getMaxHealth());
             sub = LABELS[sel] + ": " + HINTS[sel];
@@ -208,7 +229,8 @@ public final class CommandStance {
         int ty = cy + ring + 18;
         g.drawString(f, top, cx - f.width(top) / 2, ty, huntSubject >= 0 ? 0xFFFF8A8A : 0xFFEAD8FF, true);
         g.drawString(f, sub, cx - f.width(sub) / 2, ty + 11, 0xFFA898C0, true);
-        String help = "Scroll: choose  ·  Left-click: command  ·  Right-click: cancel  ·  Release " + DialogueHud.ANSWER.getTranslatedKeyMessage().getString() + ": done";
+        String help = huntSubject >= 0 ? "Left-click: hunt  ·  Right-click: cancel  ·  " + (20 - pickTicks / 20) + "s"
+                : "Scroll: choose  ·  Left-click: command  ·  Right-click: cancel  ·  Release " + DialogueHud.ANSWER.getTranslatedKeyMessage().getString() + ": done";
         g.drawString(f, help, cx - f.width(help) / 2, h - 18, 0xFFB8A8D0, true);
         String title = dom() >= 2 ? "SCP-Ω  ·  DOMINION" : "ADMINISTRATOR  ·  COMMAND";
         g.drawString(f, title, cx - f.width(title) / 2, 10, 0xFFD8A8FF, true);
