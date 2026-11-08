@@ -162,7 +162,7 @@ public final class Motions {
                     held > 0 ? "Thirteen holds " + held + " anomal" + (held == 1 ? "y" : "ies") + " in their own cells. I'll follow someone who can keep what they catch." : "Thirteen has kept their site standing. That's more than most.",
                     "Stability under Thirteen's hand is " + md.stability + "%. I've seen worse at the head of this table.",
                     incumbent == null && !Site01.data(srv).admin.isEmpty() ? "The head of this table should be someone who turns up." : "The Foundation needs a fresh hand. I vote yes.",
-                    md.anomalyKills > 0 ? "Thirteen has put down " + md.anomalyKills + " loose anomal" + (md.anomalyKills == 1 ? "y" : "ies") + " personally. That's not nothing.")
+                    md.anomalyKills > 0 ? "Thirteen has put down " + md.anomalyKills + " loose anomal" + (md.anomalyKills == 1 ? "y" : "ies") + " personally. That's not nothing." : "Thirteen has never flinched at this table. That counts.")
                     : pick(r,
                     "Thirteen has barely warmed that chair. The head of the table takes longer.",
                     "Records aren't everything. Ask the dead who had good ones.",
