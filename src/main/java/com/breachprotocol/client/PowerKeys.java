@@ -123,6 +123,9 @@ public final class PowerKeys {
 
     // ---------------------------------------------------------------- auto (kept on the server, mirrored here)
 
+    /** A tap-on, tap-off power that's on right now (time stop, rage). */
+    static boolean active(Powers.Power p) { return p != null && ClientCareerState.tag.getCompound("tog").getBoolean(p.id()); }
+
     static boolean auto(Powers.Power p) { return p != null && ClientCareerState.tag.getCompound("auto").contains(p.id()); }
 
     static void setAuto(Powers.Power p, boolean on) {
@@ -279,7 +282,7 @@ public final class PowerKeys {
         // body
         g.fill(x, y, x + s, y + s, 0xC0100A16);
         g.fill(x + 1, y + 1, x + s - 1, y + s - 1, flash ? 0x60000000 | (col & 0xFFFFFF) : 0x9018101E);
-        boolean on = auto(p);
+        boolean on = auto(p) || active(p);
         int edge = holdingThis ? 0xFFFFFFFF : col;
         if (on) {
             // left on: the frame breathes
@@ -306,8 +309,10 @@ public final class PowerKeys {
         g.drawString(f, key, x + s - 3 - f.width(key), y + 3, 0xFFD8D0E8, false);
         if (p.rMax() > 0) small(g, f, range(p) + "m", x + 3, y + s - 9, 0xFFB8B0C8);
         if (on) {
-            g.fill(x + s - 22, y + s - 10, x + s - 2, y + s - 2, col);
-            small(g, f, "AUTO", x + s - 20, y + s - 8, 0xFF0A0710);
+            String badge = active(p) ? "ON" : "AUTO";
+            int bw = (int) (f.width(badge) * 0.75F) + 4;
+            g.fill(x + s - 2 - bw, y + s - 10, x + s - 2, y + s - 2, col);
+            small(g, f, badge, x + s - bw, y + s - 8, 0xFF0A0710);
         }
         // cooldown: a shutter that rises as it recharges
         long left = cooldownLeft(p);

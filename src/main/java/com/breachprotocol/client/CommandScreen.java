@@ -172,7 +172,7 @@ public class CommandScreen extends Screen {
         yy += 32;
         yy = wrap(g, p.about(), dx, yy, dw, 0xFFC8C0D8) + 4;
         small(g, "NO RECHARGE" + (p.rMax() > 0 ? "  ·  RANGE " + p.rMin() + "-" + p.rMax() + "M" : "") + "  ·  "
-                + switch (p.aim()) { case AROUND -> "ALL AROUND YOU"; case LOOK_POINT -> "WHERE YOU LOOK"; case LOOK_TARGET -> "WHAT YOU LOOK AT"; default -> "YOU"; }, dx, yy, MUTED);
+                + switch (p.aim()) { case AROUND -> "ALL AROUND YOU"; case LOOK_POINT -> "WHERE YOU LOOK"; case LOOK_TARGET -> "WHAT YOU LOOK AT"; case TOGGLE -> p.rMax() > 0 ? "AROUND YOU, UNTIL YOU TAP AGAIN" : "YOU, UNTIL YOU TAP AGAIN"; default -> "YOU"; }, dx, yy, MUTED);
         yy += 12;
         if (!own) {
             wrap(g, "Only SCP-Ω can take this from the anomaly it belongs to.", dx, yy, dw, DIM);
@@ -217,6 +217,13 @@ public class CommandScreen extends Screen {
             yy += 17;
             small(g, p.id().equals("repel") ? "A SHIELD: NOTHING HOSTILE STAYS INSIDE THE CIRCLE." : p.id().equals("embrace") ? "FIRES WHEN YOU DROP BELOW 60% HEALTH." : "FIRES BY ITSELF WHENEVER IT'S READY AND SOMETHING HOSTILE IS IN RANGE.", dx, yy, MUTED);
             yy += 10;
+        } else if (p.aim() == Powers.Aim.TOGGLE) {
+            boolean on = PowerKeys.active(p);
+            g.fill(dx, yy, dx + dw, yy + 15, on ? col & 0x50FFFFFF | 0x50000000 : PANEL);
+            frame(g, dx, yy, dw, 15, on ? col : LINE);
+            String st = on ? "● ON NOW: TAP ITS KEY AGAIN TO STOP" : "○ OFF: TAP ITS KEY TO START, TAP AGAIN TO STOP";
+            small(g, st, dx + dw / 2 - (int) (font.width(st) * 0.375F), yy + 5, on ? TEXT : MUTED);
+            yy += 19;
         } else {
             small(g, "BY HAND ONLY: IT NEEDS YOU TO AIM IT.", dx, yy + 2, DIM);
             yy += 14;

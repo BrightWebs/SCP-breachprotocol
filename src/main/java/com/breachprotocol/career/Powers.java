@@ -53,7 +53,7 @@ public final class Powers {
     private Powers() {}
 
     /** How a power picks what it acts on. */
-    public enum Aim { SELF, AROUND, LOOK_POINT, LOOK_TARGET }
+    public enum Aim { SELF, AROUND, LOOK_POINT, LOOK_TARGET, TOGGLE }
 
     public record Power(String id, String name, String source, String glyph, int colour, String about, int minLevel, int cooldown,
                         int rMin, int rMax, int rDef, Aim aim) {}
@@ -69,7 +69,8 @@ public final class Powers {
             new Power("immolate", "Immolate", "SCP-457, the Burning Man", "♨", 0xFF7A20, "Everything hostile around you catches fire from the inside.", 2, 20 * 12, 3, 16, 8, Aim.AROUND),
             new Power("tesla", "Tesla Arc", "Tesla gate", "⚡", 0x80D8FF, "Lightning leaps from you to the nearest hostile things, more of them the further it reaches.", 1, 20 * 5, 4, 24, 12, Aim.AROUND),
             new Power("embrace", "Embrace", "SCP-999, the Tickle Monster", "❤", 0xFFA040, "Joy: you, your people and anything that follows you are healed and steadied.", 1, 20 * 30, 4, 24, 10, Aim.AROUND),
-            new Power("stasis", "Stasis Pulse", "Stasis pod", "❄", 0xA0E8FF, "Everything hostile around you is held still for ten seconds.", 1, 20 * 30, 4, 24, 12, Aim.AROUND),
+            new Power("stasis", "Time Stop", "Stasis pod", "❄", 0xA0E8FF, "Tap: everything around you stops where it is, creatures, players and arrows in the air, and anything that wanders in. Tap again and time runs. You, and whatever follows you, move freely.", 1, 0, 4, 48, 16, Aim.TOGGLE),
+            new Power("rage", "Rage", "SCP-096, the Shy Guy", "✹", 0xF0F0F0, "Tap: become what 096 is once it has seen a face. Nothing hurts you, pushes you or slows you; you run faster, climb whole blocks, sprint through walls, and your blows land like his. Tap again to come back.", 2, 0, 0, 0, 0, Aim.TOGGLE),
             new Power("reveal", "Reveal", "The registry", "◎", 0xC8A0FF, "Every anomaly within reach glows through walls for thirty seconds.", 1, 20 * 20, 16, 128, 96, Aim.AROUND),
             new Power("blink", "Blink", "SCP-173, the Sculpture", "✸", 0xC0C0C0, "Step to wherever you're looking. You don't cross the space between.", 1, 20 * 6, 8, 64, 32, Aim.LOOK_POINT),
             new Power("still", "Still", "The Administrator", "☮", 0x7FE0A0, "Everything around you that means you harm calms down, for good.", 1, 20 * 15, 8, 48, 24, Aim.AROUND),
@@ -86,7 +87,7 @@ public final class Powers {
 
     /** Powers that can be left on: they fire by themselves whenever they're ready and something hostile is in range. */
     public static boolean automatic(Power pw) {
-        return switch (pw.id()) { case "pocket", "orbital", "blink", "call", "summon" -> false; default -> true; };
+        return pw.aim() != Aim.TOGGLE && switch (pw.id()) { case "pocket", "orbital", "blink", "call", "summon" -> false; default -> true; };
     }
 
     /** How often an automatic power fires. Repel, left on, is a shield: it keeps everything hostile out of its circle. */
@@ -99,6 +100,7 @@ public final class Powers {
         if (pw == null || Dominion.level(p) < pw.minLevel()) return;
         ServerLevel l = p.serverLevel();
         int r = clamp(pw, range);
+        if (pw.aim() == Aim.TOGGLE) { Toggles.toggle(p, id, r); return; }
         // by hand: everything hostile in range, and whatever you're looking at, spared or not
         List<LivingEntity> tg = pw.aim() == Aim.AROUND ? Targets.around(p, r, looked(p, Math.max(r, 8))) : List.of();
         // no recharge: the powers are yours to use as often as you like
@@ -320,17 +322,6 @@ public final class Powers {
                 note(p, "SCP-999's joy reaches " + n + ".");
                 return true;
             }
-            case "stasis" -> {
-                for (LivingEntity e : tg) {
-                    e.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 200, 9, false, false));
-                    e.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 200, 4, false, false));
-                    if (e instanceof Mob m) { m.setTarget(null); m.getNavigation().stop(); }
-                    l.sendParticles(ParticleTypes.SNOWFLAKE, e.getX(), e.getY() + e.getBbHeight() / 2, e.getZ(), 12, 0.3, 0.5, 0.3, 0.01);
-                }
-                ring(l, me, r, ParticleTypes.SNOWFLAKE);
-                l.playSound(null, p.blockPosition(), SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1F, 0.6F);
-                return true;
-            }
             case "reveal" -> {
                 int n = 0;
                 for (Mob m : l.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(r), Unleashed::isAnomaly)) {
@@ -434,5 +425,6 @@ public final class Powers {
         t.put("pcd", cd);
         t.put("auto", p.getPersistentData().getCompound(AUTO).copy());
         Targets.addToSync(p, t);
+        Toggles.addToSync(p, t);
     }
 }
