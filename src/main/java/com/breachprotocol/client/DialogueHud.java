@@ -46,7 +46,7 @@ public final class DialogueHud {
     @SubscribeEvent
     public static void tick(ClientTickEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        while (ANSWER.consumeClick()) if (mc.screen == null && pending()) mc.setScreen(DialogueScreen.open(hud));
+        // the key itself is read by CommandStance: a tap answers, a hold commands
         if (mc.player == null) hud = null;
     }
 

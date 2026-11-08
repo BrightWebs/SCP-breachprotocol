@@ -975,6 +975,7 @@ public final class Career {
         Contacts.addToSync(p, t);
         Sites.addToSync(p, t);
         Containment.addToSync(p, t);
+        Dominion.addToSync(p, t);
         t.putInt("trial", data(p).trial);
         t.putInt("trialKills", data(p).trialKills);
         if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) Forces.addToSync(p, t);

@@ -168,8 +168,8 @@ public final class CareerEvents {
                 && Unleashed.isAnomaly(target) && !(target instanceof O5MemberEntity)) {
             event.setAmount(event.getAmount() * 8F); // nothing in the Foundation can survive its master
         }
-        if (target instanceof Player p && Career.isAscended(p)) {
-            // Nothing in the Foundation's care may harm its master.
+        if (target instanceof Player p && Career.isAscended(p) && Dominion.sovereign(p)) {
+            // Nothing in the Foundation's care may harm its master (unless they've chosen to go unmasked).
             net.minecraft.world.entity.Entity any = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
             if (any != null && (Unleashed.isAnomaly(any) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(any) || com.breachprotocol.compat.UnleashedApi.isRift(any)))
                 p.getPersistentData().putLong("bp_anomaly_hit", p.level().getGameTime());
@@ -201,7 +201,7 @@ public final class CareerEvents {
 
     @SubscribeEvent
     public static void onTarget(LivingChangeTargetEvent event) {
-        if (Unleashed.isAnomaly(event.getEntity()) && event.getNewAboutToBeSetTarget() instanceof Player p && Career.isAscended(p)) {
+        if (Unleashed.isAnomaly(event.getEntity()) && event.getNewAboutToBeSetTarget() instanceof Player p && Career.isAscended(p) && Dominion.sovereign(p)) {
             event.setCanceled(true);
         }
     }
