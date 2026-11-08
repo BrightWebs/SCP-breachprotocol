@@ -16,6 +16,8 @@ public class StaffNavigation extends GroundPathNavigation {
         super(mob, level);
         setCanOpenDoors(true);
         setCanPassDoors(true);
+        // the facility is a maze of rooms: let the planner look further before it gives up
+        setMaxVisitedNodesMultiplier(4F);
     }
 
     @Override

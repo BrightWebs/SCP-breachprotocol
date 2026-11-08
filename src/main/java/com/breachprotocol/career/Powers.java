@@ -90,7 +90,7 @@ public final class Powers {
     }
 
     /** How often an automatic power fires. Repel, left on, is a shield: it keeps everything hostile out of its circle. */
-    private static int autoEvery(Power pw) { return pw.id().equals("repel") ? 10 : pw.cooldown(); }
+    private static int autoEvery(Power pw) { return pw.id().equals("repel") ? 10 : 20; }
 
     private static final String AUTO = "bp_auto";
 
@@ -98,18 +98,11 @@ public final class Powers {
         Power pw = get(id);
         if (pw == null || Dominion.level(p) < pw.minLevel()) return;
         ServerLevel l = p.serverLevel();
-        long now = l.getGameTime(), ready = p.getPersistentData().getLong("bp_pcd_" + id);
-        if (now < ready) {
-            p.displayClientMessage(Component.literal(pw.name() + " is recharging: " + (ready - now + 19) / 20 + "s.").withStyle(ChatFormatting.GRAY), true);
-            return;
-        }
         int r = clamp(pw, range);
         // by hand: everything hostile in range, and whatever you're looking at, spared or not
         List<LivingEntity> tg = pw.aim() == Aim.AROUND ? Targets.around(p, r, looked(p, Math.max(r, 8))) : List.of();
-        if (fire(p, l, pw, r, tg, false)) {
-            p.getPersistentData().putLong("bp_pcd_" + id, now + pw.cooldown());
-            Career.sync(p);
-        }
+        // no recharge: the powers are yours to use as often as you like
+        fire(p, l, pw, r, tg, false);
     }
 
     private static int clamp(Power pw, int range) { return pw.rMax() == 0 ? 0 : Math.max(pw.rMin(), Math.min(pw.rMax(), range)); }
@@ -171,7 +164,7 @@ public final class Powers {
                 };
                 if (!due || !fire(p, l, pw, r, tg, true)) continue;
                 p.getPersistentData().putLong("bp_pcd_" + id, now + autoEvery(pw));
-                changed |= autoEvery(pw) > 20;
+
             }
             if (changed) Career.sync(p);
         }

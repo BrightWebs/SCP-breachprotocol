@@ -171,7 +171,7 @@ public class CommandScreen extends Screen {
         small(g, p.source().toUpperCase(java.util.Locale.ROOT), dx + 34, yy + 15, col);
         yy += 32;
         yy = wrap(g, p.about(), dx, yy, dw, 0xFFC8C0D8) + 4;
-        small(g, "RECHARGE " + p.cooldown() / 20 + "S" + (p.rMax() > 0 ? "  ·  RANGE " + p.rMin() + "-" + p.rMax() + "M" : "") + "  ·  "
+        small(g, "NO RECHARGE" + (p.rMax() > 0 ? "  ·  RANGE " + p.rMin() + "-" + p.rMax() + "M" : "") + "  ·  "
                 + switch (p.aim()) { case AROUND -> "ALL AROUND YOU"; case LOOK_POINT -> "WHERE YOU LOOK"; case LOOK_TARGET -> "WHAT YOU LOOK AT"; default -> "YOU"; }, dx, yy, MUTED);
         yy += 12;
         if (!own) {

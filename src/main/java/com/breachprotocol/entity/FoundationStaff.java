@@ -251,34 +251,86 @@ public class FoundationStaff extends PathfinderMob implements Person {
     public void travel(BlockPos to, boolean sleep) {
         goal = to;
         sleepAtGoal = sleep;
+        seatAtGoal = false;
+        bestD = Double.MAX_VALUE;
+        stuck = 0;
         clearRestriction();
         Seats.stand(this);
     }
 
+    /** Checked once a second while travelling: how close they've come, and for how long they haven't got closer. */
+    private boolean seatAtGoal;
+    private double bestD = Double.MAX_VALUE;
+    private int stuck;
+    private BlockPos leg;
+
     private void travelTick() {
         if (goal == null) return;
+        if (Seats.seated(this)) Seats.stand(this);
         BlockPos o = tower();
         BlockPos target = goal;
         if (o != null) {
             int here = stop(o, blockPosition()), there = stop(o, goal);
             if (here != there) {
                 BlockPos car = o.offset(com.breachprotocol.world.SiteTower.liftCar(here));
-                if (distanceToSqr(car.getX() + 0.5, car.getY(), car.getZ() + 0.5) < 2.2) {
+                double dc = distanceToSqr(car.getX() + 0.5, car.getY(), car.getZ() + 0.5);
+                // in the car, or at its door and not getting any closer: ride
+                if (dc < 3.0 || dc < 9 && stuck >= 3) {
                     if (!Lift.carry(this, o, there)) { goal = null; return; } // not cleared for that floor
+                    bestD = Double.MAX_VALUE;
+                    stuck = 0;
                     return;
                 }
                 target = car;
             }
         }
+        if (!target.equals(leg)) { leg = target; bestD = Double.MAX_VALUE; stuck = 0; }
         double d = distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
-        if (target == goal && d < (sleepAtGoal ? 4 : 6)) {
-            BlockPos g = goal;
-            goal = null;
-            if (sleepAtGoal) sleepIn(g);
-            else restrictTo(g, activity.equals("work") ? 12 : 6);
+        if (target == goal && d < (sleepAtGoal ? 4 : 6)) { arrive(); return; }
+        if (d < bestD - 1.5) { bestD = d; stuck = 0; } else stuck++;
+        if (stuck >= 10 && !watched()) {
+            // hopelessly stuck (a blocked corridor, furniture someone moved) and nobody's looking: they find their way
+            teleportTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
+            getNavigation().stop();
+            bestD = Double.MAX_VALUE;
+            stuck = 0;
+            if (target == goal) arrive();
             return;
         }
-        if (getNavigation().isDone() || tickCount % 60 == 0) getNavigation().moveTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5, 0.85);
+        var nav = getNavigation();
+        if (nav.isDone() || stuck == 3 || stuck == 6 || tickCount % 60 == 0) {
+            var path = nav.createPath(target, 0);
+            if (path != null && !path.canReach() && stuck >= 3 && path.getEndNode() != null && path.getNodeCount() > 1) {
+                // no full route yet: walk as far as the planner can see, then plan again from there
+                nav.moveTo(path, 0.9);
+            } else if (path != null) nav.moveTo(path, 0.9);
+            else nav.moveTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5, 0.9);
+        }
+    }
+
+    private void arrive() {
+        BlockPos g = goal;
+        goal = null;
+        stuck = 0;
+        if (sleepAtGoal) { sleepIn(g); return; }
+        restrictTo(g, activity.equals("work") ? (role() == Role.SECRETARY ? 6 : 12) : 6);
+        if (seatAtGoal) {
+            seatAtGoal = false;
+            BlockPos best = null;
+            double bd = 10;
+            for (BlockPos q : BlockPos.betweenClosed(g.offset(-3, -1, -3), g.offset(3, 1, 3))) {
+                if (!Seats.isSeat(level().getBlockState(q)) || Seats.occupied(level(), q)) continue;
+                double dd = q.distSqr(g);
+                if (dd < bd) { bd = dd; best = q.immutable(); }
+            }
+            if (best != null) { sitTarget = best; sitTries = 0; }
+        }
+    }
+
+    /** Someone close enough to see a person step through a wall. */
+    private boolean watched() {
+        for (Player p : level().players()) if (!p.isSpectator() && p.distanceToSqr(this) < 24 * 24 && p.hasLineOfSight(this)) return true;
+        return false;
     }
 
     private void sleepIn(BlockPos bed) {
@@ -594,7 +646,18 @@ public class FoundationStaff extends PathfinderMob implements Person {
         switch (what) {
             case "follow" -> { if (p == null) return; mode = "follow"; leader = p.getUUID(); clearRestriction(); Seats.stand(this); }
             case "stay" -> { mode = "stay"; stayAt = blockPosition(); restrictTo(stayAt, 1); getNavigation().stop(); }
-            case "post" -> { mode = "post"; leader = null; if (post != null) { restrictTo(post, 12); getNavigation().moveTo(post.getX() + 0.5, post.getY(), post.getZ() + 0.5, 0.9); } }
+            case "post" -> {
+                mode = "post";
+                leader = null;
+                sitTarget = null;
+                setSprinting(false);
+                if (post != null) {
+                    // the same way they get anywhere: doors they're cleared for, the lift between floors
+                    activity = "work";
+                    travel(post, false);
+                    seatAtGoal = role() == Role.SECRETARY; // back behind her desk
+                }
+            }
             case "sit" -> {
                 mode = "stay";
                 BlockPos c = blockPosition(), best = null;

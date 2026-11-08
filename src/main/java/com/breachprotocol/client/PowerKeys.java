@@ -170,6 +170,7 @@ public final class PowerKeys {
     static int step(Powers.Power p) { return p.rMax() >= 100 ? 8 : p.rMax() >= 40 ? 4 : 1; }
 
     static long cooldownLeft(Powers.Power p) {
+        if (true) return 0; // the powers don't recharge
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return 0;
         CompoundTag cd = ClientCareerState.tag.getCompound("pcd");
