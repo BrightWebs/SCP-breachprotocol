@@ -25,6 +25,8 @@ import java.util.List;
  *     you be, or fearing you (SCP-Ω).</li>
  * <li><b>Powers</b>: every power you hold, where it comes from, its range, and the two slots it can
  *     go in; where the slots sit on screen.</li>
+ * <li><b>Targets</b>: what your powers count as hostile: the world's rule or everything, and any
+ *     kind of creature, or any player, marked hostile or spared.</li>
  * <li><b>Orders</b>: for everything around you at once.</li>
  * </ul>
  */
@@ -65,7 +67,7 @@ public class CommandScreen extends Screen {
         g.drawString(font, title, x + 10, y + 6, ac, false);
         small(g, dom >= 2 ? "EVERYTHING THAT LIVES ANSWERS TO YOU" : "FOUNDATION STAFF AND ANOMALIES ANSWER TO YOU", x + 10, y + 17, MUTED);
         // tabs
-        String[] tabs = {"Temperament", "Powers", "Orders"};
+        String[] tabs = {"Temperament", "Powers", "Targets", "Orders"};
         int tx = x + pw - 10;
         for (int i = tabs.length - 1; i >= 0; i--) {
             int w = font.width(tabs[i]) + 14;
@@ -81,7 +83,8 @@ public class CommandScreen extends Screen {
         int cx = x + 10, cy = y + 34, cw = pw - 20, ch = ph - 44;
         switch (tab) {
             case 0 -> temperament(g, cx, cy, cw, ch, mx, my, dom);
-            case 2 -> orders(g, cx, cy, cw, ch, mx, my);
+            case 2 -> targets(g, cx, cy, cw, ch, mx, my);
+            case 3 -> orders(g, cx, cy, cw, ch, mx, my);
             default -> powers(g, cx, cy, cw, ch, mx, my, dom);
         }
     }
@@ -206,7 +209,18 @@ public class CommandScreen extends Screen {
             String key = PowerKeys.SLOTS[i].getTranslatedKeyMessage().getString();
             button(g, dx + i * (sw + 4), yy, sw, 16, (here ? "✓ " : "") + "Slot " + (i + 1) + " [" + key + "]", here, col, mx, my, () -> PowerKeys.setSlot(n, p));
         }
-        yy += 22;
+        yy += 20;
+        // left on
+        if (Powers.automatic(p)) {
+            boolean on = PowerKeys.auto(p);
+            button(g, dx, yy, dw, 15, on ? "● Automatic: on" + (p.rMax() > 0 ? ", " + PowerKeys.range(p) + "m" : "") : "○ Automatic: off", on, col, mx, my, () -> PowerKeys.setAuto(p, !PowerKeys.auto(p)));
+            yy += 17;
+            small(g, p.id().equals("repel") ? "A SHIELD: NOTHING HOSTILE STAYS INSIDE THE CIRCLE." : p.id().equals("embrace") ? "FIRES WHEN YOU DROP BELOW 60% HEALTH." : "FIRES BY ITSELF WHENEVER IT'S READY AND SOMETHING HOSTILE IS IN RANGE.", dx, yy, MUTED);
+            yy += 10;
+        } else {
+            small(g, "BY HAND ONLY: IT NEEDS YOU TO AIM IT.", dx, yy + 2, DIM);
+            yy += 14;
+        }
         // the slots as they'll look, and where they sit
         small(g, "ON SCREEN", dx, yy, MUTED);
         yy += 9;
@@ -222,7 +236,7 @@ public class CommandScreen extends Screen {
                 else { PowerKeys.setHidden(false); PowerKeys.setAnchor(n); }
             });
         }
-        small(g, "TAP A SLOT KEY TO USE IT  ·  HOLD + SCROLL: SWAP POWER  ·  HOLD + SHIFT + SCROLL: RANGE", x, y + h - 4, DIM);
+        small(g, "TAP: USE  ·  SHIFT+TAP: AUTO ON/OFF  ·  HOLD+SCROLL: SWAP  ·  HOLD+SHIFT+SCROLL: RANGE", x, y + h - 4, DIM);
     }
 
     private static String slotTag(Powers.Power p) {
@@ -230,6 +244,138 @@ public class CommandScreen extends Screen {
         for (int i = 0; i < 2; i++) if (PowerKeys.slot(i) == p) s += (s.isEmpty() ? "" : " ") + PowerKeys.SLOTS[i].getTranslatedKeyMessage().getString();
         return s;
     }
+
+    // ---------------------------------------------------------------- targets
+
+    private static int scroll;
+    private static String query = "";
+
+    private static CompoundTag tgt() { return t().getCompound("tgt"); }
+
+    private static void mark(boolean player, String key, byte v) {
+        send("pow:" + (player ? "player" : "type") + ":" + v + ":" + key);
+        // show it at once; the server's sync confirms it
+        CompoundTag tg = tgt(), m = tg.getCompound(player ? "players" : "types");
+        if (v == 0) m.remove(key);
+        else if (player) { CompoundTag e = m.getCompound(key); e.putByte("v", v); m.put(key, e); }
+        else m.putByte(key, v);
+        tg.put(player ? "players" : "types", m);
+        t().put("tgt", tg);
+    }
+
+    private void targets(GuiGraphics g, int x, int y, int w, int h, int mx, int my) {
+        boolean all = tgt().getBoolean("all");
+        // the rule
+        String[][] modes = {
+                {"◐", "The world decides", "Monsters, whatever hunts you, loose anomalies."},
+                {"●", "Everything is hostile", "All of it, players too, unless you spare it."}};
+        int bw = (w - 4) / 2;
+        for (int i = 0; i < 2; i++) {
+            int bx = x + i * (bw + 4);
+            boolean on = all == (i == 1), hov = in(mx, my, bx, y, bw, 28);
+            int col = i == 0 ? 0xFF9A90B8 : 0xFFE05050;
+            g.fill(bx, y, bx + bw, y + 28, on ? col & 0x50FFFFFF | 0x50000000 : hov ? 0x20FFFFFF : PANEL);
+            frame(g, bx, y, bw, 28, on ? col : LINE);
+            g.drawString(font, modes[i][0], bx + 7, y + 10, on ? col : MUTED, false);
+            g.drawString(font, modes[i][1], bx + 20, y + 5, on ? TEXT : MUTED, false);
+            small(g, modes[i][2], bx + 20, y + 17, on ? 0xFFC8C0D8 : DIM);
+            final String act = "pow:mode:" + i;
+            final boolean to = i == 1;
+            hits.add(new Hit(bx, y, bw, 28, () -> { send(act); CompoundTag tg = tgt(); tg.putBoolean("all", to); t().put("tgt", tg); }));
+        }
+        int top = y + 34, bottom = y + h - 12, rowH = 13;
+        int lw = (int) (w * 0.62F), rx = x + lw + 8, rw = w - lw - 8;
+        // ---- creatures
+        small(g, "CREATURES", x, top + 3, MUTED);
+        int sx = x + 48, sw = lw - 48;
+        g.fill(sx, top, sx + sw, top + 11, 0xFF0E0A14);
+        frame(g, sx, top, sw, 11, query.isEmpty() ? LINE : accent());
+        small(g, query.isEmpty() ? "TYPE TO SEARCH" : query + ((System.currentTimeMillis() / 400) % 2 == 0 ? "_" : ""), sx + 4, top + 3, query.isEmpty() ? DIM : TEXT);
+        List<String> rows = creatureRows();
+        int listTop = top + 15, fit = (bottom - listTop) / rowH;
+        scroll = Math.max(0, Math.min(scroll, Math.max(0, rows.size() - fit)));
+        CompoundTag types = tgt().getCompound("types");
+        for (int i = 0; i < fit && i + scroll < rows.size(); i++) {
+            String k = rows.get(i + scroll);
+            int ry = listTop + i * rowH;
+            var type = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(net.minecraft.resources.ResourceLocation.parse(k));
+            String nm = type.getDescription().getString();
+            boolean near = PowerKeys.nearby().contains(k);
+            if (in(mx, my, x, ry, lw, rowH)) g.fill(x, ry, x + lw, ry + rowH, 0x14FFFFFF);
+            g.drawString(font, font.plainSubstrByWidth(nm, lw - 96), x + 4, ry + 3, 0xFFC8C0D8, false);
+            if (near) small(g, "NEARBY", x + 4 + Math.min(font.width(nm), lw - 96) + 4, ry + 4, 0xFF70C090);
+            byte v = types.getByte(k);
+            pill(g, x + lw - 84, ry + 1, 82, v, v == 0 ? (byNature(k, type, all) ? "HOSTILE" : "LEFT ALONE") : null, mx, my, () -> mark(false, k, (byte) ((v + 1) % 3)));
+        }
+        if (rows.isEmpty()) small(g, query.isEmpty() ? "NOTHING SEEN YET." : "NO CREATURE CALLED THAT.", x + 4, listTop + 4, DIM);
+        if (rows.size() > fit) {
+            int th = Math.max(10, (bottom - listTop) * fit / rows.size()), ty = listTop + (bottom - listTop - th) * scroll / Math.max(1, rows.size() - fit);
+            g.fill(x + lw + 2, listTop, x + lw + 3, bottom, 0x20FFFFFF);
+            g.fill(x + lw + 1, ty, x + lw + 4, ty + th, accent());
+        }
+        // ---- players
+        small(g, "PLAYERS", rx, top + 3, MUTED);
+        CompoundTag pm = tgt().getCompound("players");
+        List<String[]> ps = new ArrayList<>();
+        Minecraft mc = Minecraft.getInstance();
+        java.util.Set<String> listed = new java.util.HashSet<>();
+        if (mc.getConnection() != null) for (var info : mc.getConnection().getOnlinePlayers()) {
+            if (mc.player != null && info.getProfile().getId().equals(mc.player.getUUID())) continue;
+            ps.add(new String[]{info.getProfile().getId().toString(), info.getProfile().getName(), "1"});
+            listed.add(info.getProfile().getId().toString());
+        }
+        for (String k : pm.getAllKeys()) if (!listed.contains(k)) ps.add(new String[]{k, pm.getCompound(k).getString("n"), "0"});
+        int py = listTop;
+        for (String[] q : ps) {
+            if (py + rowH > bottom) break;
+            byte v = pm.getCompound(q[0]).getByte("v");
+            g.drawString(font, font.plainSubstrByWidth(q[1].isEmpty() ? "Someone" : q[1], rw - 70), rx + 2, py + 3, q[2].equals("1") ? 0xFFC8C0D8 : DIM, false);
+            pill(g, rx + rw - 64, py + 1, 64, v, v == 0 ? (all ? "HOSTILE" : "LEFT ALONE") : null, mx, my, () -> mark(true, q[0], (byte) ((v + 1) % 3)));
+            py += rowH;
+        }
+        if (ps.isEmpty()) wrap(g, "No one else is here.", rx + 2, listTop + 3, rw, DIM);
+        small(g, "MARKS WIN.  WHAT YOU LOOK AT WHEN YOU USE A POWER BY HAND IS HIT, SPARED OR NOT.", x, y + h - 4, DIM);
+    }
+
+    /** One mark: unmarked (what the rule says, dim), hostile (red) or spared (green). Click to cycle. */
+    private void pill(GuiGraphics g, int x, int y, int w, byte v, String byRule, int mx, int my, Runnable cycle) {
+        int col = v == 1 ? 0xFFE05050 : v == 2 ? 0xFF60C080 : 0xFF5A5470;
+        String label = v == 1 ? "■ HOSTILE" : v == 2 ? "■ SPARED" : "· " + byRule;
+        boolean hov = in(mx, my, x, y, w, 11);
+        g.fill(x, y, x + w, y + 11, v == 0 ? (hov ? 0x30FFFFFF : 0x00000000) : col & 0x40FFFFFF | 0x40000000);
+        frame(g, x, y, w, 11, hov ? 0x90FFFFFF : col);
+        small(g, label, x + w / 2 - (int) (font.width(label) * 0.375F), y + 3, v == 0 ? MUTED : col);
+        hits.add(new Hit(x, y, w, 11, cycle));
+    }
+
+    /** What the rule alone makes of a kind of creature (roughly: the server decides per creature). */
+    private static boolean byNature(String k, net.minecraft.world.entity.EntityType<?> type, boolean all) {
+        if (k.startsWith("breachprotocol:")) return false;
+        if (all) return true;
+        return type.getCategory() == net.minecraft.world.entity.MobCategory.MONSTER || k.startsWith("scp_unleashed:scp");
+    }
+
+    /** Marked first, then nearby, then everything else you've seen, or everything that matches the search. */
+    private static List<String> creatureRows() {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        CompoundTag types = tgt().getCompound("types");
+        String q = query.trim().toLowerCase(java.util.Locale.ROOT);
+        java.util.function.Predicate<String> ok = k -> {
+            var id = net.minecraft.resources.ResourceLocation.tryParse(k);
+            if (id == null || !net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.containsKey(id)) return false;
+            if (k.equals("breachprotocol:npc_seat")) return false;
+            return q.isEmpty() || k.contains(q) || net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.get(id).getDescription().getString().toLowerCase(java.util.Locale.ROOT).contains(q);
+        };
+        for (String k : types.getAllKeys()) if (ok.test(k)) out.add(k);
+        for (String k : PowerKeys.nearby()) if (ok.test(k)) out.add(k);
+        for (String k : PowerKeys.seen()) if (ok.test(k)) out.add(k);
+        if (!q.isEmpty()) for (var e : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE) {
+            String k = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e).toString();
+            if ((e.getCategory() != net.minecraft.world.entity.MobCategory.MISC || k.startsWith("scp_unleashed:") || k.startsWith("breachprotocol:") || k.startsWith("mca:")) && ok.test(k)) out.add(k);
+        }
+        return new ArrayList<>(out);
+    }
+
 
     // ---------------------------------------------------------------- orders
 
@@ -304,12 +450,22 @@ public class CommandScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
         Powers.Power p = Powers.get(selected);
+        if (tab == 2) { scroll = Math.max(0, scroll - (int) Math.signum(sy) * (Screen.hasShiftDown() ? 5 : 1)); return true; }
         if (tab == 1 && p != null && p.rMax() > 0) { PowerKeys.setRange(p, PowerKeys.range(p) + (sy > 0 ? 1 : -1) * PowerKeys.step(p)); return true; }
         return super.mouseScrolled(mx, my, sx, sy);
     }
 
     @Override
+    public boolean charTyped(char c, int mods) {
+        if (tab == 2 && query.length() < 24 && (Character.isLetterOrDigit(c) || c == ' ' || c == '_' || c == '-')) { query += c; scroll = 0; return true; }
+        return super.charTyped(c, mods);
+    }
+
+    @Override
     public boolean keyPressed(int key, int scan, int mods) {
+        if (tab == 2 && key == org.lwjgl.glfw.GLFW.GLFW_KEY_BACKSPACE) { if (!query.isEmpty()) query = query.substring(0, query.length() - 1); scroll = 0; return true; }
+        // on the Targets tab letters are for the search, the answer key's included: Esc closes
+        if (tab == 2 && key != org.lwjgl.glfw.GLFW.GLFW_KEY_ESCAPE) return super.keyPressed(key, scan, mods);
         if (DialogueHud.ANSWER.matches(key, scan)) { CommandStance.suppress = true; onClose(); return true; }
         return super.keyPressed(key, scan, mods);
     }

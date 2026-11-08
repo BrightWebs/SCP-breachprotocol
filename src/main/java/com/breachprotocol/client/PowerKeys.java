@@ -100,7 +100,50 @@ public final class PowerKeys {
         catch (NumberFormatException e) { return p.rDef(); }
     }
 
-    static void setRange(Powers.Power p, int r) { load(); CFG.setProperty("range." + p.id(), String.valueOf(Math.max(p.rMin(), Math.min(p.rMax(), r)))); save(); }
+    static void setRange(Powers.Power p, int r) {
+        load();
+        int was = range(p);
+        CFG.setProperty("range." + p.id(), String.valueOf(Math.max(p.rMin(), Math.min(p.rMax(), r))));
+        save();
+        if (auto(p) && range(p) != was) PacketDistributor.sendToServer(new PhoneActionPayload("pow:auto:" + p.id() + ":1:" + range(p), 0));
+    }
+
+    // ---------------------------------------------------------------- auto (kept on the server, mirrored here)
+
+    static boolean auto(Powers.Power p) { return p != null && ClientCareerState.tag.getCompound("auto").contains(p.id()); }
+
+    static void setAuto(Powers.Power p, boolean on) {
+        if (p == null || !Powers.automatic(p)) return;
+        PacketDistributor.sendToServer(new PhoneActionPayload("pow:auto:" + p.id() + ":" + (on ? 1 : 0) + ":" + range(p), 0));
+        // show it at once; the server's sync confirms it
+        CompoundTag a = ClientCareerState.tag.getCompound("auto");
+        if (on) a.putInt(p.id(), range(p)); else a.remove(p.id());
+        ClientCareerState.tag.put("auto", a);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) mc.player.playSound(on ? SoundEvents.BEACON_ACTIVATE : SoundEvents.BEACON_DEACTIVATE, 0.35F, 1.6F);
+    }
+
+    // ---------------------------------------------------------------- creatures you've come across (for the Targets tab)
+
+    private static final java.util.Set<String> SEEN = new java.util.LinkedHashSet<>(), NEARBY = new java.util.HashSet<>();
+
+    static java.util.Set<String> seen() { load(); if (SEEN.isEmpty()) for (String k : CFG.getProperty("seen", "").split(",")) if (!k.isBlank()) SEEN.add(k); return SEEN; }
+
+    static java.util.Set<String> nearby() { return NEARBY; }
+
+    private static void look(Minecraft mc) {
+        NEARBY.clear();
+        boolean grew = false;
+        java.util.Set<String> s = seen();
+        for (net.minecraft.world.entity.Entity e : mc.level.entitiesForRendering()) {
+            if (!(e instanceof net.minecraft.world.entity.LivingEntity) || e instanceof net.minecraft.world.entity.player.Player
+                    || e instanceof net.minecraft.world.entity.decoration.ArmorStand) continue;
+            String k = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString();
+            if (e.distanceToSqr(mc.player) < 48 * 48) NEARBY.add(k);
+            grew |= s.add(k);
+        }
+        if (grew) { CFG.setProperty("seen", String.join(",", s)); save(); }
+    }
 
     /** Where the slots sit: 0 bottom right, 1 bottom left, 2 right side, 3 top right, 4 top left. */
     static int anchor() { load(); try { return Integer.parseInt(CFG.getProperty("anchor", "0")); } catch (NumberFormatException e) { return 0; } }
@@ -132,6 +175,7 @@ public final class PowerKeys {
         Minecraft mc = Minecraft.getInstance();
         if (flash0 > 0) flash0--;
         if (flash1 > 0) flash1--;
+        if (mc.level != null && mc.player != null && mc.player.tickCount % 40 == 0) look(mc);
         for (int i = 0; i < 2; i++) {
             KeyMapping k = SLOTS[i];
             while (k.consumeClick()) { }
@@ -139,7 +183,11 @@ public final class PowerKeys {
             boolean down = k.isDown() && mc.screen == null;
             if (down) held[i]++;
             else if (held[i] > 0) {
-                if (!adjusted[i] && held[i] < HOLD + 4) use(i);
+                if (!adjusted[i] && held[i] < HOLD + 4) {
+                    Powers.Power p = slot(i);
+                    if (Screen.hasShiftDown() && p != null && Powers.automatic(p)) setAuto(p, !auto(p));
+                    else use(i);
+                }
                 held[i] = 0;
                 adjusted[i] = false;
             }
@@ -216,7 +264,15 @@ public final class PowerKeys {
         // body
         g.fill(x, y, x + s, y + s, 0xC0100A16);
         g.fill(x + 1, y + 1, x + s - 1, y + s - 1, flash ? 0x60000000 | (col & 0xFFFFFF) : 0x9018101E);
+        boolean on = auto(p);
         int edge = holdingThis ? 0xFFFFFFFF : col;
+        if (on) {
+            // left on: the frame breathes
+            float t = (System.currentTimeMillis() % 1600) / 1600F, a = 0.45F + 0.55F * (float) Math.abs(Math.sin(t * Math.PI));
+            edge = ((int) (a * 255) << 24) | (col & 0xFFFFFF);
+            g.fill(x - 1, y - 1, x + s + 1, y, edge); g.fill(x - 1, y + s, x + s + 1, y + s + 1, edge);
+            g.fill(x - 1, y - 1, x, y + s + 1, edge); g.fill(x + s, y - 1, x + s + 1, y + s + 1, edge);
+        }
         g.fill(x, y, x + s, y + 1, edge); g.fill(x, y + s - 1, x + s, y + s, edge);
         g.fill(x, y, x + 1, y + s, edge); g.fill(x + s - 1, y, x + s, y + s, edge);
         // corner notches, the mod's terminal look
@@ -234,6 +290,10 @@ public final class PowerKeys {
         if (key.length() > 3) key = key.substring(0, 3);
         g.drawString(f, key, x + s - 3 - f.width(key), y + 3, 0xFFD8D0E8, false);
         if (p.rMax() > 0) small(g, f, range(p) + "m", x + 3, y + s - 9, 0xFFB8B0C8);
+        if (on) {
+            g.fill(x + s - 22, y + s - 10, x + s - 2, y + s - 2, col);
+            small(g, f, "AUTO", x + s - 20, y + s - 8, 0xFF0A0710);
+        }
         // cooldown: a shutter that rises as it recharges
         long left = cooldownLeft(p);
         if (left > 0) {
@@ -252,7 +312,7 @@ public final class PowerKeys {
         if (p == null) return;
         List<Powers.Power> own = owned();
         int at = own.indexOf(p);
-        int w = 170, h = 64, x = Math.max(4, Math.min(W - w - 4, sx + s / 2 - w / 2)), y = sy - h - 6;
+        int w = 200, h = 64, x = Math.max(4, Math.min(W - w - 4, sx + s / 2 - w / 2)), y = sy - h - 6;
         if (y < 4) y = sy + s + 16;
         g.fill(x, y, x + w, y + h, 0xE0100A16);
         g.fill(x, y, x + w, y + 1, 0xFF000000 | p.colour());
@@ -266,7 +326,7 @@ public final class PowerKeys {
             g.fill(x + 6, y + 36, x + 6 + (int) (bw * (r - p.rMin()) / (float) Math.max(1, p.rMax() - p.rMin())), y + 39, 0xFF000000 | p.colour());
             small(g, f, "RANGE " + r + "M  (" + p.rMin() + "-" + p.rMax() + ")", x + 6, y + 42, 0xFFB8B0C8);
         }
-        small(g, f, "SCROLL: POWER  ·  SHIFT+SCROLL: RANGE", x + 6, y + 54, 0xFF6A6080);
+        small(g, f, "SCROLL: POWER  ·  SHIFT+SCROLL: RANGE" + (Powers.automatic(p) ? "  ·  SHIFT+TAP: AUTO" : ""), x + 6, y + 54, 0xFF6A6080);
     }
 
     static void small(GuiGraphics g, Font f, String s, int x, int y, int c) {

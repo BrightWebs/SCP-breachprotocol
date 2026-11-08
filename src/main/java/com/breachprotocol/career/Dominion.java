@@ -209,7 +209,7 @@ public final class Dominion {
         l.playSound(null, at.x, at.y, at.z, SoundEvents.WARDEN_SONIC_BOOM, SoundSource.HOSTILE, 0.6F, 1.6F);
         e.hurt(l.damageSources().genericKill(), Float.MAX_VALUE);
         if (e.isAlive()) { e.setHealth(0); e.die(l.damageSources().genericKill()); }
-        if (e.isAlive()) e.discard();
+        if (e.isAlive() && !(e instanceof net.minecraft.world.entity.player.Player)) e.discard();
         tell(p, n + " is no more.");
     }
 
