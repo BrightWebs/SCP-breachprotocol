@@ -28,7 +28,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  * The command key (V by default), for the Administrator and SCP-Ω.
  *
  * <ul>
- * <li><b>Tap</b>: answer whoever is waiting on you (as before); otherwise the Dominion console.</li>
+ * <li><b>Tap</b>: answer whoever is waiting on you (your secretary, the Council). <b>Shift + tap</b>: the console.</li>
  * <li><b>Hold</b>: the command stance. Whatever living thing you look at is marked; scroll to choose an
  *     order (Calm, Follow, Stay, Hunt, Release, End) and left-click to give it. Hunt asks for its prey:
  *     look at it and click. Right-click cancels. While the key is held, clicks and the scroll wheel
@@ -48,6 +48,7 @@ public final class CommandStance {
     private static final int[] COLOURS = {0x7FE0A0, 0x9FD8FF, 0xC8D0DA, 0xFFB050, 0xB8B8B8, 0xFF5A5A};
 
     private static int held, sel;
+    private static boolean shiftAtPress;
     /** The key closed a screen: ignore it until it's let go. */
     static boolean suppress;
     private static boolean acted, active;
@@ -68,18 +69,19 @@ public final class CommandStance {
         }
         boolean down = DialogueHud.ANSWER.isDown() && mc.screen == null;
         while (DialogueHud.ANSWER.consumeClick()) { /* handled by press and release below */ }
-        if (down) held++;
+        if (down) { if (held == 0) shiftAtPress = net.minecraft.client.gui.screens.Screen.hasShiftDown(); held++; }
         else if (held > 0) {
             if (!acted && held < HOLD) {
-                if (DialogueHud.pending()) mc.setScreen(DialogueScreen.open(DialogueHud.hud));
-                else if (dom() > 0) mc.setScreen(new CommandScreen());
+                // Shift + the key: the console. The key alone: answer whoever's waiting (your secretary, the Council)
+                if (shiftAtPress && dom() > 0) mc.setScreen(new CommandScreen());
+                else if (DialogueHud.pending()) mc.setScreen(DialogueScreen.open(DialogueHud.hud));
             }
             held = 0;
             acted = false;
             huntSubject = -1;
         }
         boolean was = active;
-        active = down && held >= HOLD && dom() > 0;
+        active = down && held >= HOLD && dom() > 0 && !shiftAtPress;
         if (active && !was) mc.player.playSound(SoundEvents.AMETHYST_BLOCK_RESONATE, 0.5F, 0.6F);
         looked = active ? aim(mc) : null;
         if (looked != null && mc.level != null && mc.level.getGameTime() % 3 == 0) {

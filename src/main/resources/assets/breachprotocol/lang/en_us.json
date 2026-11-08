@@ -35,7 +35,7 @@
   "block.breachprotocol.fruit_grapes": "Grapes",
   "block.breachprotocol.fruit_life": "Fruit of Life",
   "block.breachprotocol.fruit_knowledge": "Fruit of Knowledge",
-  "key.breachprotocol.answer": "Answer the Council",
+  "key.breachprotocol.answer": "Answer / command (Shift: console)",
   "key.categories.breachprotocol": "Breach Protocol",
   "block.breachprotocol.admin_terminal": "Administrator's Terminal",
   "dialogue.main.foundation": "The facility",
@@ -209,5 +209,7 @@
   "dialogue.foundation.re.app_breach.right": "That's the right answer.",
   "dialogue.foundation.re.app_breach.wrong": "No. You'd follow procedure.",
   "dialogue.foundation.re.app_breach.menu": "Something else",
-  "dialogue.foundation.menu": "..."
+  "dialogue.foundation.menu": "...",
+  "key.breachprotocol.power1": "Power slot 1",
+  "key.breachprotocol.power2": "Power slot 2"
 }

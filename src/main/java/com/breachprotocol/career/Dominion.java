@@ -66,13 +66,22 @@ public final class Dominion {
         return Career.rank(p) == Rank.ADMINISTRATOR ? 1 : 0;
     }
 
-    public static int aura(Player p) {
+    /** How anomalies treat you: 0 as anyone, 1 they leave you be (SCP-Ω's default), 2 they fear you. */
+    public static int auraAnomalies(Player p) {
         CompoundTag t = p.getPersistentData();
-        return t.contains("bp_aura") ? t.getInt("bp_aura") : SOVEREIGN;
+        return t.contains("bp_aura_a") ? t.getInt("bp_aura_a") : t.contains("bp_aura") ? Math.min(1, t.getInt("bp_aura")) : SOVEREIGN;
     }
 
-    /** SCP-Ω's anomaly immunity (see CareerEvents) applies only when not unmasked. */
-    public static boolean sovereign(Player p) { return aura(p) != UNMASKED; }
+    /** How every other creature treats you: 0 as anyone (the default), 1 they leave you be, 2 they fear you. */
+    public static int auraCreatures(Player p) {
+        CompoundTag t = p.getPersistentData();
+        return t.contains("bp_aura_c") ? t.getInt("bp_aura_c") : t.getInt("bp_aura") == DREAD ? DREAD : UNMASKED;
+    }
+
+    public static int aura(Player p, LivingEntity e) { return Unleashed.isAnomaly(e) ? auraAnomalies(p) : auraCreatures(p); }
+
+    /** SCP-Ω's anomaly immunity (see CareerEvents) applies only when anomalies are told to leave them be. */
+    public static boolean sovereign(Player p) { return auraAnomalies(p) != UNMASKED; }
 
     // ================================================================== the console
 
@@ -83,12 +92,15 @@ public final class Dominion {
         if (a.length < 2) return;
         switch (a[1]) {
             case "aura" -> {
-                if (lv < 2 || a.length < 3) return;
-                int n = Math.max(0, Math.min(2, Integer.parseInt(a[2])));
-                p.getPersistentData().putInt("bp_aura", n);
-                String[] say = {"You let them see you as one of them. Whatever wants to fight you, will.",
-                        "The anomalies remember what you are. None of them will raise a hand to you.",
-                        "Everything living knows what you are. It keeps its distance."};
+                // dom:aura:a|c:n  (anomalies / everything else)
+                if (lv < 2 || a.length < 4) return;
+                boolean anomalies = a[2].equals("a");
+                int n = Math.max(0, Math.min(2, Integer.parseInt(a[3])));
+                p.getPersistentData().putInt(anomalies ? "bp_aura_a" : "bp_aura_c", n);
+                String what = anomalies ? "The anomalies" : "Every other living thing";
+                String[] say = {what + " see you as one of them. Whatever wants to fight you, will.",
+                        what + " remember what you are. None of them will raise a hand to you.",
+                        what + " know what you are, and keep their distance."};
                 p.displayClientMessage(Component.literal(say[n]).withStyle(ChatFormatting.LIGHT_PURPLE), true);
                 p.serverLevel().sendParticles(n == DREAD ? ParticleTypes.SCULK_SOUL : n == SOVEREIGN ? ParticleTypes.END_ROD : ParticleTypes.ASH, p.getX(), p.getY() + 1, p.getZ(), 40, 0.8, 1, 0.8, 0.04);
                 if (n != UNMASKED) for (Mob m : p.serverLevel().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(32), m -> m.getTarget() == p && turnsFrom(p, m))) m.setTarget(null);
@@ -103,7 +115,6 @@ public final class Dominion {
                 if (e instanceof LivingEntity le && v instanceof LivingEntity victim) order(p, le, "hunt", victim);
             }
             case "all" -> { if (a.length >= 3) all(p, a[2]); }
-            case "ability" -> { if (a.length >= 3) ability(p, a[2]); }
             default -> {}
         }
         Career.sync(p);
@@ -248,77 +259,8 @@ public final class Dominion {
         }
     }
 
-    // ================================================================== the implant
-
-    public record Ability(String id, String name, String about, int minLevel, int cooldown) {}
-
-    public static final List<Ability> ABILITIES = List.of(
-            new Ability("call", "Call your secretary", "She walks to you (and takes the lift), as fast as she can.", 1, 20 * 30),
-            new Ability("summon", "Summon your secretary", "She's at your side at once.", 1, 20 * 60),
-            new Ability("blink", "Blink", "Step to wherever you're looking, up to 64 blocks.", 1, 20 * 8),
-            new Ability("reveal", "Reveal", "Every anomaly within 96 blocks glows for 30 seconds.", 1, 20 * 20),
-            new Ability("stasis", "Stasis pulse", "Everything within 16 blocks is held still for 10 seconds.", 1, 20 * 30),
-            new Ability("still", "Still the room", "Everything within 32 blocks that means you harm calms down.", 1, 20 * 15),
-            new Ability("judgement", "Judgement", "Every hostile creature within 24 blocks dies.", 2, 20 * 60));
-
-    static void ability(ServerPlayer p, String id) {
-        Ability ab = ABILITIES.stream().filter(x -> x.id().equals(id)).findFirst().orElse(null);
-        if (ab == null || level(p) < ab.minLevel()) return;
-        ServerLevel l = p.serverLevel();
-        long now = l.getGameTime(), ready = p.getPersistentData().getLong("bp_cd_" + id);
-        if (now < ready) { p.displayClientMessage(Component.literal(ab.name() + " is recharging: " + (ready - now) / 20 + "s.").withStyle(ChatFormatting.GRAY), true); return; }
-        boolean used = switch (id) {
-            case "call", "summon" -> secretary(p, id.equals("summon"));
-            case "blink" -> {
-                HitResult hit = p.pick(64, 0, false);
-                if (hit.getType() == HitResult.Type.MISS) yield false;
-                Vec3 to = hit.getLocation().subtract(p.getLookAngle().scale(0.6));
-                l.sendParticles(ParticleTypes.REVERSE_PORTAL, p.getX(), p.getY() + 1, p.getZ(), 40, 0.3, 0.8, 0.3, 0.1);
-                p.teleportTo(to.x, Math.max(to.y, l.getMinBuildHeight()), to.z);
-                p.fallDistance = 0;
-                l.sendParticles(ParticleTypes.PORTAL, to.x, to.y + 1, to.z, 50, 0.3, 0.8, 0.3, 0.6);
-                l.playSound(null, to.x, to.y, to.z, SoundEvents.ENDERMAN_TELEPORT, SoundSource.PLAYERS, 0.7F, 1.4F);
-                yield true;
-            }
-            case "reveal" -> {
-                int n = 0;
-                for (Mob m : l.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(96), Unleashed::isAnomaly)) {
-                    m.addEffect(new MobEffectInstance(MobEffects.GLOWING, 20 * 30, 0, false, false));
-                    n++;
-                }
-                l.sendParticles(ParticleTypes.SONIC_BOOM, p.getX(), p.getY() + 1, p.getZ(), 1, 0, 0, 0, 0);
-                tell(p, n == 0 ? "Nothing anomalous within reach." : n + " anomal" + (n == 1 ? "y" : "ies") + " revealed.");
-                yield true;
-            }
-            case "stasis" -> {
-                for (LivingEntity e : l.getEntitiesOfClass(LivingEntity.class, p.getBoundingBox().inflate(16), e -> e != p && !(e instanceof Player))) {
-                    e.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 200, 9, false, false));
-                    e.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 200, 4, false, false));
-                    if (e instanceof Mob m) { m.setTarget(null); m.getNavigation().stop(); }
-                    l.sendParticles(ParticleTypes.SNOWFLAKE, e.getX(), e.getY() + e.getBbHeight() / 2, e.getZ(), 12, 0.3, 0.5, 0.3, 0.01);
-                }
-                l.playSound(null, p.blockPosition(), SoundEvents.BEACON_DEACTIVATE, SoundSource.PLAYERS, 1F, 0.6F);
-                yield true;
-            }
-            case "still" -> { all(p, "calm"); yield true; }
-            case "judgement" -> {
-                int n = 0;
-                for (LivingEntity e : l.getEntitiesOfClass(LivingEntity.class, p.getBoundingBox().inflate(24), e -> e instanceof Enemy || e instanceof Mob m && m.getTarget() == p)) {
-                    if (e instanceof Player) continue;
-                    l.sendParticles(ParticleTypes.END_ROD, e.getX(), e.getY() + 8, e.getZ(), 30, 0.1, 4, 0.1, 0.0);
-                    end(p, e);
-                    n++;
-                }
-                tell(p, n == 0 ? "Nothing here deserved it." : "Judgement. " + n + " fell.");
-                yield true;
-            }
-            default -> false;
-        };
-        if (used) p.getPersistentData().putLong("bp_cd_" + id, now + ab.cooldown());
-    }
-
     /** Your secretary, wherever she is: walking to you, or here at once. */
-    private static boolean secretary(ServerPlayer p, boolean now) {
+    public static boolean secretary(ServerPlayer p, boolean now) {
         FoundationStaff sec = null;
         for (ServerLevel lv : p.server.getAllLevels())
             for (Entity e : lv.getAllEntities())
@@ -378,9 +320,9 @@ public final class Dominion {
         }
         // Dread: hostile things back away from SCP-Ω
         if (srv.getTickCount() % 20 == 0) for (ServerPlayer p : srv.getPlayerList().getPlayers()) {
-            if (level(p) < 2 || aura(p) != DREAD) continue;
+            if (level(p) < 2 || auraAnomalies(p) != DREAD && auraCreatures(p) != DREAD) continue;
             ServerLevel l = p.serverLevel();
-            for (Mob m : l.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(12), m -> m instanceof Enemy && !m.getPersistentData().contains(FOLLOW))) {
+            for (Mob m : l.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(12), m -> aura(p, m) == DREAD && (m instanceof Enemy || Unleashed.isAnomaly(m)) && !m.getPersistentData().contains(FOLLOW))) {
                 if (m.getTarget() == p) m.setTarget(null);
                 Vec3 away = m.position().subtract(p.position()).normalize().scale(8).add(m.position());
                 m.getNavigation().moveTo(away.x, away.y, away.z, 1.3);
@@ -431,17 +373,17 @@ public final class Dominion {
         if (p.getUUID().toString().equals(e.getPersistentData().getString(CALM)) || turnsFrom(p, e)) event.setCanceled(true);
     }
 
+    /** With an aura, things leave SCP-Ω be (anomalies are handled by CareerEvents too). */
     private static boolean turnsFrom(ServerPlayer p, LivingEntity e) {
-        return level(p) >= 2 && aura(p) == DREAD;
+        return level(p) >= 2 && aura(p, e) != UNMASKED;
     }
 
     // ================================================================== the client's view
 
     public static void addToSync(ServerPlayer p, CompoundTag t) {
         t.putInt("dom", level(p));
-        t.putInt("aura", aura(p));
-        CompoundTag cd = new CompoundTag();
-        for (Ability a : ABILITIES) cd.putLong(a.id(), p.getPersistentData().getLong("bp_cd_" + a.id()));
-        t.put("cd", cd);
+        t.putInt("auraA", auraAnomalies(p));
+        t.putInt("auraC", auraCreatures(p));
+        Powers.addToSync(p, t);
     }
 }

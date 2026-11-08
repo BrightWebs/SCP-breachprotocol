@@ -59,6 +59,10 @@ public final class PhoneActions {
             default -> {
                 if (action.startsWith("wf:")) com.breachprotocol.entity.Workforce.action(p, action.substring(3));
                 else if (action.startsWith("dom:")) com.breachprotocol.career.Dominion.action(p, action, arg);
+                else if (action.startsWith("pow:")) {
+                    String[] pa = action.split(":");
+                    if (pa.length == 3) try { com.breachprotocol.career.Powers.cast(p, pa[1], Integer.parseInt(pa[2])); } catch (NumberFormatException ignored) {}
+                }
                 else if (action.startsWith("dir:")) Directives.run(p, action.substring(4));
                 else if (action.startsWith("orbital_at:")) {
                     String[] xz = action.substring(11).split(":");

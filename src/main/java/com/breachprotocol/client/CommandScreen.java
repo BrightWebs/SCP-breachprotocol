@@ -1,6 +1,6 @@
 package com.breachprotocol.client;
 
-import com.breachprotocol.career.Dominion;
+import com.breachprotocol.career.Powers;
 import com.breachprotocol.network.ClientCareerState;
 import com.breachprotocol.network.PhoneActionPayload;
 import net.minecraft.client.Minecraft;
@@ -10,22 +10,32 @@ import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.util.FormattedCharSequence;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The Dominion console (tap the command key): your aura (SCP-Ω), the implant's abilities with their
- * cooldowns, and orders for everything around you. Holding the key instead commands one creature.
+ * The console (Shift + the answer key, V by default), for the Administrator and SCP-Ω, in the
+ * mod's terminal style:
+ *
+ * <ul>
+ * <li><b>Temperament</b>: how anomalies, and every other living thing, treat you: as anyone, leaving
+ *     you be, or fearing you (SCP-Ω).</li>
+ * <li><b>Powers</b>: every power you hold, where it comes from, its range, and the two slots it can
+ *     go in; where the slots sit on screen.</li>
+ * <li><b>Orders</b>: for everything around you at once.</li>
+ * </ul>
  */
 public class CommandScreen extends Screen {
     private record Hit(int x, int y, int w, int h, Runnable run) {}
 
     private final List<Hit> hits = new ArrayList<>();
-    private int hover = -1;
+    private static int tab = 1;
+    private static String selected = "";
 
-    public CommandScreen() { super(Component.literal("Dominion")); }
+    public CommandScreen() { super(Component.literal("Console")); }
 
     private static CompoundTag t() { return ClientCareerState.tag; }
 
@@ -34,103 +44,268 @@ public class CommandScreen extends Screen {
     @Override
     public boolean isPauseScreen() { return false; }
 
+    // palette: the mod's terminal look, purple for SCP-Ω, gold for the Administrator
+    private int accent() { return t().getInt("dom") >= 2 ? 0xFFB070FF : 0xFFE0B040; }
+
+    private static final int BG = 0xF20A0710, PANEL = 0xFF140E1C, LINE = 0x40FFFFFF, TEXT = 0xFFEAE4F6, MUTED = 0xFF8A82A0, DIM = 0xFF5A5470;
+
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
         super.render(g, mx, my, pt);
         hits.clear();
         int dom = t().getInt("dom");
-        boolean omega = dom >= 2;
-        int pw = Math.min(360, width - 20), ph = omega ? 248 : 206, x = (width - pw) / 2, y = (height - ph) / 2;
-        int accent = omega ? 0xFFB070FF : 0xFFE0B040;
-        g.fill(x, y, x + pw, y + ph, 0xF00C0812);
-        g.fill(x, y, x + pw, y + 1, accent);
-        g.fill(x, y + ph - 1, x + pw, y + ph, accent);
-        g.fill(x, y, x + 1, y + ph, 0x60FFFFFF);
-        g.fill(x + pw - 1, y, x + pw, y + ph, 0x60FFFFFF);
-        String title = omega ? "SCP-Ω  ·  DOMINION" : "THE ADMINISTRATOR'S IMPLANT";
-        g.drawString(font, title, x + 10, y + 8, accent, false);
-        String sub = omega ? "Everything that lives answers to you." : "Foundation staff and anomalies answer to you.";
-        g.drawString(font, sub, x + 10, y + 19, 0xFF9088A8, false);
-        int yy = y + 34;
-        // ---- aura
-        if (omega) {
-            section(g, "AURA", x + 10, yy);
-            yy += 11;
-            String[] names = {"Unmasked", "Sovereign", "Dread"};
-            String[] about = {"Everything behaves as it would to anyone", "No anomaly raises a hand to you", "Nothing living turns on you; hostiles back away"};
-            int bw = (pw - 20 - 8) / 3, aura = t().getInt("aura");
-            for (int i = 0; i < 3; i++) {
-                int bx = x + 10 + i * (bw + 4);
-                final int n = i;
-                button(g, bx, yy, bw, 18, names[i], aura == i, i == 2 ? 0xFF6A40A0 : i == 1 ? 0xFF8050C0 : 0xFF505060, mx, my, () -> send("dom:aura:" + n));
-            }
-            String a = about[Math.max(0, Math.min(2, aura))];
-            g.drawString(font, a, x + pw / 2 - font.width(a) / 2, yy + 22, 0xFFA898C0, false);
-            yy += 36;
+        int pw = Math.min(420, width - 16), ph = Math.min(290, height - 16), x = (width - pw) / 2, y = (height - ph) / 2;
+        int ac = accent();
+        // frame
+        g.fill(x, y, x + pw, y + ph, BG);
+        frame(g, x, y, pw, ph, ac);
+        g.fill(x + 1, y + 1, x + pw - 1, y + 26, PANEL);
+        g.fill(x + 1, y + 26, x + pw - 1, y + 27, ac & 0x60FFFFFF);
+        String title = dom >= 2 ? "SCP-Ω  ·  DOMINION" : "ADMINISTRATOR  ·  IMPLANT";
+        g.drawString(font, title, x + 10, y + 6, ac, false);
+        small(g, dom >= 2 ? "EVERYTHING THAT LIVES ANSWERS TO YOU" : "FOUNDATION STAFF AND ANOMALIES ANSWER TO YOU", x + 10, y + 17, MUTED);
+        // tabs
+        String[] tabs = {"Temperament", "Powers", "Orders"};
+        int tx = x + pw - 10;
+        for (int i = tabs.length - 1; i >= 0; i--) {
+            int w = font.width(tabs[i]) + 14;
+            tx -= w;
+            boolean on = tab == i, hov = in(mx, my, tx, y + 6, w, 15);
+            g.fill(tx, y + 6, tx + w, y + 21, on ? ac & 0x50FFFFFF | 0x50000000 : hov ? 0x30FFFFFF : 0x00000000);
+            if (on) g.fill(tx, y + 20, tx + w, y + 21, ac);
+            g.drawString(font, tabs[i], tx + 7, y + 10, on ? TEXT : MUTED, false);
+            final int n = i;
+            hits.add(new Hit(tx, y + 6, w, 15, () -> tab = n));
+            tx -= 4;
         }
-        // ---- implant
-        section(g, "IMPLANT", x + 10, yy);
-        yy += 11;
-        CompoundTag cd = t().getCompound("cd");
-        long now = Minecraft.getInstance().level == null ? 0 : Minecraft.getInstance().level.getGameTime();
-        List<Dominion.Ability> abs = new ArrayList<>();
-        for (Dominion.Ability a : Dominion.ABILITIES) if (dom >= a.minLevel()) abs.add(a);
-        int cols = 2, bw = (pw - 20 - 4) / cols;
-        for (int i = 0; i < abs.size(); i++) {
-            Dominion.Ability a = abs.get(i);
-            int bx = x + 10 + (i % cols) * (bw + 4), by = yy + (i / cols) * 22;
-            long left = cd.getLong(a.id()) - now;
-            String label = left > 0 ? a.name() + "  (" + (left + 19) / 20 + "s)" : a.name();
-            boolean judge = a.id().equals("judgement");
-            button(g, bx, by, bw, 18, label, false, left > 0 ? 0xFF303038 : judge ? 0xFF802830 : 0xFF2C5070, mx, my, left > 0 ? null : () -> { send("dom:ability:" + a.id()); onClose(); });
-            if (mx >= bx && mx < bx + bw && my >= by && my < by + 18) hoverText(g, a.about(), mx, my);
+        int cx = x + 10, cy = y + 34, cw = pw - 20, ch = ph - 44;
+        switch (tab) {
+            case 0 -> temperament(g, cx, cy, cw, ch, mx, my, dom);
+            case 2 -> orders(g, cx, cy, cw, ch, mx, my);
+            default -> powers(g, cx, cy, cw, ch, mx, my, dom);
         }
-        yy += ((abs.size() + cols - 1) / cols) * 22 + 6;
-        // ---- orders
-        section(g, "ORDERS", x + 10, yy);
-        yy += 11;
-        String[][] orders = {{"Still everything nearby", "dom:all:calm"}, {"Recall my followers", "dom:all:recall"}, {"Release everything", "dom:all:release"}};
-        int ow = (pw - 20 - 8) / 3;
-        for (int i = 0; i < 3; i++) {
-            final String act = orders[i][1];
-            button(g, x + 10 + i * (ow + 4), yy, ow, 18, orders[i][0], false, 0xFF3A3A4C, mx, my, () -> send(act));
-        }
-        yy += 26;
-        String foot = "Hold " + DialogueHud.ANSWER.getTranslatedKeyMessage().getString() + " and look at a creature to command it.";
-        g.drawString(font, foot, x + pw / 2 - font.width(foot) / 2, y + ph - 14, 0xFF7A7090, false);
     }
 
-    private void section(GuiGraphics g, String s, int x, int y) {
-        g.drawString(font, s, x, y, 0xFF6A6080, false);
+    // ---------------------------------------------------------------- temperament
+
+    private void temperament(GuiGraphics g, int x, int y, int w, int h, int mx, int my, int dom) {
+        if (dom < 2) {
+            locked(g, x, y, w, "Temperament belongs to SCP-Ω.", "The Administrator is still a person. Anything can fight a person. Ascend, and choose what may.");
+            return;
+        }
+        String[] names = {"As anyone", "Leave me be", "Fear me"};
+        String[] glyph = {"○", "◐", "●"};
+        String[][] about = {
+                {"Anomalies treat you as they'd treat anyone: the hostile ones will come for you.", "Anomalies remember what you are. None of them will raise a hand to you.", "Anomalies know what you are, and back away when you come near."},
+                {"Every other creature behaves as it would to anyone.", "Nothing living turns on you. The wild leaves you be.", "Hostile creatures know what you are, and keep their distance."}};
+        String[] rows = {"ANOMALIES", "EVERY OTHER LIVING THING"};
+        String[] keys = {"a", "c"};
+        int[] cur = {t().getInt("auraA"), t().getInt("auraC")};
+        int yy = y + 2;
+        for (int r = 0; r < 2; r++) {
+            small(g, rows[r], x, yy, MUTED);
+            yy += 9;
+            int bw = (w - 8) / 3;
+            for (int i = 0; i < 3; i++) {
+                int bx = x + i * (bw + 4);
+                boolean on = cur[r] == i, hov = in(mx, my, bx, yy, bw, 30);
+                int col = i == 0 ? 0xFF707088 : i == 1 ? 0xFF9A70E0 : 0xFF6040A0;
+                g.fill(bx, yy, bx + bw, yy + 30, on ? col & 0x60FFFFFF | 0x60000000 : hov ? 0x20FFFFFF : PANEL);
+                frame(g, bx, yy, bw, 30, on ? col : LINE);
+                g.pose().pushPose();
+                g.pose().translate(bx + 14, yy + 15, 0);
+                g.pose().scale(1.6F, 1.6F, 1F);
+                g.drawString(font, glyph[i], -font.width(glyph[i]) / 2, -4, on ? col | 0xFF000000 : MUTED, false);
+                g.pose().popPose();
+                g.drawString(font, names[i], bx + 26, yy + 11, on ? TEXT : MUTED, false);
+                final String act = "dom:aura:" + keys[r] + ":" + i;
+                hits.add(new Hit(bx, yy, bw, 30, () -> send(act)));
+            }
+            yy += 34;
+            wrap(g, about[r][Math.max(0, Math.min(2, cur[r]))], x, yy, w, 0xFFB8A8D8);
+            yy += 26;
+        }
+        small(g, "WHATEVER YOU CHOOSE, YOU CANNOT DIE. RIGHT-CLICKING AN SCP STILL TALKS TO IT.", x, y + h - 10, DIM);
     }
+
+    // ---------------------------------------------------------------- powers
+
+    private void powers(GuiGraphics g, int x, int y, int w, int h, int mx, int my, int dom) {
+        int lw = 150;
+        // the list
+        List<Powers.Power> all = Powers.ALL;
+        if (selected.isEmpty() || Powers.get(selected) == null) { Powers.Power s0 = PowerKeys.slot(0); selected = s0 != null ? s0.id() : all.get(0).id(); }
+        int rowH = Math.max(12, Math.min(15, (h - 4) / all.size()));
+        for (int i = 0; i < all.size(); i++) {
+            Powers.Power p = all.get(i);
+            int ry = y + i * rowH;
+            boolean own = dom >= p.minLevel(), on = p.id().equals(selected), hov = in(mx, my, x, ry, lw, rowH);
+            int col = 0xFF000000 | p.colour();
+            if (on) g.fill(x, ry, x + lw, ry + rowH, col & 0x40FFFFFF | 0x40000000);
+            else if (hov) g.fill(x, ry, x + lw, ry + rowH, 0x18FFFFFF);
+            if (on) g.fill(x, ry, x + 2, ry + rowH, col);
+            g.drawString(font, p.glyph(), x + 6, ry + (rowH - 8) / 2, own ? col : DIM, false);
+            g.drawString(font, p.name(), x + 18, ry + (rowH - 8) / 2, own ? (on ? TEXT : 0xFFC8C0D8) : DIM, false);
+            String tag = slotTag(p);
+            if (!tag.isEmpty()) small(g, tag, x + lw - 4 - (int) (font.width(tag) * 0.75F), ry + (rowH - 6) / 2, col);
+            else if (!own) small(g, "Ω", x + lw - 10, ry + (rowH - 6) / 2, DIM);
+            final String id = p.id();
+            hits.add(new Hit(x, ry, lw, rowH, () -> selected = id));
+        }
+        g.fill(x + lw + 6, y, x + lw + 7, y + h, LINE);
+        // the detail
+        Powers.Power p = Powers.get(selected);
+        if (p == null) return;
+        int dx = x + lw + 14, dw = w - lw - 14, yy = y;
+        int col = 0xFF000000 | p.colour();
+        boolean own = dom >= p.minLevel();
+        g.pose().pushPose();
+        g.pose().translate(dx + 14, yy + 14, 0);
+        g.pose().scale(2.6F, 2.6F, 1F);
+        g.drawString(font, p.glyph(), -font.width(p.glyph()) / 2, -4, own ? col : DIM, false);
+        g.pose().popPose();
+        g.drawString(font, p.name(), dx + 34, yy + 4, own ? TEXT : MUTED, false);
+        small(g, p.source().toUpperCase(java.util.Locale.ROOT), dx + 34, yy + 15, col);
+        yy += 32;
+        yy = wrap(g, p.about(), dx, yy, dw, 0xFFC8C0D8) + 4;
+        small(g, "RECHARGE " + p.cooldown() / 20 + "S" + (p.rMax() > 0 ? "  ·  RANGE " + p.rMin() + "-" + p.rMax() + "M" : "") + "  ·  "
+                + switch (p.aim()) { case AROUND -> "ALL AROUND YOU"; case LOOK_POINT -> "WHERE YOU LOOK"; case LOOK_TARGET -> "WHAT YOU LOOK AT"; default -> "YOU"; }, dx, yy, MUTED);
+        yy += 12;
+        if (!own) {
+            wrap(g, "Only SCP-Ω can take this from the anomaly it belongs to.", dx, yy, dw, DIM);
+            return;
+        }
+        // range
+        if (p.rMax() > 0) {
+            int r = PowerKeys.range(p);
+            small(g, "RANGE", dx, yy, MUTED);
+            String rv = r + "m";
+            g.drawString(font, rv, dx + dw - font.width(rv), yy - 1, TEXT, false);
+            yy += 9;
+            int bx = dx + 18, bw = dw - 36;
+            button(g, dx, yy, 14, 12, "-", false, 0xFF2A2236, mx, my, () -> PowerKeys.setRange(p, PowerKeys.range(p) - PowerKeys.step(p)));
+            button(g, dx + dw - 14, yy, 14, 12, "+", false, 0xFF2A2236, mx, my, () -> PowerKeys.setRange(p, PowerKeys.range(p) + PowerKeys.step(p)));
+            g.fill(bx, yy + 5, bx + bw, yy + 7, 0xFF2A2236);
+            int fillW = (int) (bw * (r - p.rMin()) / (float) Math.max(1, p.rMax() - p.rMin()));
+            g.fill(bx, yy + 5, bx + fillW, yy + 7, col);
+            g.fill(bx + fillW - 1, yy + 2, bx + fillW + 2, yy + 10, TEXT);
+            hits.add(new Hit(bx, yy, bw, 12, () -> {
+                double f = (lastX - bx) / (double) bw;
+                PowerKeys.setRange(p, p.rMin() + (int) Math.round(f * (p.rMax() - p.rMin())));
+            }));
+            yy += 18;
+        }
+        // slots
+        small(g, "PUT IT IN A SLOT", dx, yy, MUTED);
+        yy += 9;
+        int sw = (dw - 4) / 2;
+        for (int i = 0; i < 2; i++) {
+            final int n = i;
+            Powers.Power in = PowerKeys.slot(i);
+            boolean here = in == p;
+            String key = PowerKeys.SLOTS[i].getTranslatedKeyMessage().getString();
+            button(g, dx + i * (sw + 4), yy, sw, 16, (here ? "✓ " : "") + "Slot " + (i + 1) + " [" + key + "]", here, col, mx, my, () -> PowerKeys.setSlot(n, p));
+        }
+        yy += 22;
+        // the slots as they'll look, and where they sit
+        small(g, "ON SCREEN", dx, yy, MUTED);
+        yy += 9;
+        PowerKeys.drawSlot(g, font, 0, dx, yy, 34);
+        PowerKeys.drawSlot(g, font, 1, dx + 38, yy, 34);
+        String[] where = {"Bottom right", "Bottom left", "Right side", "Top right", "Top left", "Hidden"};
+        int ax = dx + 82, aw = dw - 82, abw = (aw - 4) / 2;
+        int cur = PowerKeys.hidden() ? 5 : PowerKeys.anchor();
+        for (int i = 0; i < 6; i++) {
+            final int n = i;
+            button(g, ax + (i % 2) * (abw + 2), yy + (i / 2) * 15 - 1, abw, 13, where[i], cur == i, 0xFF3A3050, mx, my, () -> {
+                if (n == 5) PowerKeys.setHidden(true);
+                else { PowerKeys.setHidden(false); PowerKeys.setAnchor(n); }
+            });
+        }
+        small(g, "TAP A SLOT KEY TO USE IT  ·  HOLD + SCROLL: SWAP POWER  ·  HOLD + SHIFT + SCROLL: RANGE", x, y + h - 4, DIM);
+    }
+
+    private static String slotTag(Powers.Power p) {
+        String s = "";
+        for (int i = 0; i < 2; i++) if (PowerKeys.slot(i) == p) s += (s.isEmpty() ? "" : " ") + PowerKeys.SLOTS[i].getTranslatedKeyMessage().getString();
+        return s;
+    }
+
+    // ---------------------------------------------------------------- orders
+
+    private void orders(GuiGraphics g, int x, int y, int w, int h, int mx, int my) {
+        String[][] orders = {
+                {"Still everything nearby", "Everything within 32 blocks that means you harm calms down, for good.", "dom:all:calm"},
+                {"Recall my followers", "Everything that follows you comes to your side, wherever it is in this world.", "dom:all:recall"},
+                {"Release everything", "Every creature you've calmed, sent or kept is released to its own nature.", "dom:all:release"}};
+        int yy = y + 2;
+        for (String[] o : orders) {
+            boolean hov = in(mx, my, x, yy, w, 34);
+            g.fill(x, yy, x + w, yy + 34, hov ? 0x20FFFFFF : PANEL);
+            frame(g, x, yy, w, 34, hov ? accent() : LINE);
+            g.drawString(font, o[0], x + 10, yy + 6, TEXT, false);
+            small(g, o[1], x + 10, yy + 20, MUTED);
+            final String act = o[2];
+            hits.add(new Hit(x, yy, w, 34, () -> { send(act); onClose(); }));
+            yy += 40;
+        }
+        yy += 4;
+        small(g, "ONE CREATURE AT A TIME: HOLD " + DialogueHud.ANSWER.getTranslatedKeyMessage().getString().toUpperCase(java.util.Locale.ROOT)
+                + " AND LOOK AT IT. SCROLL TO CHOOSE AN ORDER, LEFT-CLICK TO GIVE IT.", x, yy, MUTED);
+        small(g, "CALM · FOLLOW · STAY · HUNT · RELEASE · END", x, yy + 10, DIM);
+    }
+
+    // ---------------------------------------------------------------- pieces
+
+    private void locked(GuiGraphics g, int x, int y, int w, String head, String body) {
+        g.drawString(font, head, x, y + 10, TEXT, false);
+        wrap(g, body, x, y + 24, w, MUTED);
+    }
+
+    private void frame(GuiGraphics g, int x, int y, int w, int h, int c) {
+        g.fill(x, y, x + w, y + 1, c); g.fill(x, y + h - 1, x + w, y + h, c);
+        g.fill(x, y, x + 1, y + h, c); g.fill(x + w - 1, y, x + w, y + h, c);
+    }
+
+    private int wrap(GuiGraphics g, String s, int x, int y, int w, int c) {
+        for (FormattedCharSequence l : font.split(Component.literal(s), w)) { g.drawString(font, l, x, y, c, false); y += 10; }
+        return y;
+    }
+
+    private void small(GuiGraphics g, String s, int x, int y, int c) { PowerKeys.small(g, font, s, x, y, c); }
 
     private void button(GuiGraphics g, int x, int y, int w, int h, String label, boolean on, int colour, int mx, int my, Runnable run) {
-        boolean hov = run != null && mx >= x && mx < x + w && my >= y && my < y + h;
-        int fill = on ? colour | 0xFF000000 : hov ? brighten(colour) : colour & 0x00FFFFFF | 0xB0000000;
-        g.fill(x, y, x + w, y + h, fill);
-        g.fill(x, y + h - 1, x + w, y + h, on ? 0xFFFFFFFF : 0x40FFFFFF);
+        boolean hov = in(mx, my, x, y, w, h);
+        g.fill(x, y, x + w, y + h, on ? colour & 0x70FFFFFF | 0x70000000 : hov ? 0x30FFFFFF : PANEL);
+        frame(g, x, y, w, h, on ? colour | 0xFF000000 : hov ? 0x80FFFFFF : LINE);
         String l = font.width(label) > w - 6 ? font.plainSubstrByWidth(label, w - 10) + "…" : label;
-        g.drawString(font, l, x + w / 2 - font.width(l) / 2, y + (h - 8) / 2, run == null ? 0xFF707078 : 0xFFF0ECFF, false);
-        if (run != null) hits.add(new Hit(x, y, w, h, run));
+        g.drawString(font, l, x + w / 2 - font.width(l) / 2, y + (h - 8) / 2, on ? TEXT : 0xFFC8C0D8, false);
+        hits.add(new Hit(x, y, w, h, run));
     }
 
-    private static int brighten(int c) {
-        int r = Math.min(255, ((c >> 16) & 255) + 40), gg = Math.min(255, ((c >> 8) & 255) + 40), b = Math.min(255, (c & 255) + 40);
-        return 0xFF000000 | r << 16 | gg << 8 | b;
-    }
+    private static boolean in(int mx, int my, int x, int y, int w, int h) { return mx >= x && mx < x + w && my >= y && my < y + h; }
 
-    private void hoverText(GuiGraphics g, String s, int mx, int my) {
-        g.renderTooltip(font, Component.literal(s), mx, my);
-    }
+    private double lastX;
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
-        if (button == 0) for (Hit h : hits) if (mx >= h.x && mx < h.x + h.w && my >= h.y && my < h.y + h.h) {
-            Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.2F, 0.3F));
-            h.run.run();
-            return true;
+        lastX = mx;
+        if (button == 0) for (int i = hits.size() - 1; i >= 0; i--) {
+            Hit h = hits.get(i);
+            if (mx >= h.x && mx < h.x + h.w && my >= h.y && my < h.y + h.h) {
+                Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 1.4F, 0.25F));
+                h.run.run();
+                return true;
+            }
         }
         return super.mouseClicked(mx, my, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+        Powers.Power p = Powers.get(selected);
+        if (tab == 1 && p != null && p.rMax() > 0) { PowerKeys.setRange(p, PowerKeys.range(p) + (sy > 0 ? 1 : -1) * PowerKeys.step(p)); return true; }
+        return super.mouseScrolled(mx, my, sx, sy);
     }
 
     @Override
