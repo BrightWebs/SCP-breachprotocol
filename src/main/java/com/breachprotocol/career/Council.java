@@ -95,6 +95,7 @@ public final class Council {
             boolean admin = r == Rank.ADMINISTRATOR || Career.isAscended(p);
             boolean holder = seat > 0 && p.getUUID().toString().equals(sd.holders.get(seat));
             // the Administrator has priority: an Overseer who sits down while the Administrator presides joins that session
+            if (PRESIDING != null && (PRESIDING.p.server != p.server || PRESIDING.p.hasDisconnected() || SESSIONS.get(PRESIDING.p.getUUID()) != PRESIDING)) PRESIDING = null;
             if (holder && !admin && PRESIDING != null && !PRESIDING.done) { PRESIDING.join(p); continue; }
             if (now < COOLDOWN.getOrDefault(p.getUUID(), 0L)) continue;
             if (seat == 0 && admin) {
