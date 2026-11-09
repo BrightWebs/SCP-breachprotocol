@@ -29,6 +29,11 @@ public final class Flight {
 
     /** "pow:fly:gear:n", "pow:fly:boom:n", "pow:fly:impact". */
     public static void action(ServerPlayer p, String[] a) {
+        if (a.length >= 4 && a[2].equals("lie")) {
+            if (a[3].equals("1") && Dominion.level(p) >= 2 && p.getAbilities().flying) com.breachprotocol.world.FlightState.LYING.add(p.getUUID());
+            else com.breachprotocol.world.FlightState.LYING.remove(p.getUUID());
+            return;
+        }
         if (a.length < 3 || Dominion.level(p) < 2 || !p.getAbilities().flying) { if (a.length >= 3 && a[2].equals("gear")) GEAR.remove(p.getUUID()); return; }
         ServerLevel l = p.serverLevel();
         Vec3 at = p.position().add(0, 1, 0);
@@ -61,8 +66,13 @@ public final class Flight {
 
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
-        if (GEAR.isEmpty()) return;
         MinecraftServer srv = event.getServer();
+        // lying flat ends when the flight does
+        com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
+            ServerPlayer p = srv.getPlayerList().getPlayer(id);
+            return p == null || !p.getAbilities().flying || p.onGround() || Dominion.level(p) < 2;
+        });
+        if (GEAR.isEmpty()) return;
         GEAR.entrySet().removeIf(en -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(en.getKey());
             if (p == null || !p.getAbilities().flying || p.onGround()) return true;

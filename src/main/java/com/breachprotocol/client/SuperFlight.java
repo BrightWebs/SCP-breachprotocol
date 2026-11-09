@@ -23,6 +23,7 @@ import net.neoforged.neoforge.client.event.ViewportEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import org.joml.Quaternionf;
+import com.breachprotocol.world.FlightState;
 
 /**
  * SCP-Ω's flight, the way it looks in films rather than Minecraft's creative hover.
@@ -102,6 +103,10 @@ public final class SuperFlight {
         if (!input && vel.lengthSqr() < 0.0025) vel = new Vec3(0, Math.sin(ticks * 0.08) * 0.012, 0); // a hover that breathes
         p.setDeltaMovement(vel);
         p.setSprinting(false);
+        // fast enough and you lie along the flight: the pose, and the hitbox with it (the server is told)
+        double fast = vel.length();
+        boolean lie = FlightState.localLying ? fast > 0.55 : fast > 1.05;
+        if (lie != FlightState.localLying) { FlightState.localId = p.getUUID(); FlightState.localLying = lie; send("pow:fly:lie:" + (lie ? 1 : 0)); }
         before = p.position();
 
         // effects on your own screen
@@ -146,7 +151,13 @@ public final class SuperFlight {
         if (g == was) return;
         send("pow:fly:gear:" + g);
         if (g > was && g >= 2) boom(p, g);
-        else if (g > was) p.playSound(SoundEvents.FIREWORK_ROCKET_LAUNCH, 0.7F, 0.8F);
+        else if (g > was) {
+            // a rush of air, not a firework
+            p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.9F, 0.6F);
+            p.playSound(SoundEvents.ENDER_DRAGON_FLAP, 0.6F, 1.5F);
+            punch = 5;
+            shake = 4;
+        }
     }
 
     /** Through the sound barrier. */
@@ -172,6 +183,7 @@ public final class SuperFlight {
 
     private static void land(LocalPlayer p) {
         flying = false;
+        if (FlightState.localLying) { FlightState.localLying = false; send("pow:fly:lie:0"); }
         if (gear != 0) { gear = 0; send("pow:fly:gear:0"); }
         if (zeroed) { p.getAbilities().setFlyingSpeed(0.05F); zeroed = false; }
         vel = Vec3.ZERO;
@@ -224,13 +236,24 @@ public final class SuperFlight {
         double h = d.horizontalDistance();
         // your own flight we know; someone else's we judge by how they move (other players' abilities aren't sent to us)
         boolean mine = p == Minecraft.getInstance().player;
-        if (mine ? !flying : h < 0.5) return;
+        if (mine ? !flying : h < 0.5 && !FlightState.lying(p)) return;
+        var ps = event.getPoseStack();
+        if (FlightState.lying(p)) {
+            // flat already (the lying pose); dip into dives and rise into climbs
+            float yaw0 = Mth.rotLerp(pt, p.yRotO, p.getYRot()) * Mth.DEG_TO_RAD;
+            float dive = (float) Mth.clamp(Math.atan2(-d.y, Math.max(0.05, h)), -1.3, 1.3);
+            ps.pushPose();
+            ps.translate(0, 0.3, 0);
+            ps.mulPose(new Quaternionf().rotateAxis(dive, Mth.cos(yaw0), 0, Mth.sin(yaw0)));
+            ps.translate(0, -0.3, 0);
+            LEANED.add(p.getId());
+            return;
+        }
         if (h < 0.25) return;
         float yaw = Mth.rotLerp(pt, p.yRotO, p.getYRot()) * Mth.DEG_TO_RAD;
-        float tilt = (float) Mth.clamp((h - 0.25) / 0.9, 0, 1) * 82F;
-        // diving tips you further over, climbing stands you up
-        tilt = Mth.clamp(tilt - (float) Math.toDegrees(Math.atan2(d.y, Math.max(0.05, h))) * 0.6F, 0F, 100F) * Mth.DEG_TO_RAD;
-        var ps = event.getPoseStack();
+        // upright and still slow: a lean into the way you're going (faster, and you lie flat instead)
+        float tilt = (float) Mth.clamp((h - 0.25) / 0.8, 0, 1) * 28F;
+        tilt = Mth.clamp(tilt - (float) Math.toDegrees(Math.atan2(d.y, Math.max(0.05, h))) * 0.3F, 0F, 40F) * Mth.DEG_TO_RAD;
         ps.pushPose();
         ps.translate(0, p.getBbHeight() / 2, 0);
         ps.mulPose(new Quaternionf().rotateAxis(tilt, Mth.cos(yaw), 0, Mth.sin(yaw)));
@@ -239,6 +262,75 @@ public final class SuperFlight {
     }
 
     private static final java.util.Set<Integer> LEANED = new java.util.HashSet<>();
+
+    // ================================================================== the body
+
+    /** How long each other player has been off the ground and not falling: how we tell they're hovering. */
+    private static final java.util.Map<Integer, Integer> AIR = new java.util.HashMap<>();
+
+    /** 0 not flying, 1 upright (hovering, drifting), 2 flat out. */
+    static int style(Player p) {
+        if (p.isFallFlying() || p.isPassenger() || p.isInWater() || p.isSleeping()) return 0;
+        if (FlightState.lying(p)) return 2;
+        if (p == Minecraft.getInstance().player) return flying ? 1 : 0;
+        return AIR.getOrDefault(p.getId(), 0) > 12 ? 1 : 0;
+    }
+
+    @SubscribeEvent
+    public static void tickBodies(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) { AIR.clear(); return; }
+        java.util.Set<Integer> seen = new java.util.HashSet<>();
+        for (Player p : mc.level.players()) {
+            seen.add(p.getId());
+            if (p != mc.player) {
+                boolean hang = !p.onGround() && !p.isInWater() && !p.isFallFlying() && p.getY() - p.yo > -0.3;
+                AIR.merge(p.getId(), 1, Integer::sum);
+                if (!hang) AIR.put(p.getId(), 0);
+            }
+            // no walking in mid-air
+            if (style(p) > 0) p.walkAnimation.setSpeed(0F);
+        }
+        AIR.keySet().retainAll(seen);
+    }
+
+    /** Called at the end of the model's own posing (mixin.client.FlightModelMixin). */
+    public static void pose(net.minecraft.client.model.HumanoidModel<?> m, Player p, float age, float headPitch) {
+        int st = style(p);
+        if (st == 0) return;
+        float sway = Mth.sin(age * 0.07F), sway2 = Mth.sin(age * 0.05F + 1.3F);
+        if (st == 2) {
+            boolean both = p == Minecraft.getInstance().player ? gear >= 3 : new Vec3(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo).length() > 3.0;
+            // head up, looking where you're going
+            m.head.xRot = -1.25F + headPitch * Mth.DEG_TO_RAD * 0.5F;
+            // a fist out ahead (both, at the higher gears), the other arm along your side
+            m.rightArm.xRot = -Mth.PI + sway * 0.03F;
+            m.rightArm.yRot = 0F;
+            m.rightArm.zRot = -0.06F;
+            if (both) { m.leftArm.xRot = -Mth.PI + sway2 * 0.03F; m.leftArm.yRot = 0F; m.leftArm.zRot = 0.06F; }
+            else { m.leftArm.xRot = 0.12F + sway2 * 0.03F; m.leftArm.yRot = 0F; m.leftArm.zRot = -0.1F; }
+            // legs straight and together, the left a touch bent
+            m.rightLeg.xRot = 0.04F + sway * 0.04F;
+            m.leftLeg.xRot = 0.2F + sway2 * 0.04F;
+            m.rightLeg.yRot = m.leftLeg.yRot = 0F;
+            m.rightLeg.zRot = 0.03F;
+            m.leftLeg.zRot = -0.03F;
+        } else {
+            // hovering: arms loose and a little out, legs hanging, everything drifting slightly
+            m.rightArm.xRot = 0.08F + sway * 0.06F;
+            m.rightArm.yRot = 0F;
+            m.rightArm.zRot = 0.22F + sway2 * 0.04F;
+            m.leftArm.xRot = 0.08F - sway * 0.06F;
+            m.leftArm.yRot = 0F;
+            m.leftArm.zRot = -0.22F - sway2 * 0.04F;
+            m.rightLeg.xRot = 0.14F + sway2 * 0.05F;
+            m.leftLeg.xRot = -0.04F - sway2 * 0.05F;
+            m.rightLeg.yRot = m.leftLeg.yRot = 0F;
+            m.rightLeg.zRot = 0.04F;
+            m.leftLeg.zRot = -0.04F;
+        }
+        m.hat.copyFrom(m.head);
+    }
 
     @SubscribeEvent
     public static void unlean(RenderPlayerEvent.Post event) {
