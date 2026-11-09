@@ -13,6 +13,7 @@
   },
   "client": [
     "client.FlightModelMixin",
-    "client.WarheadGuardMixin"
+    "client.WarheadGuardMixin",
+    "client.TransparencyGuardMixin"
   ]
 }
