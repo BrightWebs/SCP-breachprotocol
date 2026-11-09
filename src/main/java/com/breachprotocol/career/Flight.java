@@ -156,16 +156,17 @@ public final class Flight {
         }
     }
 
-    /** SCP-Ω in flight: the server takes their word for where they are (see mixin.FlightMoveMixin). */
-    public static boolean trusted(ServerPlayer p) {
-        return p != null && (p.getAbilities().flying || RUN.containsKey(p.getUUID())) && Dominion.level(p) >= 2;
-    }
-
     private static int parse(String s) { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } }
 
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
         MinecraftServer srv = event.getServer();
+        // on a server, the "moved too quickly" check measures each move against the speed it last knew you had.
+        // A flier's (or runner's) real speed is kept here, so a fast but honest move, or two arriving together
+        // over a laggy connection, isn't mistaken for cheating and dragged back
+        for (ServerPlayer p : srv.getPlayerList().getPlayers())
+            if ((p.getAbilities().flying || RUN.containsKey(p.getUUID())) && Dominion.level(p) >= 2 && !p.isPassenger())
+                p.setDeltaMovement(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
         // lying flat ends when the flight does
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
