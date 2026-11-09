@@ -34,8 +34,9 @@ public final class ModNetwork {
                 }));
         registrar.playToClient(FlightPosePayload.TYPE, FlightPosePayload.STREAM_CODEC, (payload, ctx) ->
                 ctx.enqueueWork(() -> {
-                    if (payload.state() > 0) com.breachprotocol.world.FlightState.CHARGING.add(payload.entity());
-                    else com.breachprotocol.world.FlightState.CHARGING.remove(payload.entity());
+                    int id = payload.entity();
+                    if (payload.state() == 1) com.breachprotocol.world.FlightState.CHARGING.add(id); else com.breachprotocol.world.FlightState.CHARGING.remove(id);
+                    if (payload.state() == 2) com.breachprotocol.world.FlightState.RAMMING.add(id); else com.breachprotocol.world.FlightState.RAMMING.remove(id);
                 }));
         registrar.playToClient(PhotoDataPayload.TYPE, PhotoDataPayload.STREAM_CODEC, (payload, ctx) ->
                 ctx.enqueueWork(() -> ClientPhotoBridge.received(payload.img(), payload.png())));

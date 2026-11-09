@@ -105,8 +105,10 @@ public final class SuperFlight {
         boolean now = eligible(p);
         if (!now) {
             if (flying) land(p);
+            run(p);
             return;
         }
+        if (runGear > 0) runShift(p, 0);
         if (!flying) { flying = true; vel = p.getDeltaMovement(); gear = 0; }
         // vanilla's own flying pushes nothing: the motion is all ours
         p.getAbilities().setFlyingSpeed(0F);
@@ -192,7 +194,7 @@ public final class SuperFlight {
         gear = g;
         if (g == was) return;
         send("pow:fly:gear:" + g);
-        if (g > was && g >= 2) boom(p, g);
+        if (g > was && g >= 2) boom(p, g, "fly");
         else if (g > was) {
             // a rush of air, not a firework
             p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.9F, 0.6F);
@@ -203,13 +205,13 @@ public final class SuperFlight {
     }
 
     /** Through the sound barrier. */
-    private static void boom(LocalPlayer p, int g) {
+    private static void boom(LocalPlayer p, int g, String kind) {
         Minecraft mc = Minecraft.getInstance();
         shake = 14;
         punch = 10;
         p.playSound(SoundEvents.GENERIC_EXPLODE.value(), 1.2F, 0.5F);
         p.playSound(SoundEvents.WARDEN_SONIC_BOOM, 1.0F, 0.9F + g * 0.05F);
-        send("pow:fly:boom:" + g);
+        send("pow:" + kind + ":boom:" + g);
         if (mc.level == null) return;
         // the vapour cone: a ring round you, square to the way you're going
         Vec3 dir = p.getLookAngle(), c = p.position().add(0, 0.9, 0).add(dir.scale(0.5));
@@ -270,6 +272,103 @@ public final class SuperFlight {
         if (ticks % 3 == 0) { p.playSound(SoundEvents.GENERIC_EXPLODE.value(), 0.7F, 0.9F); shake = Math.max(shake, 5); }
     }
 
+
+    // ================================================================== running
+
+    /** Blocks per tick on foot: each sprint gear. Gear 2 breaks the sound barrier; from there you run on water. */
+    private static final double[] RUN = {0, 0.6, 1.0, 1.5, 2.1, 2.8};
+    private static int runGear, runIdle, runLastTap = -100, shiftDownAt = -100;
+    private static boolean runSprintWas, shiftWas, ramming;
+
+    static boolean running() { return runGear > 0; }
+
+    /** On foot: double-tap sprint for gears, as in the air; at the top gear a quick tap of crouch puts your shoulder down. */
+    private static void run(LocalPlayer p) {
+        Minecraft mc = Minecraft.getInstance();
+        var o = mc.options;
+        boolean free = mc.screen == null;
+        boolean ok = canLaunch(p) && !p.getAbilities().flying && !p.isFallFlying() && !p.isPassenger() && charging == false && pendingLaunch < 0;
+        boolean fwd = free && o.keyUp.isDown() && !o.keyDown.isDown();
+        boolean sprintKey = free && o.keySprint.isDown();
+        if (ok && fwd && sprintKey && !runSprintWas && !o.keyShift.isDown()) {
+            if (ticks - runLastTap <= 7) runShift(p, Math.min(RUN.length - 1, runGear + 1));
+            runLastTap = ticks;
+        }
+        runSprintWas = sprintKey;
+        if (!ok || !fwd) { if (runGear > 0 && (!ok || ++runIdle > 8)) runShift(p, 0); return; }
+        runIdle = 0;
+        // a quick tap of crouch at the top gear: shoulder down, and through whatever's in front
+        boolean sh = free && o.keyShift.isDown();
+        if (sh && !shiftWas) shiftDownAt = ticks;
+        if (!sh && shiftWas && ticks - shiftDownAt <= 6 && runGear >= RUN.length - 1) setRam(p, !ramming);
+        shiftWas = sh;
+        if (runGear == 0) return;
+        p.setSprinting(true);
+        float yaw = p.getYRot() * Mth.DEG_TO_RAD;
+        Vec3 dir = new Vec3(-Mth.sin(yaw), 0, Mth.cos(yaw));
+        float side = free ? (o.keyLeft.isDown() ? 1F : 0F) - (o.keyRight.isDown() ? 1F : 0F) : 0F;
+        Vec3 want = dir.scale(RUN[runGear]).add(new Vec3(dir.z, 0, -dir.x).scale(side * 0.35));
+        Vec3 dm = p.getDeltaMovement(), h = new Vec3(dm.x, 0, dm.z);
+        h = h.add(want.subtract(h).scale(0.3));
+        double vy = dm.y;
+        boolean onWater = false;
+        if (runGear >= 2 && mc.level != null) {
+            // fast enough and the water holds you up
+            var below = net.minecraft.core.BlockPos.containing(p.getX(), p.getY() - 0.2, p.getZ());
+            if (p.isInWater()) { vy = 0.18; onWater = true; }
+            else if (mc.level.getFluidState(below).is(net.minecraft.tags.FluidTags.WATER) && vy <= 0) { vy = 0; onWater = true; p.setOnGround(true); }
+        }
+        if (ramming) tearAhead(p, h);
+        p.setDeltaMovement(h.x, vy, h.z);
+        if (mc.level != null) {
+            if (onWater) for (int i = 0; i < 3; i++) mc.level.addParticle(ParticleTypes.SPLASH, p.getX() + (Math.random() - 0.5), p.getY() + 0.1, p.getZ() + (Math.random() - 0.5), -h.x * 0.2, 0.2, -h.z * 0.2);
+            if (runGear >= 2) mc.level.addParticle(onWater ? ParticleTypes.BUBBLE_POP : ParticleTypes.CLOUD, p.getX() - h.x, p.getY() + 0.2, p.getZ() - h.z, -h.x * 0.05, 0.02, -h.z * 0.05);
+        }
+        if (shake > 0) shake--;
+        if (punch > 0) punch--;
+    }
+
+    private static void runShift(LocalPlayer p, int g) {
+        int was = runGear;
+        runGear = g;
+        if (g == was) return;
+        send("pow:run:gear:" + g);
+        if (g < RUN.length - 1 && ramming) setRam(p, false);
+        if (g > was && g >= 2) boom(p, g, "run");
+        else if (g > was) { p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.8F, 0.7F); punch = 5; shake = 3; }
+    }
+
+    private static void setRam(LocalPlayer p, boolean on) {
+        if (ramming == on) return;
+        ramming = on;
+        send("pow:run:ram:" + (on ? 1 : 0));
+        if (on) { p.playSound(SoundEvents.RAVAGER_ROAR, 0.5F, 1.4F); shake = Math.max(shake, 6); }
+    }
+
+    /** Ramming on foot: what stands in front of you goes; the ground under you stays. */
+    private static void tearAhead(LocalPlayer p, Vec3 h) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !p.mayBuild()) return;
+        net.minecraft.world.phys.AABB box = p.getBoundingBox().expandTowards(h.scale(2.0)).inflate(0.15, 0, 0.15);
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        double feet = p.getY() + 0.05;
+        for (net.minecraft.core.BlockPos q : net.minecraft.core.BlockPos.betweenClosed(Mth.floor(box.minX), Mth.floor(box.minY), Mth.floor(box.minZ), Mth.floor(box.maxX), Mth.floor(box.maxY), Mth.floor(box.maxZ))) {
+            if (n >= 96) break;
+            if (q.getY() + 1 <= feet) continue;
+            var st = mc.level.getBlockState(q);
+            if (st.isAir() || st.getCollisionShape(mc.level, q).isEmpty() || st.getDestroySpeed(mc.level, q) < 0) continue;
+            if (n > 0) sb.append(',');
+            sb.append(q.asLong());
+            mc.level.addDestroyBlockEffect(q.immutable(), st);
+            mc.level.setBlock(q.immutable(), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 11);
+            n++;
+        }
+        if (n == 0) return;
+        send("pow:run:tear:" + sb);
+        if (ticks % 3 == 0) { p.playSound(SoundEvents.GENERIC_EXPLODE.value(), 0.6F, 1.0F); shake = Math.max(shake, 4); }
+    }
+
     private static void land(LocalPlayer p) {
         flying = false;
         FlightState.CHARGING.clear();
@@ -284,15 +383,16 @@ public final class SuperFlight {
 
     @SubscribeEvent
     public static void fov(ComputeFovModifierEvent event) {
-        if (!flying) return;
-        double sp = vel.length();
+        if (!flying && runGear == 0) return;
+        Minecraft mc = Minecraft.getInstance();
+        double sp = flying ? vel.length() : mc.player == null ? 0 : mc.player.getDeltaMovement().horizontalDistance() * 1.6;
         float stretch = (float) Math.min(0.55, sp * 0.07) + (punch > 0 ? punch * 0.025F : 0);
         event.setNewFovModifier(1F + stretch);
     }
 
     @SubscribeEvent
     public static void camera(ViewportEvent.ComputeCameraAngles event) {
-        if (!flying) return;
+        if (!flying && runGear == 0) return;
         float pt = (float) event.getPartialTick();
         float r = Mth.lerp(pt, rollWas, roll);
         if (shake > 0) {
@@ -307,8 +407,16 @@ public final class SuperFlight {
     @SubscribeEvent
     public static void hud(RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
-        if (!flying || mc.options.hideGui || mc.player == null) return;
+        if (!flying && runGear == 0 || mc.options.hideGui || mc.player == null) return;
         GuiGraphics g = event.getGuiGraphics();
+        if (!flying) {
+            String s = "SPRINT GEAR " + runGear + (runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : "");
+            String gs = runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR UP" : ramming ? "TAP CROUCH: STOP RAMMING" : "TAP CROUCH: SHOULDER DOWN, THROUGH ANYTHING";
+            int x = g.guiWidth() / 2, y = g.guiHeight() - 62;
+            g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
+            PowerKeys.small(g, mc.font, gs, x - (int) (mc.font.width(gs) * 0.375F), y + 10, 0xFFA898C0);
+            return;
+        }
         String s = gear == 0 ? (vel.length() > 1.0 ? "FLYING FAST" : "FLYING") : "GEAR " + gear + (gear >= 2 ? "  ·  SUPERSONIC" : "");
         String gs = gear < MAX_GEAR ? "DOUBLE-TAP SPRINT: GEAR UP" : "TOP SPEED";
         int x = g.guiWidth() / 2, y = g.guiHeight() - 62;
@@ -320,6 +428,18 @@ public final class SuperFlight {
     @SubscribeEvent
     public static void lean(RenderPlayerEvent.Pre event) {
         Player p = event.getEntity();
+        double hRun = new Vec3(p.getX() - p.xo, 0, p.getZ() - p.zo).length();
+        boolean me = p == Minecraft.getInstance().player;
+        if (!p.getAbilities().flying && !FlightState.lying(p) && (me ? runGear >= 1 : p.onGround() && hRun > 0.6) || style(p) == 5) {
+            // running flat out: the body leans into it (further still with a shoulder down)
+            float yaw = Mth.rotLerp(event.getPartialTick(), p.yBodyRotO, p.yBodyRot) * Mth.DEG_TO_RAD;
+            float t = (float) Mth.clamp((hRun - 0.35) * 0.45, 0, 0.42) + (style(p) == 5 ? 0.15F : 0F);
+            var ps = event.getPoseStack();
+            ps.pushPose();
+            ps.mulPose(new Quaternionf().rotateAxis(t, Mth.cos(yaw), 0, Mth.sin(yaw)));
+            LEANED.add(p.getId());
+            return;
+        }
         if (style(p) == 3) {
             // kneeling: the whole body sits lower
             event.getPoseStack().pushPose();
@@ -368,7 +488,9 @@ public final class SuperFlight {
     /** 0 not flying, 1 upright (hovering, drifting), 2 flat out. */
     static int style(Player p) {
         if (p.isFallFlying() || p.isPassenger() || p.isInWater() || p.isSleeping()) return 0;
-        if (p == Minecraft.getInstance().player ? charging : FlightState.CHARGING.contains(p.getId())) return 3;
+        boolean me = p == Minecraft.getInstance().player;
+        if (me ? charging : FlightState.CHARGING.contains(p.getId())) return 3;
+        if (me ? ramming && runGear > 0 : FlightState.RAMMING.contains(p.getId())) return 5;
         if (FlightState.lying(p)) return 2;
         if (p == Minecraft.getInstance().player) return flying ? 1 : 0;
         return AIR.getOrDefault(p.getId(), 0) > 12 ? 1 : 0;
@@ -397,6 +519,22 @@ public final class SuperFlight {
         int st = style(p);
         if (st == 0) return;
         float sway = Mth.sin(age * 0.07F), sway2 = Mth.sin(age * 0.05F + 1.3F);
+        if (st == 5) {
+            // the shoulder charge: turned side-on, lead shoulder down, the arm tucked across, head down behind it
+            float jolt = Mth.sin(age * 1.9F) * 0.03F;
+            m.body.yRot = 0.6F;
+            m.body.xRot = 0.35F;
+            m.head.yRot = m.head.yRot * 0.3F - 0.35F;
+            m.head.xRot = 0.15F + jolt;
+            m.leftArm.xRot = -0.9F + jolt;
+            m.leftArm.yRot = 0.9F;
+            m.leftArm.zRot = 0.35F;
+            m.rightArm.xRot = 0.55F - jolt;
+            m.rightArm.yRot = 0.3F;
+            m.rightArm.zRot = 0.25F;
+            m.hat.copyFrom(m.head);
+            return; // the legs keep running
+        }
         if (st == 3) {
             // the take-off stance: down on one knee, a fist planted on the ground, the other arm thrown back, eyes up
             float shiver = Mth.sin(age * 1.7F) * 0.012F;

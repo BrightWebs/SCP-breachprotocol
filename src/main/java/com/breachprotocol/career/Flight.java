@@ -26,6 +26,27 @@ public final class Flight {
     private Flight() {}
 
     private static final Map<UUID, Integer> GEAR = new HashMap<>();
+    /** On foot: sprint gears, and who's running with a shoulder down. */
+    private static final Map<UUID, Integer> RUN = new HashMap<>();
+    private static final java.util.Set<UUID> RAM = new java.util.HashSet<>();
+    private static final net.minecraft.resources.ResourceLocation STEP = net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "sprint_step");
+
+    private static void step(ServerPlayer p, boolean on) {
+        var a = p.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.STEP_HEIGHT);
+        if (a == null) return;
+        if (on && !a.hasModifier(STEP)) a.addTransientModifier(new net.minecraft.world.entity.ai.attributes.AttributeModifier(STEP, 0.65, net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation.ADD_VALUE));
+        else if (!on) a.removeModifier(STEP);
+    }
+
+    private static void ramPose(ServerPlayer p, boolean on) {
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntity(p, new com.breachprotocol.network.FlightPosePayload(p.getId(), on ? 2 : 0));
+    }
+
+    private static void stopRun(ServerPlayer p) {
+        RUN.remove(p.getUUID());
+        if (RAM.remove(p.getUUID())) ramPose(p, false);
+        step(p, false);
+    }
 
     /** "pow:fly:gear:n", "pow:fly:boom:n", "pow:fly:impact". */
     public static void action(ServerPlayer p, String[] a) {
@@ -44,7 +65,21 @@ public final class Flight {
             }
             return;
         }
-        if (a.length < 3 || Dominion.level(p) < 2 || !p.getAbilities().flying) { if (a.length >= 3 && a[2].equals("gear")) GEAR.remove(p.getUUID()); return; }
+        if (a[1].equals("run") && a.length >= 4 && (a[2].equals("gear") || a[2].equals("ram"))) {
+            if (Dominion.level(p) < 2) { stopRun(p); return; }
+            if (a[2].equals("gear")) {
+                int g = parse(a[3]);
+                if (g <= 0) stopRun(p);
+                else { RUN.put(p.getUUID(), Math.min(5, g)); step(p, true); } // step assist: up whole blocks without a jump
+            } else {
+                boolean on = a[3].equals("1") && RUN.getOrDefault(p.getUUID(), 0) >= 5;
+                if (on) RAM.add(p.getUUID()); else RAM.remove(p.getUUID());
+                ramPose(p, on);
+            }
+            return;
+        }
+        boolean runner = a[1].equals("run") && RUN.containsKey(p.getUUID());
+        if (a.length < 3 || Dominion.level(p) < 2 || !p.getAbilities().flying && !runner) { if (a.length >= 3 && a[2].equals("gear")) GEAR.remove(p.getUUID()); return; }
         ServerLevel l = p.serverLevel();
         Vec3 at = p.position().add(0, 1, 0);
         switch (a[2]) {
@@ -66,7 +101,7 @@ public final class Flight {
             }
             case "tear" -> {
                 // gear five: SCP-096's way through things. Whatever's in front of you goes (bedrock and the like excepted)
-                if (GEAR.getOrDefault(p.getUUID(), 0) < 5 || a.length < 4 || !p.mayBuild()) return;
+                if ((runner ? RAM.contains(p.getUUID()) ? 5 : 0 : GEAR.getOrDefault(p.getUUID(), 0)) < 5 || a.length < 4 || !p.mayBuild()) return;
                 int n = 0;
                 for (String k : a[3].split(",")) {
                     if (++n > 128) break;
@@ -123,7 +158,7 @@ public final class Flight {
 
     /** SCP-Ω in flight: the server takes their word for where they are (see mixin.FlightMoveMixin). */
     public static boolean trusted(ServerPlayer p) {
-        return p != null && p.getAbilities().flying && Dominion.level(p) >= 2;
+        return p != null && (p.getAbilities().flying || RUN.containsKey(p.getUUID())) && Dominion.level(p) >= 2;
     }
 
     private static int parse(String s) { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } }
@@ -135,6 +170,19 @@ public final class Flight {
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
             return p == null || !p.getAbilities().flying || Dominion.level(p) < 2;
+        });
+        // runners: the dust trail behind the fast ones; the ram
+        RUN.entrySet().removeIf(en -> {
+            ServerPlayer p = srv.getPlayerList().getPlayer(en.getKey());
+            if (p == null) { RAM.remove(en.getKey()); return true; }
+            if (p.getAbilities().flying || Dominion.level(p) < 2) { RAM.remove(en.getKey()); ramPose(p, false); step(p, false); return true; }
+            if (RAM.contains(p.getUUID())) ram(p);
+            if (en.getValue() >= 2) {
+                ServerLevel l = p.serverLevel();
+                for (ServerPlayer q : l.players())
+                    if (q != p && q.distanceToSqr(p) < 160 * 160) l.sendParticles(q, ParticleTypes.CLOUD, true, p.getX(), p.getY() + 0.2, p.getZ(), 2, 0.2, 0.05, 0.2, 0.01);
+            }
+            return false;
         });
         if (GEAR.isEmpty()) return;
         GEAR.entrySet().removeIf(en -> {

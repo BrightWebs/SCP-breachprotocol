@@ -21,6 +21,8 @@ public final class FlightState {
     public static volatile UUID localId;
     /** Client: other players (by entity id) down in the take-off stance, as the server reported. */
     public static final Set<Integer> CHARGING = ConcurrentHashMap.newKeySet();
+    /** Client: other players (by entity id) running with a shoulder down. */
+    public static final Set<Integer> RAMMING = ConcurrentHashMap.newKeySet();
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();
