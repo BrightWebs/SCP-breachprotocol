@@ -508,8 +508,10 @@ public final class SuperFlight {
                 AIR.merge(p.getId(), 1, Integer::sum);
                 if (!hang) AIR.put(p.getId(), 0);
             }
-            // no walking in mid-air
-            if (style(p) > 0) p.walkAnimation.setSpeed(0F);
+            // no walking in mid-air; on foot at speed (ramming included) a full, steady stride
+            int st = style(p);
+            if (st > 0 && st != 5) p.walkAnimation.setSpeed(0F);
+            else if (st == 5 || p == mc.player && runGear > 0) p.walkAnimation.setSpeed(1F);
         }
         AIR.keySet().retainAll(seen);
     }
@@ -524,13 +526,19 @@ public final class SuperFlight {
             float jolt = Mth.sin(age * 1.9F) * 0.03F;
             m.body.yRot = 0.6F;
             m.body.xRot = 0.35F;
+            // the shoulders turn with the torso (as the model does for a swing); the legs keep running straight ahead
+            float by = m.body.yRot;
+            m.rightArm.z = Mth.sin(by) * 5F;
+            m.rightArm.x = -Mth.cos(by) * 5F;
+            m.leftArm.z = -Mth.sin(by) * 5F;
+            m.leftArm.x = Mth.cos(by) * 5F;
             m.head.yRot = m.head.yRot * 0.3F - 0.35F;
             m.head.xRot = 0.15F + jolt;
             m.leftArm.xRot = -0.9F + jolt;
-            m.leftArm.yRot = 0.9F;
+            m.leftArm.yRot = 0.9F + by;
             m.leftArm.zRot = 0.35F;
             m.rightArm.xRot = 0.55F - jolt;
-            m.rightArm.yRot = 0.3F;
+            m.rightArm.yRot = 0.3F + by;
             m.rightArm.zRot = 0.25F;
             m.hat.copyFrom(m.head);
             return; // the legs keep running
