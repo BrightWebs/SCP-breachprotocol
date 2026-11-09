@@ -36,6 +36,9 @@ import com.breachprotocol.world.FlightState;
  * <li>Hold sprint to go faster. <b>Double-tap sprint</b> to shift up a gear, again and again: the
  *     second gear breaks the sound barrier (a boom everyone hears, a vapour cone, the screen shakes),
  *     and every gear after that is faster still. Let go of forward and you drop back down the gears.</li>
+ * <li><b>Crouch and triple-tap sprint</b>, on the ground or in the air: straight into flight at the top
+ *     gear. At the top gear you go through things the way SCP-096 does: blocks in your path are torn
+ *     out (bedrock and the like hold), and anything living in your way is thrown aside.</li>
  * <li>The camera banks into turns, the view stretches with speed, and to anyone watching you lie
  *     flat into the direction you're flying.</li>
  * </ul>
@@ -50,7 +53,8 @@ public final class SuperFlight {
 
     private static Vec3 vel = Vec3.ZERO, before = Vec3.ZERO;
     private static int gear, idle, lastSprintTap = -100, ticks, shake, punch;
-    private static boolean sprintWas, zeroed, flying;
+    private static boolean sprintWas, zeroed, flying, launchWas;
+    private static int taps, firstTap = -100;
     private static float roll, rollWas, lastYaw;
     private static WindSound wind;
 
@@ -68,6 +72,13 @@ public final class SuperFlight {
         if (!(event.getEntity() instanceof LocalPlayer p)) return;
         Minecraft mc = Minecraft.getInstance();
         ticks++;
+        // crouch and triple-tap sprint: straight into flight, at full speed
+        boolean sprintKey = mc.options.keySprint.isDown();
+        if (sprintKey && !launchWas && mc.screen == null) {
+            if (ticks - firstTap > 12) { firstTap = ticks; taps = 0; }
+            if (++taps >= 3 && mc.options.keyShift.isDown() && canLaunch(p)) { taps = 0; launch(p); }
+        }
+        launchWas = sprintKey;
         boolean now = eligible(p);
         if (!now) {
             if (flying) land(p);
@@ -101,6 +112,7 @@ public final class SuperFlight {
         double k = input ? Mth.clamp(0.16 - vel.length() * 0.012, 0.045, 0.16) : 0.09;
         vel = vel.add(want.subtract(vel).scale(k));
         if (!input && vel.lengthSqr() < 0.0025) vel = new Vec3(0, Math.sin(ticks * 0.08) * 0.012, 0); // a hover that breathes
+        if (gear >= MAX_GEAR) tear(p);
         p.setDeltaMovement(vel);
         p.setSprinting(false);
         // fast enough and you lie along the flight: the pose, and the hitbox with it (the server is told)
@@ -135,6 +147,7 @@ public final class SuperFlight {
         // what actually happened: a wall takes the speed out of you
         Vec3 moved = p.position().subtract(before);
         if (vel.lengthSqr() > 0.01 && moved.lengthSqr() < vel.lengthSqr() * 0.36) {
+            if (gear >= MAX_GEAR && moved.lengthSqr() > 0.04) return; // gear five ploughs on
             if (vel.length() > 2.5) {
                 shake = 12;
                 p.playSound(SoundEvents.GENERIC_EXPLODE.value(), 0.8F, 1.3F);
@@ -179,6 +192,47 @@ public final class SuperFlight {
         }
         mc.level.addParticle(ParticleTypes.SONIC_BOOM, c.x, c.y, c.z, 0, 0, 0);
         mc.level.addParticle(ParticleTypes.EXPLOSION, c.x - dir.x * 2, c.y - dir.y * 2, c.z - dir.z * 2, 0, 0, 0);
+    }
+
+    static boolean canLaunch(LocalPlayer p) {
+        return p.getAbilities().mayfly && !p.isCreative() && !p.isSpectator() && !p.isPassenger() && ClientCareerState.tag.getInt("dom") >= 2;
+    }
+
+    /** From standing to gear five in one go. */
+    private static void launch(LocalPlayer p) {
+        Vec3 look = p.getLookAngle();
+        p.getAbilities().flying = true;
+        p.onUpdateAbilities();
+        flying = true;
+        vel = look.scale(SPEED[MAX_GEAR + 1]);
+        if (p.onGround() && vel.y < 0.3 && look.y > -0.35) vel = new Vec3(vel.x, 0.3, vel.z); // off the ground, not into it
+        p.setOnGround(false);
+        idle = 0;
+        gear = 0;
+        shift(p, MAX_GEAR);
+        p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 1.0F, 0.5F);
+    }
+
+    /** Gear five: what's in front of you is gone before you reach it (the server does it for real). */
+    private static void tear(LocalPlayer p) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !p.mayBuild()) return;
+        net.minecraft.world.phys.AABB box = p.getBoundingBox().expandTowards(vel.scale(2.0)).inflate(0.15);
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
+        for (net.minecraft.core.BlockPos q : net.minecraft.core.BlockPos.betweenClosed(Mth.floor(box.minX), Mth.floor(box.minY), Mth.floor(box.minZ), Mth.floor(box.maxX), Mth.floor(box.maxY), Mth.floor(box.maxZ))) {
+            if (n >= 128) break;
+            var st = mc.level.getBlockState(q);
+            if (st.isAir() || st.getCollisionShape(mc.level, q).isEmpty() || st.getDestroySpeed(mc.level, q) < 0) continue;
+            if (n > 0) sb.append(',');
+            sb.append(q.asLong());
+            mc.level.addDestroyBlockEffect(q.immutable(), st);
+            mc.level.setBlock(q.immutable(), net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 11);
+            n++;
+        }
+        if (n == 0) return;
+        send("pow:fly:tear:" + sb);
+        if (ticks % 3 == 0) { p.playSound(SoundEvents.GENERIC_EXPLODE.value(), 0.7F, 0.9F); shake = Math.max(shake, 5); }
     }
 
     private static void land(LocalPlayer p) {

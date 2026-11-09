@@ -54,11 +54,42 @@ public final class Flight {
                     l.sendParticles(q, ParticleTypes.EXPLOSION, true, at.x, at.y, at.z, 2, 0.5, 0.5, 0.5, 0);
                 }
             }
+            case "tear" -> {
+                // gear five: SCP-096's way through things. Whatever's in front of you goes (bedrock and the like excepted)
+                if (GEAR.getOrDefault(p.getUUID(), 0) < 5 || a.length < 4 || !p.mayBuild()) return;
+                int n = 0;
+                for (String k : a[3].split(",")) {
+                    if (++n > 128) break;
+                    long v;
+                    try { v = Long.parseLong(k); } catch (NumberFormatException e) { continue; }
+                    net.minecraft.core.BlockPos q = net.minecraft.core.BlockPos.of(v);
+                    if (q.distToCenterSqr(p.position()) > 24 * 24 || !l.mayInteract(p, q)) continue;
+                    var st = l.getBlockState(q);
+                    if (st.isAir() || st.getDestroySpeed(l, q) < 0) continue;
+                    l.destroyBlock(q, false, p);
+                }
+                if (p.tickCount % 3 == 0) l.playSound(p, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2F, 0.8F);
+            }
             case "impact" -> {
                 l.playSound(p, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5F, 1.2F);
                 for (ServerPlayer q : l.players()) if (q != p) l.sendParticles(q, ParticleTypes.EXPLOSION, true, at.x, at.y, at.z, 3, 0.6, 0.6, 0.6, 0);
             }
             default -> {}
+        }
+    }
+
+    /** At gear five, anything in your way is hit as if by a train, and thrown aside. Your own people are spared. */
+    private static void ram(ServerPlayer p) {
+        ServerLevel l = p.serverLevel();
+        Vec3 dir = p.getLookAngle();
+        var box = p.getBoundingBox().expandTowards(dir.scale(3)).inflate(1.0);
+        for (net.minecraft.world.entity.LivingEntity e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> e != p && e.isAlive() && !e.isSpectator())) {
+            if (Targets.yours(p, e) || e instanceof ServerPlayer q && (q.isCreative() || !Targets.hostile(p, q))) continue;
+            e.hurt(l.damageSources().playerAttack(p), 40F);
+            Vec3 side = e.position().subtract(p.position()).normalize();
+            e.push(dir.x * 2.5 + side.x, 0.8, dir.z * 2.5 + side.z);
+            e.hurtMarked = true;
+            l.sendParticles(ParticleTypes.EXPLOSION, e.getX(), e.getY() + e.getBbHeight() / 2, e.getZ(), 1, 0, 0, 0, 0);
         }
     }
 
@@ -76,6 +107,7 @@ public final class Flight {
         GEAR.entrySet().removeIf(en -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(en.getKey());
             if (p == null || !p.getAbilities().flying || p.onGround()) return true;
+            if (en.getValue() >= 5) ram(p);
             if (en.getValue() < 2) return false;
             // the contrail, for everyone but the flier (theirs is drawn on their own screen)
             ServerLevel l = p.serverLevel();

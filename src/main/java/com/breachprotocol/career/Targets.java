@@ -71,7 +71,7 @@ public final class Targets {
     }
 
     /** Your own people and creatures: spared unless you mark their kind hostile, or look straight at them. */
-    private static boolean yours(ServerPlayer p, LivingEntity e) {
+    public static boolean yours(ServerPlayer p, LivingEntity e) {
         String me = p.getUUID().toString();
         CompoundTag t = e.getPersistentData();
         return e instanceof FoundationStaff || e instanceof O5MemberEntity || me.equals(t.getString("bp_dom_follow")) || me.equals(t.getString("bp_dom_calm"))
