@@ -5,15 +5,12 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "BlockStateBaseMixin",
-    "PlayerPoseMixin",
-    "FlightMoveMixin"
+    "PlayerPoseMixin"
   ],
   "injectors": {
     "defaultRequire": 1
   },
   "client": [
-    "client.FlightModelMixin",
-    "client.WarheadGuardMixin",
-    "client.TransparencyGuardMixin"
+    "client.FlightModelMixin"
   ]
 }
