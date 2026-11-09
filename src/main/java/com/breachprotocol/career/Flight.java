@@ -34,6 +34,15 @@ public final class Flight {
             else com.breachprotocol.world.FlightState.LYING.remove(p.getUUID());
             return;
         }
+        if (a.length >= 4 && a[2].equals("charge")) {
+            boolean on = a[3].equals("1") && Dominion.level(p) >= 2;
+            net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntity(p, new com.breachprotocol.network.FlightPosePayload(p.getId(), on ? 1 : 0));
+            if (on) {
+                l.playSound(p, at.x, at.y, at.z, SoundEvents.RESPAWN_ANCHOR_CHARGE, SoundSource.PLAYERS, 1F, 0.6F);
+                l.sendParticles(ParticleTypes.CRIT, p.getX(), p.getY() + 0.05, p.getZ(), 12, 0.4, 0.02, 0.4, 0.1);
+            }
+            return;
+        }
         if (a.length < 3 || Dominion.level(p) < 2 || !p.getAbilities().flying) { if (a.length >= 3 && a[2].equals("gear")) GEAR.remove(p.getUUID()); return; }
         ServerLevel l = p.serverLevel();
         Vec3 at = p.position().add(0, 1, 0);

@@ -36,7 +36,9 @@ import com.breachprotocol.world.FlightState;
  * <li>Hold sprint to go faster. <b>Double-tap sprint</b> to shift up a gear, again and again: the
  *     second gear breaks the sound barrier (a boom everyone hears, a vapour cone, the screen shakes),
  *     and every gear after that is faster still. Let go of forward and you drop back down the gears.</li>
- * <li><b>Crouch and triple-tap sprint</b>, on the ground or in the air: straight into flight at the top
+ * <li><b>Crouch and triple-tap sprint</b>: on the ground, the first tap drops you into the take-off
+ *     stance (a knee and a fist down, the other arm back), the third launches you with a shockwave that
+ *     throws back everything nearby without breaking the ground. In the air, the same goes straight to the top
  *     gear. At the top gear you go through things the way SCP-096 does: blocks in your path are torn
  *     out (bedrock and the like hold), and anything living in your way is thrown aside.</li>
  * <li>The camera banks into turns, the view stretches with speed, and to anyone watching you lie
@@ -54,7 +56,8 @@ public final class SuperFlight {
     private static Vec3 vel = Vec3.ZERO, before = Vec3.ZERO;
     private static int gear, idle, lastSprintTap = -100, ticks, shake, punch;
     private static boolean sprintWas, zeroed, flying, launchWas;
-    private static int taps, firstTap = -100, launchedAt = -100;
+    private static int taps, firstTap = -100, launchedAt = -100, pendingLaunch = -1;
+    private static boolean charging;
     private static float roll, rollWas, lastYaw;
     private static WindSound wind;
 
@@ -74,11 +77,31 @@ public final class SuperFlight {
         ticks++;
         // crouch and triple-tap sprint: straight into flight, at full speed
         boolean sprintKey = mc.options.keySprint.isDown();
+        boolean crouched = mc.options.keyShift.isDown();
         if (sprintKey && !launchWas && mc.screen == null) {
-            if (ticks - firstTap > 12) { firstTap = ticks; taps = 0; }
-            if (++taps >= 3 && mc.options.keyShift.isDown() && canLaunch(p)) { taps = 0; launch(p); }
+            if (ticks - firstTap > 14) { firstTap = ticks; taps = 0; }
+            taps++;
+            // the first tap drops you into the stance (on the ground); the third, and a beat later you're gone
+            if (crouched && canLaunch(p) && taps >= 3 && pendingLaunch < 0) { taps = 0; pendingLaunch = ticks + (p.onGround() ? 6 : 0); p.playSound(SoundEvents.WARDEN_SONIC_CHARGE, 0.6F, 1.6F); }
         }
         launchWas = sprintKey;
+        boolean stance = canLaunch(p) && p.onGround() && (pendingLaunch >= 0 || crouched && taps >= 1 && ticks - firstTap <= 14);
+        if (stance != charging) {
+            charging = stance;
+            send("pow:fly:charge:" + (stance ? 1 : 0));
+            if (stance) { p.playSound(SoundEvents.RESPAWN_ANCHOR_CHARGE, 0.5F, 0.7F); shake = Math.max(shake, 3); }
+        }
+        if (charging && mc.level != null && ticks % 2 == 0) {
+            // the ground cracks under the fist
+            Vec3 f = p.position().add(p.getLookAngle().multiply(0.6, 0, 0.6));
+            mc.level.addParticle(ParticleTypes.CRIT, f.x, p.getY() + 0.05, f.z, (Math.random() - 0.5) * 0.3, 0.1, (Math.random() - 0.5) * 0.3);
+        }
+        if (pendingLaunch >= 0 && ticks >= pendingLaunch) {
+            pendingLaunch = -1;
+            charging = false;
+            send("pow:fly:charge:0");
+            if (canLaunch(p)) launch(p);
+        }
         boolean now = eligible(p);
         if (!now) {
             if (flying) land(p);
@@ -249,6 +272,7 @@ public final class SuperFlight {
 
     private static void land(LocalPlayer p) {
         flying = false;
+        FlightState.CHARGING.clear();
         if (FlightState.localLying) { FlightState.localLying = false; send("pow:fly:lie:0"); }
         if (gear != 0) { gear = 0; send("pow:fly:gear:0"); }
         if (zeroed) { p.getAbilities().setFlyingSpeed(0.05F); zeroed = false; }
@@ -296,6 +320,13 @@ public final class SuperFlight {
     @SubscribeEvent
     public static void lean(RenderPlayerEvent.Pre event) {
         Player p = event.getEntity();
+        if (style(p) == 3) {
+            // kneeling: the whole body sits lower
+            event.getPoseStack().pushPose();
+            event.getPoseStack().translate(0, -0.2, 0);
+            LEANED.add(p.getId());
+            return;
+        }
         if (p.isFallFlying() || p.onGround() || p.isPassenger() || p.isInWater()) return;
         float pt = event.getPartialTick();
         Vec3 d = new Vec3(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
@@ -337,6 +368,7 @@ public final class SuperFlight {
     /** 0 not flying, 1 upright (hovering, drifting), 2 flat out. */
     static int style(Player p) {
         if (p.isFallFlying() || p.isPassenger() || p.isInWater() || p.isSleeping()) return 0;
+        if (p == Minecraft.getInstance().player ? charging : FlightState.CHARGING.contains(p.getId())) return 3;
         if (FlightState.lying(p)) return 2;
         if (p == Minecraft.getInstance().player) return flying ? 1 : 0;
         return AIR.getOrDefault(p.getId(), 0) > 12 ? 1 : 0;
@@ -365,6 +397,26 @@ public final class SuperFlight {
         int st = style(p);
         if (st == 0) return;
         float sway = Mth.sin(age * 0.07F), sway2 = Mth.sin(age * 0.05F + 1.3F);
+        if (st == 3) {
+            // the take-off stance: down on one knee, a fist planted on the ground, the other arm thrown back, eyes up
+            float shiver = Mth.sin(age * 1.7F) * 0.012F;
+            m.body.xRot = 0.55F;
+            m.head.xRot = -0.55F + shiver;
+            m.rightArm.xRot = -0.05F + shiver;
+            m.rightArm.yRot = 0F;
+            m.rightArm.zRot = 0.04F;
+            m.leftArm.xRot = 1.15F;
+            m.leftArm.yRot = 0.2F;
+            m.leftArm.zRot = -0.4F;
+            m.rightLeg.xRot = -1.35F;   // the knee up in front
+            m.rightLeg.yRot = 0F;
+            m.rightLeg.zRot = 0.05F;
+            m.leftLeg.xRot = 0.75F;     // the other knee down behind
+            m.leftLeg.yRot = 0F;
+            m.leftLeg.zRot = -0.05F;
+            m.hat.copyFrom(m.head);
+            return;
+        }
         if (st == 2) {
             boolean both = p == Minecraft.getInstance().player ? gear >= 3 : new Vec3(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo).length() > 3.0;
             // head up, looking where you're going

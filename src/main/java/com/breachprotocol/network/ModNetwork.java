@@ -32,6 +32,11 @@ public final class ModNetwork {
                 ctx.enqueueWork(() -> {
                     if (ctx.player() instanceof ServerPlayer sp) com.breachprotocol.entity.Dialogue.action(sp, payload.action(), payload.text());
                 }));
+        registrar.playToClient(FlightPosePayload.TYPE, FlightPosePayload.STREAM_CODEC, (payload, ctx) ->
+                ctx.enqueueWork(() -> {
+                    if (payload.state() > 0) com.breachprotocol.world.FlightState.CHARGING.add(payload.entity());
+                    else com.breachprotocol.world.FlightState.CHARGING.remove(payload.entity());
+                }));
         registrar.playToClient(PhotoDataPayload.TYPE, PhotoDataPayload.STREAM_CODEC, (payload, ctx) ->
                 ctx.enqueueWork(() -> ClientPhotoBridge.received(payload.img(), payload.png())));
     }
