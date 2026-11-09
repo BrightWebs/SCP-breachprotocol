@@ -93,6 +93,11 @@ public final class Flight {
         }
     }
 
+    /** SCP-Ω in flight: the server takes their word for where they are (see mixin.FlightMoveMixin). */
+    public static boolean trusted(ServerPlayer p) {
+        return p != null && p.getAbilities().flying && Dominion.level(p) >= 2;
+    }
+
     private static int parse(String s) { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } }
 
     @SubscribeEvent
@@ -101,12 +106,12 @@ public final class Flight {
         // lying flat ends when the flight does
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
-            return p == null || !p.getAbilities().flying || p.onGround() || Dominion.level(p) < 2;
+            return p == null || !p.getAbilities().flying || Dominion.level(p) < 2;
         });
         if (GEAR.isEmpty()) return;
         GEAR.entrySet().removeIf(en -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(en.getKey());
-            if (p == null || !p.getAbilities().flying || p.onGround()) return true;
+            if (p == null || !p.getAbilities().flying) return true; // a graze of the ground isn't a landing
             if (en.getValue() >= 5) ram(p);
             if (en.getValue() < 2) return false;
             // the contrail, for everyone but the flier (theirs is drawn on their own screen)

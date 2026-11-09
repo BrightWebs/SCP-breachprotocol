@@ -54,7 +54,7 @@ public final class SuperFlight {
     private static Vec3 vel = Vec3.ZERO, before = Vec3.ZERO;
     private static int gear, idle, lastSprintTap = -100, ticks, shake, punch;
     private static boolean sprintWas, zeroed, flying, launchWas;
-    private static int taps, firstTap = -100;
+    private static int taps, firstTap = -100, launchedAt = -100;
     private static float roll, rollWas, lastYaw;
     private static WindSound wind;
 
@@ -89,9 +89,15 @@ public final class SuperFlight {
         p.getAbilities().setFlyingSpeed(0F);
         zeroed = true;
 
-        var in = p.input;
-        float fwd = in.forwardImpulse, side = in.leftImpulse;
-        boolean up = in.jumping, down = in.shiftKeyDown;
+        // the keys themselves: the game's own input is cut to a crawl while you lie flat, which would slow you,
+        // stand you up, speed you up and lay you down again, over and over
+        var o = mc.options;
+        boolean free = mc.screen == null;
+        float fwd = free ? (o.keyUp.isDown() ? 1F : 0F) - (o.keyDown.isDown() ? 1F : 0F) : 0F;
+        float side = free ? (o.keyLeft.isDown() ? 1F : 0F) - (o.keyRight.isDown() ? 1F : 0F) : 0F;
+        boolean up = free && o.keyJump.isDown();
+        // after a launch, the crouch you launched with doesn't drag you down
+        boolean down = free && o.keyShift.isDown() && ticks - launchedAt > 20;
         boolean sprint = mc.options.keySprint.isDown();
 
         // double-tap sprint: up a gear
@@ -203,6 +209,7 @@ public final class SuperFlight {
         Vec3 look = p.getLookAngle();
         p.getAbilities().flying = true;
         p.onUpdateAbilities();
+        launchedAt = ticks;
         flying = true;
         vel = look.scale(SPEED[MAX_GEAR + 1]);
         if (p.onGround() && vel.y < 0.3 && look.y > -0.35) vel = new Vec3(vel.x, 0.3, vel.z); // off the ground, not into it
