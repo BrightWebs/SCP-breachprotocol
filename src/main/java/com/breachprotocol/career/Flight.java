@@ -26,6 +26,8 @@ public final class Flight {
     private Flight() {}
 
     private static final Map<UUID, Integer> GEAR = new HashMap<>();
+    /** Where each player was at the end of the last tick: their real speed, for the server's movement check. */
+    private static final Map<UUID, Vec3> LAST = new HashMap<>();
     /** On foot: sprint gears, and who's running with a shoulder down. */
     private static final Map<UUID, Integer> RUN = new HashMap<>();
     private static final java.util.Set<UUID> RAM = new java.util.HashSet<>();
@@ -164,9 +166,13 @@ public final class Flight {
         // on a server, the "moved too quickly" check measures each move against the speed it last knew you had.
         // A flier's (or runner's) real speed is kept here, so a fast but honest move, or two arriving together
         // over a laggy connection, isn't mistaken for cheating and dragged back
-        for (ServerPlayer p : srv.getPlayerList().getPlayers())
-            if ((p.getAbilities().flying || RUN.containsKey(p.getUUID())) && Dominion.level(p) >= 2 && !p.isPassenger())
-                p.setDeltaMovement(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
+        for (ServerPlayer p : srv.getPlayerList().getPlayers()) {
+            Vec3 now = p.position(), was = LAST.put(p.getUUID(), now);
+            if (was != null && (p.getAbilities().flying || RUN.containsKey(p.getUUID())) && Dominion.level(p) >= 2 && !p.isPassenger()
+                    && was.distanceToSqr(now) < 400) // not a teleport
+                p.setDeltaMovement(now.subtract(was));
+        }
+        if (srv.getTickCount() % 200 == 0) LAST.keySet().removeIf(id -> srv.getPlayerList().getPlayer(id) == null);
         // lying flat ends when the flight does
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
