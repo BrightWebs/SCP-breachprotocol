@@ -212,7 +212,9 @@ public final class SuperFlight {
         launchedAt = ticks;
         flying = true;
         vel = look.scale(SPEED[MAX_GEAR + 1]);
-        if (p.onGround() && vel.y < 0.3 && look.y > -0.35) vel = new Vec3(vel.x, 0.3, vel.z); // off the ground, not into it
+        // off the ground, never into it: at least a climb, however you're looking
+        if (vel.y < 0.9) vel = new Vec3(vel.x, 0.9, vel.z);
+        send("pow:fly:launch");
         p.setOnGround(false);
         idle = 0;
         gear = 0;
@@ -223,12 +225,15 @@ public final class SuperFlight {
     /** Gear five: what's in front of you is gone before you reach it (the server does it for real). */
     private static void tear(LocalPlayer p) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null || !p.mayBuild()) return;
+        if (mc.level == null || !p.mayBuild() || ticks - launchedAt < 15) return; // a launch leaves the ground standing
+        // only what's ahead of you: skimming over the ground doesn't plough it; diving into it does
+        double feet = p.getY() + (vel.y < -0.35 ? -64 : 0.05);
         net.minecraft.world.phys.AABB box = p.getBoundingBox().expandTowards(vel.scale(2.0)).inflate(0.15);
         StringBuilder sb = new StringBuilder();
         int n = 0;
         for (net.minecraft.core.BlockPos q : net.minecraft.core.BlockPos.betweenClosed(Mth.floor(box.minX), Mth.floor(box.minY), Mth.floor(box.minZ), Mth.floor(box.maxX), Mth.floor(box.maxY), Mth.floor(box.maxZ))) {
             if (n >= 128) break;
+            if (q.getY() + 1 <= feet) continue;
             var st = mc.level.getBlockState(q);
             if (st.isAir() || st.getCollisionShape(mc.level, q).isEmpty() || st.getDestroySpeed(mc.level, q) < 0) continue;
             if (n > 0) sb.append(',');

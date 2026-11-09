@@ -70,6 +70,24 @@ public final class Flight {
                 }
                 if (p.tickCount % 3 == 0) l.playSound(p, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.2F, 0.8F);
             }
+            case "launch" -> {
+                // the shockwave of a take-off: everything near is thrown back, nothing is broken
+                l.playSound(p, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2F, 0.7F);
+                l.playSound(null, at.x, at.y, at.z, SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 2F, 0.6F);
+                Vec3 feet = p.position();
+                for (int i = 0; i < 40; i++) {
+                    double t = i * Math.PI * 2 / 40;
+                    l.sendParticles(ParticleTypes.CLOUD, feet.x + Math.cos(t) * 1.2, feet.y + 0.1, feet.z + Math.sin(t) * 1.2, 0, Math.cos(t), 0.02, Math.sin(t), 0.6);
+                }
+                l.sendParticles(ParticleTypes.EXPLOSION_EMITTER, feet.x, feet.y + 0.2, feet.z, 1, 0, 0, 0, 0);
+                for (net.minecraft.world.entity.LivingEntity e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, p.getBoundingBox().inflate(7), e -> e != p && e.isAlive() && !e.isSpectator())) {
+                    if (Targets.yours(p, e) || e instanceof ServerPlayer q && q.isCreative()) continue;
+                    double d = Math.max(1, e.distanceTo(p));
+                    Vec3 away = e.position().subtract(feet).multiply(1, 0, 1).normalize().scale(2.6 / Math.sqrt(d));
+                    e.push(away.x, 0.5, away.z);
+                    e.hurtMarked = true;
+                }
+            }
             case "impact" -> {
                 l.playSound(p, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 1.5F, 1.2F);
                 for (ServerPlayer q : l.players()) if (q != p) l.sendParticles(q, ParticleTypes.EXPLOSION, true, at.x, at.y, at.z, 3, 0.6, 0.6, 0.6, 0);
