@@ -83,6 +83,9 @@ public final class Response {
         return 2; // Keter, Apollyon, unclassified: the Council's problem
     }
 
+    /** Who's out after it, if anyone (for the registry). */
+    public static String teamOn(UUID id) { Team t = TEAMS.get(id); return t == null ? "" : t.unit.title; }
+
     /** The orders the breach message offers. */
     static Career.Reply[] orders(Containment.Entry e) {
         String id = e.id.toString(), d = e.designation;

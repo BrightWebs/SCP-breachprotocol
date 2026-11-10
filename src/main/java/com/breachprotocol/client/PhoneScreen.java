@@ -1605,6 +1605,10 @@ public class PhoneScreen extends Screen {
     }
 
     /** The containment registry: everything held, loose or put down at the Foundation's sites, and designating new cells. */
+    /** The registry's filter (-1 all, 0 held, 1 loose, 2 in cells) and the entry opened for orders. */
+    private static int regFilter = -1;
+    private static String regOpen = "";
+
     private int drawRegistry(GuiGraphics g, int y, ListTag reg) {
         int x = SX + 6, w = SW - 12;
         int held = t().getInt("regHeld"), loose = t().getInt("regLoose"), gone = t().getInt("regGone");
@@ -1615,10 +1619,15 @@ public class PhoneScreen extends Screen {
         int[] col = {0xFF7FD6FF, loose > 0 ? 0xFFFF6B6B : 0xFF7A8794, 0xFFB8C6D6};
         for (int i = 0; i < 3; i++) {
             int cx = x + cw * i + cw / 2;
+            boolean on = regFilter == i, hov = over(x + cw * i + 2, y + 2, cw - 4, 26);
+            if (on || hov) { RAW = true; rrect(g, x + cw * i + 3, y + 3, cw - 6, 24, 6, on ? 0xFF1E6B3A : 0xFF0E3A1E); RAW = false; }
             g.drawString(font, stat[i][0], cx - font.width(stat[i][0]) / 2, y + 5, Terminal.map(col[i]), false);
-            small(g, stat[i][1], cx, y + 19, MUTED);
+            small(g, stat[i][1], cx, y + 19, on ? Terminal.BRIGHT : MUTED);
+            final int f = i;
+            hit(x + cw * i + 2, y + 2, cw - 4, 26, () -> { regFilter = regFilter == f ? -1 : f; regOpen = ""; scroll = 0; });
         }
         y += 34;
+        if (regFilter >= 0) { small(g, (regFilter == 0 ? "SHOWING HELD" : regFilter == 1 ? "SHOWING LOOSE" : "SHOWING THOSE IN CELLS") + "  \u00B7  TAP AGAIN FOR ALL", SX + SW / 2, y, Terminal.BRIGHT); y += 9; }
         int empty = t().getInt("regEmpty");
         if (empty > 0) { small(g, empty + " DESIGNATED CELL" + (empty == 1 ? "" : "S") + " STAND EMPTY", SX + SW / 2, y, AMBER); y += 9; }
         // designating the room you're standing in
@@ -1629,10 +1638,15 @@ public class PhoneScreen extends Screen {
             empty(g, y - 16, "Registry empty", "Anomalies held at your sites are entered automatically. Breaches are detected the same way.");
             return y + 60;
         }
+        int shown = 0;
         for (Tag tg : reg) {
             CompoundTag e = (CompoundTag) tg;
             int st = e.getInt("st");
-            int h = 30;
+            if (regFilter == 0 && st != 0 || regFilter == 1 && st != 1 || regFilter == 2 && (st != 0 || e.getString("cell").isEmpty())) continue;
+            shown++;
+            String eid = e.getString("id");
+            boolean open = !eid.isEmpty() && eid.equals(regOpen) && st != 2;
+            int h = open ? (st == 1 ? 30 + 56 : 30 + 22) : 30;
             boolean isLoose = st == 1, dead = st == 2;
             rbox(g, x, y, w, h, 8, isLoose ? 0xFF2A0C0E : 0xFF08180E, isLoose ? 0xFF7A2328 : 0xFF163D24);
             circle(g, x + 10, y + 15, 4, isLoose ? RED : dead ? 0xFF5A6470 : TEAL);
@@ -1657,8 +1671,27 @@ public class PhoneScreen extends Screen {
             line = ellipsize(line.toUpperCase(Locale.ROOT), (int) ((w - 30) / 0.75F));
             small(g, line, x + 20 + (int) (font.width(line) * 0.375F), y + 18, isLoose ? 0xFFFF7A7A : dead ? 0xFF7A8794 : 0xFF7FD6FF);
             if (e.getInt("seen") >= 2 && st == 0) small(g, "LAST CHECKED " + e.getInt("seen") + "D AGO", x + w - 8 - (int) (font.width("LAST CHECKED " + e.getInt("seen") + "D AGO") * 0.375F), y + 25, AMBER);
+            // tap it for orders
+            if (!eid.isEmpty() && st != 2) hit(x, y, w, 30, () -> regOpen = regOpen.equals(eid) ? "" : eid);
+            if (open) {
+                int oy = y + 31, bw = (w - 16) / 2;
+                String team = e.getString("team");
+                if (st == 1) {
+                    small(g, team.isEmpty() ? "WHO GOES AFTER IT?" : team.toUpperCase(Locale.ROOT) + " IS ON IT  \u00B7  SEND SOMEONE ELSE?", x + w / 2, oy, team.isEmpty() ? AMBER : 0xFF7FD6FF);
+                    oy += 8;
+                    pill(g, x + 6, oy, bw, 14, "Site Security", 0xFF2E9E57, true, () -> send("resp:SECURITY:" + eid, 0));
+                    pill(g, x + 10 + bw, oy, bw, 14, "Epsilon-11", 0xFF2E9E57, true, () -> send("resp:EPSILON_11:" + eid, 0));
+                    oy += 17;
+                    pill(g, x + 6, oy, bw, 14, "Nu-7", 0xFF2E9E57, true, () -> send("resp:NU_7:" + eid, 0));
+                    pill(g, x + 10 + bw, oy, bw, 14, "I'll do it myself", 0xFF156E8F, true, () -> send("resp:SELF:" + eid, 0));
+                } else {
+                    pill(g, x + 6, oy, bw, 14, "Transfer to Site-01", 0xFF156E8F, true, () -> send("cont:transfer:" + eid, 0));
+                    pill(g, x + 10 + bw, oy, bw, 14, "Terminate", 0xFFB84848, true, () -> send("cont:terminate:" + eid, 0));
+                }
+            }
             y += h + 4;
         }
+        if (shown == 0) { empty(g, y - 16, "None here", regFilter == 1 ? "Nothing is loose. Good." : "Nothing in this list right now."); y += 44; }
         small(g, "THE COUNCIL DEBATES BREACHES AND TRANSFERS", SX + SW / 2, y + 2, Terminal.DIM);
         return y + 12;
     }

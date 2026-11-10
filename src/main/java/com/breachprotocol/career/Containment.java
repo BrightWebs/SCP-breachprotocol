@@ -554,8 +554,10 @@ public final class Containment extends SavedData {
         int held = 0, loose = 0, gone = 0;
         for (Entry e : show) {
             if (e.status == HELD) held++; else if (e.status == LOOSE) loose++; else gone++;
-            if (l.size() >= 40) continue;
+            if (l.size() >= 160) continue;
             CompoundTag c = new CompoundTag();
+            c.putString("id", e.id.toString());
+            c.putString("team", Response.teamOn(e.id));
             c.putString("d", e.designation);
             c.putString("dk", e.dk);
             c.putString("o", e.cls);
