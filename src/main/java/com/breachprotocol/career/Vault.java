@@ -345,11 +345,16 @@ public final class Vault {
             v.setBlock(q, s, 2);
         }
         v.setBlock(new BlockPos((c.fx0 + c.fx1) / 2, Y + c.h + 1, (c.fza + c.fzb) / 2), lamp, 2);
-        // the door: only the Administrator opens it
-        var face = c.front < 0 ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH;
-        BlockState door = Blocks.IRON_DOOR.defaultBlockState().setValue(net.minecraft.world.level.block.DoorBlock.FACING, face);
-        v.setBlock(new BlockPos(c.fx0 + 1, Y + 1, c.front), door.setValue(net.minecraft.world.level.block.DoorBlock.HALF, net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER), 2);
-        v.setBlock(new BlockPos(c.fx0 + 1, Y + 2, c.front), door.setValue(net.minecraft.world.level.block.DoorBlock.HALF, net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 2);
+        // the door: a Foundation containment door, Level 5 scanner on the corridor side, exit button inside
+        var out = c.front < 0 ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH;
+        for (int y = 1; y <= 3; y++) { v.setBlock(new BlockPos(c.fx0 + 3, Y + y, c.front), wall, 2); v.setBlock(new BlockPos(c.fx0 + 1, Y + 3, c.front), wall, 2); v.setBlock(new BlockPos(c.fx0 + 2, Y + 3, c.front), wall, 2); }
+        new Doors(v).gate(c.fx0 + 1, c.front, out);
+    }
+
+    /** SCP Unleashed's doors, placed the way the facility builder places them. */
+    private static final class Doors extends com.breachprotocol.world.FacilityBuilder {
+        Doors(ServerLevel v) { super(v, BlockPos.ZERO); }
+        void gate(int x, int z, net.minecraft.core.Direction out) { gate("containment_room_door", 2, 2, x, z, Y, out, 5); }
     }
 
     /** Everything back the way it was built: storeroom (chests keep their contents), corridor, throne room, every cell, and every captive back inside its own. */
