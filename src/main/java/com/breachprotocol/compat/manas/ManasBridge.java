@@ -54,14 +54,26 @@ public final class ManasBridge {
         });
     }
 
+    private static boolean warned;
+
+    /** Theirs if they're the Administrator (it's granted to every one of them): no asking Manas, whose storage differs between versions. */
     public static boolean has(ServerPlayer p) {
-        try { return SkillAPI.getSkillsFrom(p).getSkill(ID).isPresent(); } catch (Throwable t) { return false; }
+        return SKILL != null && (com.breachprotocol.career.Career.rank(p) == com.breachprotocol.career.Rank.ADMINISTRATOR || com.breachprotocol.career.Career.isAscended(p));
+    }
+
+    /** Whether Manas has it on record yet (only to decide whether to hand it over). */
+    private static boolean learned(ServerPlayer p) {
+        try { return SkillAPI.getSkillsFrom(p).getSkill(ID).isPresent(); }
+        catch (Throwable t) {
+            if (!warned) { warned = true; BreachProtocol.LOGGER.warn("Shapeshift: couldn't read Manas skill storage ({}); granting once per session instead", t.toString()); }
+            return p.getPersistentData().getBoolean("bp_shape_granted");
+        }
     }
 
     /** The Administrator has it; it's learned the first time they're seen without it. */
     public static void grant(ServerPlayer p) {
-        if (SKILL == null || has(p)) return;
-        try { SkillHelper.learnSkill(p, SKILL); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Couldn't grant Shapeshift: {}", t.toString()); }
+        if (SKILL == null || learned(p)) return;
+        try { SkillHelper.learnSkill(p, SKILL); p.getPersistentData().putBoolean("bp_shape_granted", true); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Couldn't grant Shapeshift: {}", t.toString()); }
     }
 
     // ---------------------------------------------------------------- using it
