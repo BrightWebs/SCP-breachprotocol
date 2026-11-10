@@ -85,6 +85,7 @@ public final class ManasBridge {
         if (!shifted(p)) { say(p, "You're already yourself.", ChatFormatting.GRAY); return; }
         try { MimicFormHelper.clearSource(p, SOURCE); } catch (Throwable t) { BreachProtocol.LOGGER.debug("Shapeshift revert: {}", t.toString()); }
         p.getPersistentData().remove(FORM);
+        p.getPersistentData().remove(TRAITS);
         giveBack(p);
         puff(p, false);
         Career.sync(p);
@@ -132,12 +133,71 @@ public final class ManasBridge {
             net.minecraft.nbt.ListTag l = new net.minecraft.nbt.ListTag();
             for (String x : lent) l.add(net.minecraft.nbt.StringTag.valueOf(x));
             p.getPersistentData().put(LENT, l);
+            // what the body brings with it
+            CompoundTag tr = new CompoundTag();
+            tr.putBoolean("fire", e.fireImmune());
+            tr.putBoolean("water", e.canBreatheUnderwater());
+            double dmg = 0;
+            if (net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(e.getType())) {
+                var sup = net.minecraft.world.entity.ai.attributes.DefaultAttributes.getSupplier(e.getType());
+                if (sup.hasAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)) dmg = sup.getBaseValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
+            }
+            if (e.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) != null) dmg = Math.max(dmg, e.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE));
+            tr.putDouble("dmg", dmg);
+            p.getPersistentData().put(TRAITS, tr);
             done(p, e.getName().getString(), "mobs", id);
-            if (!lent.isEmpty()) say(p, "You are " + e.getName().getString() + ", and everything it can do, you can: " + lent.size() + (lent.size() == 1 ? " skill." : " skills."), ChatFormatting.LIGHT_PURPLE);
+            readout(p, e, lent, tr);
         } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift (creature): {}", t.toString()); say(p, "It wouldn't take.", ChatFormatting.RED); }
     }
 
-    private static final String LENT = "bp_shape_lent", KNOWN_SKILLS = "bp_shape_skills";
+    private static final String LENT = "bp_shape_lent", KNOWN_SKILLS = "bp_shape_skills", TRAITS = "bp_shape_traits";
+
+    /** Everything the form gave you, said once, in chat. */
+    private static void readout(ServerPlayer p, LivingEntity e, List<String> lent, CompoundTag tr) {
+        List<String> parts = new java.util.ArrayList<>();
+        double dmg = Math.max(tr.getDouble("dmg"), p.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE));
+        parts.add("hits for " + String.format(java.util.Locale.ROOT, "%.0f", dmg));
+        if (tr.getBoolean("fire")) parts.add("fireproof");
+        if (tr.getBoolean("water")) parts.add("breathes water");
+        try { if (MimicFormHelper.isFlyingForm(p)) parts.add("flies"); } catch (Throwable ignored) {}
+        p.sendSystemMessage(Component.literal("◆ " + e.getName().getString().toUpperCase(java.util.Locale.ROOT)).withStyle(ChatFormatting.LIGHT_PURPLE, ChatFormatting.BOLD)
+                .append(Component.literal("  " + String.join(" · ", parts)).withStyle(ChatFormatting.GRAY)));
+        if (lent.isEmpty()) p.sendSystemMessage(Component.literal("   no skills of its own").withStyle(ChatFormatting.DARK_GRAY));
+        else {
+            List<String> names = new java.util.ArrayList<>();
+            for (String id : lent) { String path = id.substring(id.indexOf(':') + 1).replace('_', ' '); names.add(Character.toUpperCase(path.charAt(0)) + path.substring(1)); }
+            p.sendSystemMessage(Component.literal("   its skills, yours while you wear it: ").withStyle(ChatFormatting.GRAY).append(Component.literal(String.join(", ", names)).withStyle(ChatFormatting.LIGHT_PURPLE)));
+        }
+    }
+
+    /** While in a creature's form: its fireproof hide and water-breathing, kept up quietly. */
+    public static void traits(ServerPlayer p) {
+        CompoundTag pd = p.getPersistentData();
+        if (!pd.contains(FORM) || !pd.contains(TRAITS)) return;
+        CompoundTag tr = pd.getCompound(TRAITS);
+        if (tr.getBoolean("fire")) p.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.FIRE_RESISTANCE, 80, 0, true, false, true));
+        if (tr.getBoolean("water")) p.addEffect(new net.minecraft.world.effect.MobEffectInstance(net.minecraft.world.effect.MobEffects.WATER_BREATHING, 80, 0, true, false, true));
+    }
+
+    /** A blow from the form (sent by the client when you attack): as hard as the creature hits, or you do, whichever is more. */
+    private static void hit(ServerPlayer p, int id) {
+        CompoundTag pd = p.getPersistentData();
+        if (!pd.contains(FORM)) return;
+        long now = p.level().getGameTime();
+        if (now - pd.getLong("bp_shape_hit") < 8) return;
+        Entity t = p.serverLevel().getEntity(id);
+        if (!(t instanceof LivingEntity le) || !le.isAlive() || t == p) return;
+        double reach = 4.5 + le.getBbWidth() / 2 + p.getBbWidth() / 2;
+        if (p.distanceToSqr(le) > reach * reach * 1.4) return;
+        pd.putLong("bp_shape_hit", now);
+        float dmg = (float) Math.max(pd.getCompound(TRAITS).getDouble("dmg"), p.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE));
+        if (le.hurt(p.damageSources().playerAttack(p), dmg)) {
+            Vec3 away = le.position().subtract(p.position()).multiply(1, 0, 1).normalize().scale(0.45);
+            le.push(away.x, 0.15, away.z);
+            le.hurtMarked = true;
+            p.serverLevel().playSound(null, le.blockPosition(), SoundEvents.PLAYER_ATTACK_STRONG, SoundSource.PLAYERS, 0.8F, 1.0F);
+        }
+    }
 
     private static void giveBack(ServerPlayer p) {
         CompoundTag pd = p.getPersistentData();
@@ -168,6 +228,7 @@ public final class ManasBridge {
     public static void action(ServerPlayer p, String a) {
         if (!has(p)) return;
         if (a.equals("revert")) { revert(p); return; }
+        if (a.startsWith("hit:")) { try { hit(p, Integer.parseInt(a.substring(4))); } catch (NumberFormatException ignored) {} return; }
         int c = a.indexOf(':');
         if (c < 0) return;
         String kind = a.substring(0, c), id = a.substring(c + 1);
@@ -196,6 +257,7 @@ public final class ManasBridge {
     private static void clear(ServerPlayer p) {
         if (!shifted(p)) return;
         try { MimicFormHelper.clearSource(p, SOURCE); } catch (Throwable ignored) {}
+        p.getPersistentData().remove(TRAITS);
         giveBack(p);
     }
 

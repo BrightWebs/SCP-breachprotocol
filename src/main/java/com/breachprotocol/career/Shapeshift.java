@@ -40,7 +40,11 @@ public final class Shapeshift {
         /** Become Administrator and it's yours. */
         @SubscribeEvent
         public static void tick(ServerTickEvent.Post event) {
-            if (!present() || event.getServer().getTickCount() % 100 != 41) return;
+            if (!present()) return;
+            if (event.getServer().getTickCount() % 20 == 7)
+                for (ServerPlayer p : event.getServer().getPlayerList().getPlayers())
+                    if (disguised(p)) try { com.breachprotocol.compat.manas.ManasBridge.traits(p); } catch (Throwable t) { return; }
+            if (event.getServer().getTickCount() % 100 != 41) return;
             for (ServerPlayer p : event.getServer().getPlayerList().getPlayers())
                 if (Vault.chief(p)) try { com.breachprotocol.compat.manas.ManasBridge.grant(p); } catch (Throwable t) { present = false; return; }
         }

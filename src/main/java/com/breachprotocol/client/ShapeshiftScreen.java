@@ -36,7 +36,9 @@ public class ShapeshiftScreen extends Screen {
     private final List<Hit> hits = new ArrayList<>();
     private static int tab = 0;
     /** Your forms (the ones you've been before), or everything there is. */
-    private static boolean all = false;
+    private static boolean all = true;
+    /** The search takes your typing only once you've clicked into it. */
+    private boolean searching;
     private String query = "";
     private int scroll = 0;
     private Mob hover;
@@ -131,15 +133,15 @@ public class ShapeshiftScreen extends Screen {
         }
         // your forms / everything, search, and the way back
         int sy = y + 32;
-        String[] views = {"Your forms", "Everything"};
+        String[] views = {"Everything", "Your forms"};
         int vx = x + 10;
         for (int i = 0; i < 2; i++) {
             int w = font.width(views[i]) + 12;
-            boolean on = all == (i == 1), hov = in(mx, my, vx, sy, w, 14);
+            boolean on = all == (i == 0), hov = in(mx, my, vx, sy, w, 14);
             g.fill(vx, sy, vx + w, sy + 14, on ? 0x50402060 : hov ? 0x30FFFFFF : PANEL);
             frame(g, vx, sy, w, 14, on ? AC : LINE);
             g.drawString(font, views[i], vx + 6, sy + 3, on ? TEXT : MUTED, false);
-            final boolean v = i == 1;
+            final boolean v = i == 0;
             hits.add(new Hit(vx, sy, w, 14, () -> { all = v; scroll = 0; }));
             vx += w + 3;
         }
@@ -154,9 +156,12 @@ public class ShapeshiftScreen extends Screen {
             hits.add(new Hit(bx, sy, bw, 14, () -> { send("shape:revert"); onClose(); }));
             sw -= bw + 3;
         }
-        g.fill(vx, sy, vx + sw, sy + 14, PANEL);
-        frame(g, vx, sy, sw, 14, LINE);
-        g.drawString(font, query.isEmpty() ? "Search..." : query + ((System.currentTimeMillis() / 500) % 2 == 0 ? "_" : ""), vx + 4, sy + 3, query.isEmpty() ? DIM : TEXT, false);
+        boolean hovS = in(mx, my, vx, sy, sw, 14);
+        g.fill(vx, sy, vx + sw, sy + 14, searching ? 0xFF1C1428 : PANEL);
+        frame(g, vx, sy, sw, 14, searching ? AC : hovS ? 0x80FFFFFF : LINE);
+        String shown = query + (searching && (System.currentTimeMillis() / 500) % 2 == 0 ? "_" : "");
+        g.drawString(font, query.isEmpty() && !searching ? "Click to search..." : shown, vx + 4, sy + 3, query.isEmpty() && !searching ? DIM : TEXT, false);
+        hits.add(new Hit(vx, sy, sw, 14, () -> searching = true));
         int cy = sy + 20, ch = y + ph - cy - 8;
         if (tab == 0) creatures(g, x + 10, cy, pw - 20, ch, mx, my);
         else blockGrid(g, x + 10, cy, pw - 20, ch, mx, my);
@@ -168,7 +173,16 @@ public class ShapeshiftScreen extends Screen {
         else {
             Map<String, Mob> byId = new HashMap<>();
             for (Mob m : mobs) byId.put(m.id(), m);
-            for (String id : known("shapeMobs")) { Mob m = byId.get(id); if (m != null && matches(m.name(), m.id())) list.add(m); }
+            for (String id : known("shapeMobs")) {
+                Mob m = byId.get(id);
+                if (m == null) {
+                    var rl = net.minecraft.resources.ResourceLocation.tryParse(id);
+                    var t = rl == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+                    if (t == null) continue;
+                    m = new Mob(t, id, t.getDescription().getString());
+                }
+                if (matches(m.name(), m.id())) list.add(m);
+            }
         }
         int lw = w - 150, rh = 14, rows = (h - 4) / rh;
         scroll = Math.max(0, Math.min(scroll, Math.max(0, list.size() - rows)));
@@ -261,6 +275,7 @@ public class ShapeshiftScreen extends Screen {
             onClose();
             return true;
         }
+        if (button == 0) searching = false;
         if (button == 0) for (int i = hits.size() - 1; i >= 0; i--) {
             Hit h = hits.get(i);
             if (mx >= h.x && mx < h.x + h.w && my >= h.y && my < h.y + h.h) {
@@ -280,15 +295,18 @@ public class ShapeshiftScreen extends Screen {
 
     @Override
     public boolean charTyped(char c, int mods) {
-        if (query.length() < 32 && (Character.isLetterOrDigit(c) || c == ' ' || c == '_' || c == '-' || c == ':')) { query += c; scroll = 0; return true; }
+        if (searching && query.length() < 32 && (Character.isLetterOrDigit(c) || c == ' ' || c == '_' || c == '-' || c == ':')) { query += c; scroll = 0; return true; }
         return super.charTyped(c, mods);
     }
 
     @Override
     public boolean keyPressed(int key, int scan, int mods) {
-        if (key == GLFW.GLFW_KEY_BACKSPACE) { if (!query.isEmpty()) query = query.substring(0, query.length() - 1); scroll = 0; return true; }
-        if (key == GLFW.GLFW_KEY_ESCAPE) { onClose(); return true; }
+        if (searching && key == GLFW.GLFW_KEY_BACKSPACE) { if (!query.isEmpty()) query = query.substring(0, query.length() - 1); scroll = 0; return true; }
+        if (key == GLFW.GLFW_KEY_ESCAPE) { if (searching) { searching = false; return true; } onClose(); return true; }
+        if (key == GLFW.GLFW_KEY_ENTER) { searching = false; return true; }
         if (key == GLFW.GLFW_KEY_TAB) { tab = 1 - tab; scroll = 0; return true; }
-        return true; // letters are for the search
+        if (searching) return true; // letters are for the search
+        if (Minecraft.getInstance().options.keyInventory.matches(key, scan)) { onClose(); return true; }
+        return super.keyPressed(key, scan, mods);
     }
 }
