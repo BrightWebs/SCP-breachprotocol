@@ -50,6 +50,41 @@ public final class Shapeshift {
         }
     }
 
+    @EventBusSubscriber(modid = BreachProtocol.MODID)
+    public static final class Cheat {
+    /** The cheat: /shapeshift all puts every creature and every block among your forms; /shapeshift clear empties them. */
+    @SubscribeEvent
+    public static void commands(net.neoforged.neoforge.event.RegisterCommandsEvent event) {
+        event.getDispatcher().register(net.minecraft.commands.Commands.literal("shapeshift").requires(src -> src.hasPermission(2))
+                .then(net.minecraft.commands.Commands.literal("all").executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    net.minecraft.nbt.ListTag mobs = new net.minecraft.nbt.ListTag(), blocks = new net.minecraft.nbt.ListTag();
+                    for (var t : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE) {
+                        if (t == net.minecraft.world.entity.EntityType.PLAYER) continue;
+                        @SuppressWarnings("unchecked") var lt = (net.minecraft.world.entity.EntityType<? extends net.minecraft.world.entity.LivingEntity>) t;
+                        boolean living;
+                        try { living = net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(lt); } catch (Throwable e) { living = false; }
+                        if (living) mobs.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(t).toString()));
+                    }
+                    for (var b : net.minecraft.core.registries.BuiltInRegistries.BLOCK)
+                        if (b.asItem() != net.minecraft.world.item.Items.AIR) blocks.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).toString()));
+                    p.getPersistentData().put("bp_shape_mobs", mobs);
+                    p.getPersistentData().put("bp_shape_blocks", blocks);
+                    Career.sync(p);
+                    c.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("Every form is yours: " + mobs.size() + " creatures, " + blocks.size() + " blocks.").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), false);
+                    return mobs.size() + blocks.size();
+                }))
+                .then(net.minecraft.commands.Commands.literal("clear").executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    p.getPersistentData().remove("bp_shape_mobs");
+                    p.getPersistentData().remove("bp_shape_blocks");
+                    Career.sync(p);
+                    c.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("Your forms are cleared.").withStyle(net.minecraft.ChatFormatting.GRAY), false);
+                    return 1;
+                })));
+    }
+    }
+
     /** "shape:mob:id" / "shape:block:id", from the menu. */
     public static void action(ServerPlayer p, String a) {
         if (!present()) return;

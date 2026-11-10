@@ -281,7 +281,7 @@ public final class ManasBridge {
         String key = "bp_shape_" + list;
         net.minecraft.nbt.ListTag old = pd.getList(key, net.minecraft.nbt.Tag.TAG_STRING), now = new net.minecraft.nbt.ListTag();
         now.add(net.minecraft.nbt.StringTag.valueOf(id));
-        for (net.minecraft.nbt.Tag t : old) if (!t.getAsString().equals(id) && now.size() < 400) now.add(t);
+        for (net.minecraft.nbt.Tag t : old) if (!t.getAsString().equals(id) && now.size() < 6000) now.add(t);
         pd.put(key, now);
         puff(p, true);
         say(p, "You are " + what + ". Use Shapeshift again to come back.", ChatFormatting.LIGHT_PURPLE);
