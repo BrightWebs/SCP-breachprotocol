@@ -271,7 +271,20 @@ public class FoundationStaff extends PathfinderMob implements Person {
         BlockPos target = goal;
         if (o != null) {
             int here = stop(o, blockPosition()), there = stop(o, goal);
-            if (here != there) {
+            // in the residence on the wrong floor (for where they're going, or the ground floor to leave it): its own lift
+            BlockPos resLeg = null;
+            if (Lift.inResidence(o, blockPosition())) {
+                int rh = com.breachprotocol.world.SiteTower.resFloor(blockPosition().getY() - o.getY());
+                int rg = Lift.inResidence(o, goal) ? com.breachprotocol.world.SiteTower.resFloor(goal.getY() - o.getY()) : 0;
+                if (rh != rg) {
+                    BlockPos car = o.offset(com.breachprotocol.world.SiteTower.resCar(rh));
+                    double dc = distanceToSqr(car.getX() + 0.5, car.getY(), car.getZ() + 0.5);
+                    if (dc < 3.0 || dc < 9 && stuck >= 3) { Lift.carryRes(this, o, rg); bestD = Double.MAX_VALUE; stuck = 0; return; }
+                    resLeg = car;
+                }
+            }
+            if (resLeg != null) target = resLeg;
+            else if (here != there) {
                 BlockPos car = o.offset(com.breachprotocol.world.SiteTower.liftCar(here));
                 double dc = distanceToSqr(car.getX() + 0.5, car.getY(), car.getZ() + 0.5);
                 // in the car, or at its door and not getting any closer: ride
@@ -282,6 +295,10 @@ public class FoundationStaff extends PathfinderMob implements Person {
                     return;
                 }
                 target = car;
+            } else if (here == 0 && Lift.inResidence(o, goal) && goal.getY() - o.getY() >= com.breachprotocol.world.SiteTower.STOREY) {
+                // heading up in the residence from outside it: to its ground-floor lift first
+                target = o.offset(com.breachprotocol.world.SiteTower.resCar(0));
+                if (distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5) < 3.0) { Lift.carryRes(this, o, com.breachprotocol.world.SiteTower.resFloor(goal.getY() - o.getY())); return; }
             }
         }
         if (!target.equals(leg)) { leg = target; bestD = Double.MAX_VALUE; stuck = 0; }
@@ -353,18 +370,8 @@ public class FoundationStaff extends PathfinderMob implements Person {
     /** Their bed in the residence (assigned once, kept). */
     private BlockPos bed() {
         BlockPos o = tower();
-        if (o == null) return null;
-        if (getPersistentData().contains("bp_bed")) return BlockPos.of(getPersistentData().getLong("bp_bed"));
-        java.util.Set<Long> taken = new java.util.HashSet<>();
-        for (FoundationStaff f : level().getEntitiesOfClass(FoundationStaff.class, new net.minecraft.world.phys.AABB(o).inflate(120)))
-            if (f.getPersistentData().contains("bp_bed")) taken.add(f.getPersistentData().getLong("bp_bed"));
-        for (BlockPos b : com.breachprotocol.world.SiteTower.beds()) {
-            BlockPos w = o.offset(b);
-            if (taken.contains(w.asLong()) || !(level().getBlockState(w).getBlock() instanceof net.minecraft.world.level.block.BedBlock)) continue;
-            getPersistentData().putLong("bp_bed", w.asLong());
-            return w;
-        }
-        return null;
+        if (o == null || !(level() instanceof net.minecraft.server.level.ServerLevel sl)) return null;
+        return Lift.bedFor(sl, o, this);
     }
 
     /** Night-shift guards sleep by day. */

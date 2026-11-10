@@ -149,7 +149,50 @@ public final class McaFoundation {
         for (int i = 0; i < genes.length; i++) McaHooks.setGene(v, genes[i], g[i]);
         v.setPersistenceRequired();
         employ(v, role, site, post);
+        v.getPersistentData().putBoolean("bp_emp_native", true); // Foundation-born: no village to go home to; they sleep in the residence
         return true;
+    }
+
+    /** Staff who joined from the site itself (not from a village): no home in any village, so their bed is in the residence. */
+    static boolean residentNative(Villager v) {
+        if (v.getPersistentData().getBoolean("bp_emp_native")) return true;
+        try { return v.getBrain().getMemory(MemoryModuleType.HOME).isEmpty(); } catch (RuntimeException e) { return false; }
+    }
+
+    /** Night: to their bed in the residence (by lift if it's upstairs) and to sleep. */
+    private static void toBed(ServerLevel l, Villager v) {
+        if (v.isSleeping()) return;
+        BlockPos post = BlockPos.of(v.getPersistentData().getLong("bp_emp_post"));
+        Sites.Site t = Lift.towerAt(l, post);
+        if (t == null) return;
+        BlockPos o = Secretary.origin(t);
+        BlockPos bed = Lift.bedFor(l, o, v);
+        if (bed == null) return;
+        if (v.blockPosition().distSqr(bed) < 6) { v.getNavigation().stop(); v.startSleeping(bed); return; }
+        int bedFloor = com.breachprotocol.world.SiteTower.resFloor(bed.getY() - o.getY());
+        BlockPos target = bed;
+        if (Lift.inResidence(o, v.blockPosition())) {
+            int here = com.breachprotocol.world.SiteTower.resFloor(v.getBlockY() - o.getY());
+            if (here != bedFloor) {
+                BlockPos car = o.offset(com.breachprotocol.world.SiteTower.resCar(here));
+                if (v.blockPosition().distSqr(car) < 3) { Lift.carryRes(v, o, bedFloor); return; }
+                target = car;
+            }
+        } else {
+            boolean outside = v.getX() - o.getX() < -12 || v.getX() - o.getX() > com.breachprotocol.world.SiteTower.T + 6 || v.getZ() - o.getZ() > com.breachprotocol.world.SiteTower.T + 6 || v.getZ() - o.getZ() < -12;
+            int here = outside ? 0 : Lift.storey(o, v.getBlockY());
+            if (here != 0) {
+                // up in the tower: down to the ground floor first
+                BlockPos car = o.offset(com.breachprotocol.world.SiteTower.liftCar(here));
+                if (v.blockPosition().distSqr(car) < 3) { Lift.carry(v, o, 0); return; }
+                target = car;
+            } else if (bedFloor > 0) {
+                BlockPos car = o.offset(com.breachprotocol.world.SiteTower.resCar(0));
+                if (v.blockPosition().distSqr(car) < 3) { Lift.carryRes(v, o, bedFloor); return; }
+                target = car;
+            }
+        }
+        v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.6F, 1));
     }
 
     // ================================================================== what they notice
@@ -184,6 +227,7 @@ public final class McaFoundation {
                     }
                     if (v.blockPosition().distSqr(post) > 36) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.6F, 1));
                 }
+                if (employee(v) && !work && (tod >= 12500 || tod < 500) && residentNative(v)) toBed(l, v);
                 if (pd.contains("bp_walkin") || pd.contains("bp_cand")) {
                     BlockPos w = BlockPos.of(pd.getLong("bp_wait"));
                     if (pd.contains("bp_wait") && v.blockPosition().distSqr(w) > 9) v.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(w, 0.6F, 1));

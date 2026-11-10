@@ -75,11 +75,67 @@ public final class Lift {
         Sites.Site site = towerAt(l, pos);
         if (site == null) return;
         BlockPos o = Secretary.origin(site);
+        for (int f = 0; f < SiteTower.RES_FLOORS; f++) if (o.offset(SiteTower.resPanel(f)).equals(pos)) {
+            event.setCanceled(true);
+            event.setCancellationResult(InteractionResult.SUCCESS);
+            resMenu(p, site, f);
+            return;
+        }
         int s = storey(o, pos.getY() - 1);
         if (!o.offset(SiteTower.liftPanel(s)).equals(pos)) return;
         event.setCanceled(true);
         event.setCancellationResult(InteractionResult.SUCCESS);
         menu(p, site, s);
+    }
+
+    /** The residence lift: three floors, open to everyone who lives there. */
+    static void resMenu(ServerPlayer p, Sites.Site site, int here) {
+        Dialogue.begin(p, "rlift:" + site.name, "Lift", site.name + " residence · floor " + (here + 1), -1);
+        Dialogue.line(p, "", "Select a floor.", 0);
+        Dialogue.clearOptions(p);
+        for (int f = SiteTower.RES_FLOORS - 1; f >= 0; f--) {
+            String name = "Residence, floor " + (f + 1) + (f == 0 ? " (way out)" : "");
+            if (f == here) Dialogue.option(p, name + "  (you are here)", "close", "", 0x808080);
+            else Dialogue.option(p, name, "/rlift " + f, "", 0x9FD8FF);
+        }
+        Dialogue.send(p, true);
+    }
+
+    /** Where in the residence's lift car you'd be on floor f, for whoever's in it. */
+    static BlockPos car(BlockPos o, int floor, boolean res) { return o.offset(res ? SiteTower.resCar(floor) : SiteTower.liftCar(floor)); }
+
+    /** Residents ride the residence lift without the panel. */
+    public static void carryRes(net.minecraft.world.entity.Mob m, BlockPos origin, int to) {
+        BlockPos dest = origin.offset(SiteTower.resCar(to));
+        m.getNavigation().stop();
+        m.teleportTo(dest.getX() + 0.5, dest.getY(), dest.getZ() + 0.5);
+        m.level().playSound(null, dest, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 0.5F, 1.0F);
+    }
+
+    /** Is this spot (relative to nothing: a world position) inside the residence block of the tower at origin o? */
+    public static boolean inResidence(BlockPos o, BlockPos p) {
+        int dx = p.getX() - o.getX(), dz = p.getZ() - o.getZ(), dy = p.getY() - o.getY();
+        return dx >= SiteTower.RX0 && dx <= SiteTower.RX1 && dz >= 0 && dz <= SiteTower.T && dy >= 0 && dy < SiteTower.RES_FLOORS * SiteTower.STOREY;
+    }
+
+    /** A bed in the residence for this person: theirs if they have one, else the first free one (kept from then on). */
+    public static BlockPos bedFor(ServerLevel l, BlockPos o, Entity who) {
+        var pd = who.getPersistentData();
+        if (pd.contains("bp_bed")) {
+            BlockPos b = BlockPos.of(pd.getLong("bp_bed"));
+            if (!l.isLoaded(b) || l.getBlockState(b).getBlock() instanceof net.minecraft.world.level.block.BedBlock) return b;
+            pd.remove("bp_bed");
+        }
+        Set<Long> taken = new HashSet<>();
+        for (Entity e : l.getEntities((Entity) null, new AABB(o).inflate(160), e -> e != who && e.getPersistentData().contains("bp_bed")))
+            taken.add(e.getPersistentData().getLong("bp_bed"));
+        for (BlockPos b : SiteTower.beds()) {
+            BlockPos w = o.offset(b);
+            if (taken.contains(w.asLong()) || !l.isLoaded(w) || !(l.getBlockState(w).getBlock() instanceof net.minecraft.world.level.block.BedBlock)) continue;
+            pd.putLong("bp_bed", w.asLong());
+            return w;
+        }
+        return null;
     }
 
     static void menu(ServerPlayer p, Sites.Site site, int here) {
@@ -99,7 +155,7 @@ public final class Lift {
 
     // ================================================================== riding
 
-    private record Ride(UUID who, ServerLevel level, BlockPos origin, int from, int to, long at) {}
+    private record Ride(UUID who, ServerLevel level, BlockPos origin, int from, int to, long at, boolean res) {}
 
     private static final List<Ride> RIDES = new ArrayList<>();
 
@@ -122,7 +178,21 @@ public final class Lift {
             }
             p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.BLOCKS, 0.7F, 1.2F);
             p.displayClientMessage(Component.literal("Going to " + SiteTower.floorName(to).replaceFirst("  ", " ") + "...").withStyle(ChatFormatting.AQUA), true);
-            RIDES.add(new Ride(p.getUUID(), p.serverLevel(), o, from, to, p.serverLevel().getGameTime() + 20L + Math.abs(to - from) * 6L));
+            RIDES.add(new Ride(p.getUUID(), p.serverLevel(), o, from, to, p.serverLevel().getGameTime() + 20L + Math.abs(to - from) * 6L, false));
+            return 1;
+        })));
+        event.getDispatcher().register(Commands.literal("rlift").then(Commands.argument("floor", IntegerArgumentType.integer(0, SiteTower.RES_FLOORS - 1)).executes(c -> {
+            ServerPlayer p = c.getSource().getPlayerOrException();
+            int to = IntegerArgumentType.getInteger(c, "floor");
+            Sites.Site site = towerAt(p.serverLevel(), p.blockPosition());
+            if (site == null) return 0;
+            BlockPos o = Secretary.origin(site);
+            int from = SiteTower.resFloor(p.getBlockY() - o.getY());
+            Dialogue.close(p);
+            if (p.blockPosition().distSqr(car(o, from, true)) > 9) { p.displayClientMessage(Component.literal("Step into the lift car first.").withStyle(ChatFormatting.GRAY), true); return 0; }
+            p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.NOTE_BLOCK_CHIME.value(), SoundSource.BLOCKS, 0.7F, 1.2F);
+            p.displayClientMessage(Component.literal("Going to residence floor " + (to + 1) + "...").withStyle(ChatFormatting.AQUA), true);
+            RIDES.add(new Ride(p.getUUID(), p.serverLevel(), o, from, to, p.serverLevel().getGameTime() + 20L + Math.abs(to - from) * 6L, true));
             return 1;
         })));
     }
@@ -137,7 +207,7 @@ public final class Lift {
             it.remove();
             ServerPlayer p = s.getPlayerList().getPlayer(r.who());
             if (p == null) continue;
-            BlockPos from = r.origin().offset(SiteTower.liftCar(r.from())), to = r.origin().offset(SiteTower.liftCar(r.to()));
+            BlockPos from = car(r.origin(), r.from(), r.res()), to = car(r.origin(), r.to(), r.res());
             if (p.blockPosition().distSqr(from) > 9) continue; // stepped out
             // everyone in the car rides together
             for (Entity e : r.level().getEntities((Entity) null, new AABB(from).inflate(1.5, 2, 1.5), x -> x instanceof LivingEntity)) {
@@ -145,7 +215,7 @@ public final class Lift {
                 e.teleportTo(to.getX() + 0.5 + off.x, to.getY(), to.getZ() + 0.5 + off.z);
             }
             r.level().playSound(null, to, SoundEvents.NOTE_BLOCK_BELL.value(), SoundSource.BLOCKS, 0.8F, 1.0F);
-            p.displayClientMessage(Component.literal("Floor " + SiteTower.floorName(r.to()).replaceFirst("  ", ": ")).withStyle(ChatFormatting.AQUA), true);
+            p.displayClientMessage(Component.literal(r.res() ? "Residence, floor " + (r.to() + 1) : "Floor " + SiteTower.floorName(r.to()).replaceFirst("  ", ": ")).withStyle(ChatFormatting.AQUA), true);
         }
     }
 

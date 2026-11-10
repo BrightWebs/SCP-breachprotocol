@@ -1153,31 +1153,51 @@ public final class SiteTower extends FacilityBuilder {
 
     // ================================================================== staff residence
 
-    /** The residence block east of the tower (x RX0..RX1, z 0..T): two floors of rooms, two beds in each. */
-    public static final int RX0 = T + 9, RX1 = T + 33;
+    /**
+     * The residence block east of the tower (x RX0..RX1, z 0..T): three floors of rooms, four beds in
+     * each (96 in all, a bed for everyone on the site's books who doesn't go home to a village), and a
+     * lift at the far end of the corridor.
+     */
+    public static final int RX0 = T + 9, RX1 = T + 33, RES_FLOORS = 3;
 
-    /** Every bed in the residence (relative to the origin), head end. */
-    public static List<BlockPos> beds() {
-        List<BlockPos> out = new ArrayList<>();
-        for (int f = 0; f < 2; f++) {
-            int Y = f * STOREY;
-            for (int i = 0; i < 4; i++) {
-                int x0 = RX0 + 1 + i * 6;
-                out.add(new BlockPos(x0 + 1, Y + 1, 2)); out.add(new BlockPos(x0 + 4, Y + 1, 2));
-                out.add(new BlockPos(x0 + 1, Y + 1, T - 2)); out.add(new BlockPos(x0 + 4, Y + 1, T - 2));
+    /** Every bed in the residence (relative to the origin), head end, with the way its foot points (0 south, 1 north). */
+    private static List<int[]> bedSpots() {
+        List<int[]> out = new ArrayList<>();
+        for (int f = 0; f < RES_FLOORS; f++) for (int i = 0; i < 4; i++) {
+            int x0 = RX0 + i * 6, Y = f * STOREY + 1;
+            for (int x : new int[]{x0 + 1, x0 + 4}) {
+                out.add(new int[]{x, Y, 2, 0});       // north rooms, by the window
+                out.add(new int[]{x, Y, 12, 1});      // north rooms, by the door
+                out.add(new int[]{x, Y, T - 2, 1});   // south rooms, by the window
+                out.add(new int[]{x, Y, T - 12, 0});  // south rooms, by the door
             }
         }
         return out;
     }
 
+    /** Every bed in the residence (relative to the origin), head end. */
+    public static List<BlockPos> beds() {
+        List<BlockPos> out = new ArrayList<>();
+        for (int[] b : bedSpots()) out.add(new BlockPos(b[0], b[1], b[2]));
+        return out;
+    }
+
+    /** The residence lift: its car on floor f (0..2), and the panel inside it. */
+    public static BlockPos resCar(int f) { return new BlockPos(RX1 - 2, f * STOREY + 1, 16); }
+
+    public static BlockPos resPanel(int f) { return new BlockPos(RX1 - 1, f * STOREY + 2, 17); }
+
+    /** Which residence floor a height (relative to the origin) is on. */
+    public static int resFloor(int dy) { return Math.max(0, Math.min(RES_FLOORS - 1, Math.floorDiv(dy, STOREY))); }
+
     private void residence() {
         // the plot: cleared, levelled, and a path from the tower doors
-        air(RX0 - 4, 1, -3, RX1 + 3, 2 * STOREY + 6, T + 5);
+        air(RX0 - 4, 1, -3, RX1 + 3, RES_FLOORS * STOREY + 6, T + 5);
         fill(RX0 - 4, 0, -3, RX1 + 3, 0, T + 3, "facility_precast_concrete");
         fill(RX0 - 4, -1, -3, RX1 + 3, -1, T + 3, "facility_concrete");
         for (int x = 20; x <= RX0; x++) { set(x, 0, T + 3, "ez_floor"); set(x, 0, T + 4, "ez_floor"); }
         for (int z = 15; z <= T + 4; z++) { set(RX0 - 2, 0, z, "ez_floor"); set(RX0 - 1, 0, z, "ez_floor"); }
-        for (int f = 0; f < 2; f++) {
+        for (int f = 0; f < RES_FLOORS; f++) {
             int Y = f * STOREY;
             Pal hall = EZ, rooms = OFFICE.floor("facility_carpet_blue");
             room(hall, RX0, 14, RX1, 18, Y, true);                       // corridor
@@ -1187,24 +1207,33 @@ public final class SiteTower extends FacilityBuilder {
                 room(rooms, x0, 18, x1, T, Y, true);
                 ezDoor(x0 + 2, 14, Y, S);
                 ezDoor(x0 + 2, 18, Y, N);
-                for (int[] b : new int[][]{{x0 + 1, 2, 0}, {x0 + 4, 2, 0}, {x0 + 1, T - 2, 1}, {x0 + 4, T - 2, 1}}) {
-                    BlockPos head = at(b[0], Y + 1, b[1]);
-                    Direction foot = b[2] == 0 ? S : N;
-                    l.setBlock(head, Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD), FLAGS);
-                    l.setBlock(head.relative(foot), Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), FLAGS);
-                }
                 tall(x0 + 5, Y + 1, b2(i, 0), "locker", W);
                 tall(x0 + 5, Y + 1, b2(i, 1), "locker", W);
                 roomFurniture(x0, Y);
             }
             // the facade: glass along both long sides
             for (int x = RX0; x <= RX1; x++) for (int yy = Y + 2; yy <= Y + 3; yy++) if ((x - RX0) % 6 != 0) { set(x, yy, 0, "reinforced_glass"); set(x, yy, T, "reinforced_glass"); }
+            // the lift at the far end of the corridor: a car behind a partition, a door onto the corridor, the panel inside
+            fill(RX1 - 4, Y + 1, 15, RX1 - 4, Y + 4, 17, "facility_painted_concrete");
+            air(RX1 - 3, Y + 1, 15, RX1 - 1, Y + 4, 17);
+            fill(RX1 - 3, Y, 15, RX1 - 1, Y, 17, "facility_epoxy_floor");
+            set(RX1 - 2, Y + 4, 16, "fluorescent_light[face=ceiling,facing=east,lit=true]");
+            BlockPos panel = resPanel(f);
+            set(panel.getX(), panel.getY(), panel.getZ(), "door_button[facing=west,powered=false]");
+            ezDoor(RX1 - 4, 15, Y, W);
+            set(RX1 - 5, Y + 3, 17, "facility_sign_elevator_small[facing=west]");
+            plate(RX1 - 1, Y + 2, 15, W, "RESIDENCE", "FLOOR " + (f + 1));
         }
-        // the entrance from the path, and the stairs at the far end of the corridor
+        // the beds, last, so nothing above overwrites them
+        for (int[] b : bedSpots()) {
+            BlockPos head = at(b[0], b[1], b[2]);
+            Direction foot = b[3] == 0 ? S : N;
+            l.setBlock(head, Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD), FLAGS);
+            l.setBlock(head.relative(foot), Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), FLAGS);
+        }
+        // the entrance from the path
         ezDoor(RX0, 15, 0, W);
         plate(RX0 - 1, 3, 17, W, "STAFF", "RESIDENCE");
-        air(RX1 - 5, STOREY - 1, 15, RX1 - 1, STOREY, 17);
-        for (int k = 1; k <= 5; k++) for (int z = 15; z <= 17; z++) set(RX1 - k, k, z, "facility_concrete_stairs[facing=west,half=bottom,shape=straight]");
     }
 
     private static int b2(int i, int side) { return side == 0 ? 7 : T - 7; }
@@ -1275,7 +1304,7 @@ public final class SiteTower extends FacilityBuilder {
     // ================================================================== touching up an existing tower
 
     /** Layout revision. A tower built (or touched up) at this revision has every furniture fix. */
-    public static final int LAYOUT = 4;
+    public static final int LAYOUT = 5;
 
     /**
      * Brings an existing tower's furnishings up to the current layout, in place: only the pieces that
@@ -1289,6 +1318,7 @@ public final class SiteTower extends FacilityBuilder {
         if (from < 2) b.touchUp();
         if (from < 3) b.touchUp3();
         if (from < 4) b.touchUp4();
+        if (from < 5) b.residence(); // revision 5: the residence rebuilt with three floors, a bed for everyone, and a lift for the stairs
     }
 
     /** Revision 4: the bell on the secretary's counter. */
