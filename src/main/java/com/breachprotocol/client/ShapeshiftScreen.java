@@ -113,9 +113,9 @@ public class ShapeshiftScreen extends Screen {
         frame(g, x, y, pw, ph, AC);
         g.fill(x + 1, y + 1, x + pw - 1, y + 26, PANEL);
         g.fill(x + 1, y + 26, x + pw - 1, y + 27, AC & 0x60FFFFFF);
-        g.drawString(font, "SHAPESHIFT", x + 10, y + 6, AC, false);
+        g.drawString(font, "THE ARCHIVE", x + 10, y + 6, AC, false);
         String form = ClientCareerState.tag.getString("shapeForm");
-        PowerKeys.small(g, font, form.isEmpty() ? "YOU ARE YOURSELF  ·  CHOOSE A FORM" : "YOU ARE " + form.toUpperCase(Locale.ROOT), x + 10, y + 17, form.isEmpty() ? MUTED : AC);
+        PowerKeys.small(g, font, (form.isEmpty() ? "YOU ARE YOURSELF" : "YOU ARE " + form.toUpperCase(Locale.ROOT)) + "  ·  CLICK: BECOME IT  ·  SHIFT+CLICK: BE YOURSELF", x + 10, y + 17, form.isEmpty() ? MUTED : AC);
         String[] tabs = {"Polymorph", "Mimic"};
         int tx = x + pw - 10;
         for (int i = tabs.length - 1; i >= 0; i--) {
@@ -254,6 +254,13 @@ public class ShapeshiftScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mx, double my, int button) {
+        // shift-click anywhere: back to yourself
+        if (button == 0 && Screen.hasShiftDown()) {
+            Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK.value(), 0.9F, 0.25F));
+            if (!ClientCareerState.tag.getString("shapeForm").isEmpty()) send("shape:revert");
+            onClose();
+            return true;
+        }
         if (button == 0) for (int i = hits.size() - 1; i >= 0; i--) {
             Hit h = hits.get(i);
             if (mx >= h.x && mx < h.x + h.w && my >= h.y && my < h.y + h.h) {

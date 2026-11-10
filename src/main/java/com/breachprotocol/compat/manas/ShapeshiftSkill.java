@@ -34,10 +34,10 @@ public class ShapeshiftSkill extends Skill {
 
     public List<Integer> getModeLearningList(ManasSkillInstance instance) { return List.of(0, 1); }
 
-    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "mimic" : "shapeshift"; }
+    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "mimic" : "archive"; }
 
     public Component getModeName(ManasSkillInstance instance, int mode) {
-        return Component.literal(mode == 0 ? "Mimic" : "Shapeshift").withStyle(mode == 0 ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.DARK_PURPLE);
+        return Component.literal(mode == 0 ? "Mimic" : "Archive").withStyle(mode == 0 ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.DARK_PURPLE);
     }
 
     public double getManaCost(LivingEntity e, ManasSkillInstance instance, int mode) { return 0; }

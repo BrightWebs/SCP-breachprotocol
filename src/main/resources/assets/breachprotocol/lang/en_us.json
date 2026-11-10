@@ -214,5 +214,5 @@
   "key.breachprotocol.power2": "Power slot 2",
   "key.breachprotocol.console": "Open the implant console",
   "breachprotocol.skill.shapeshift": "Shapeshift",
-  "breachprotocol.skill.shapeshift.description": "The Administrator's. Mimic mode: use it and become whatever you're looking at, creature or object, at once; crouch and use it to come back. Shapeshift mode: use it to open your forms (Polymorph for creatures, Mimic for objects), search them, and pick one; crouch and use it to come back. A creature's form brings its skills with it."
+  "breachprotocol.skill.shapeshift.description": "The Administrator's. Mimic mode: use it and become whatever you're looking at, creature or object, at once; crouch and use it to come back. Archive mode: use it to open the Archive of your forms (Polymorph for creatures, Mimic for objects), searchable; click one to become it, shift-click to be yourself again. A creature's form brings its skills with it."
 }
