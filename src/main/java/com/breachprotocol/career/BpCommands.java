@@ -136,6 +136,27 @@ public final class BpCommands {
                             if (!Shapeshift.present()) return fail(c, "Shapeshift needs ManasCore and Manas Reborn.");
                             return ok(c, "Every form is yours: " + Shapeshift.unlockAll(p) + " creatures and blocks.");
                         }))
+                        .then(Commands.literal("add")
+                                .then(Commands.literal("creature").then(Commands.argument("id", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                        .suggests((c, b) -> SharedSuggestionProvider.suggestResource(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.keySet(), b))
+                                        .executes(c -> {
+                                            ServerPlayer p = c.getSource().getPlayerOrException();
+                                            net.minecraft.resources.ResourceLocation id = net.minecraft.commands.arguments.ResourceLocationArgument.getId(c, "id");
+                                            var t = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getOptional(id).orElse(null);
+                                            if (t == null || t == net.minecraft.world.entity.EntityType.PLAYER) return fail(c, "No such creature: " + id);
+                                            Shapeshift.addForm(p, "mobs", id.toString());
+                                            return ok(c, t.getDescription().getString() + " is among your forms.");
+                                        })))
+                                .then(Commands.literal("block").then(Commands.argument("id", net.minecraft.commands.arguments.ResourceLocationArgument.id())
+                                        .suggests((c, b) -> SharedSuggestionProvider.suggestResource(net.minecraft.core.registries.BuiltInRegistries.BLOCK.keySet(), b))
+                                        .executes(c -> {
+                                            ServerPlayer p = c.getSource().getPlayerOrException();
+                                            net.minecraft.resources.ResourceLocation id = net.minecraft.commands.arguments.ResourceLocationArgument.getId(c, "id");
+                                            var b = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getOptional(id).orElse(null);
+                                            if (b == null || b == net.minecraft.world.level.block.Blocks.AIR) return fail(c, "No such block: " + id);
+                                            Shapeshift.addForm(p, "blocks", id.toString());
+                                            return ok(c, b.getName().getString() + " is among your forms.");
+                                        }))))
                         .then(Commands.literal("clear").executes(c -> {
                             ServerPlayer p = c.getSource().getPlayerOrException();
                             p.getPersistentData().remove("bp_shape_mobs");

@@ -50,6 +50,16 @@ public final class Shapeshift {
         }
     }
 
+    /** One form, put at the top of your forms ("mobs" or "blocks"). */
+    public static void addForm(ServerPlayer p, String list, String id) {
+        String key = "bp_shape_" + list;
+        net.minecraft.nbt.ListTag old = p.getPersistentData().getList(key, net.minecraft.nbt.Tag.TAG_STRING), now = new net.minecraft.nbt.ListTag();
+        now.add(net.minecraft.nbt.StringTag.valueOf(id));
+        for (net.minecraft.nbt.Tag t : old) if (!t.getAsString().equals(id) && now.size() < 6000) now.add(t);
+        p.getPersistentData().put(key, now);
+        Career.sync(p);
+    }
+
     /** Every living creature and every block, among your forms. Returns how many. */
     public static int unlockAll(ServerPlayer p) {
         net.minecraft.nbt.ListTag mobs = new net.minecraft.nbt.ListTag(), blocks = new net.minecraft.nbt.ListTag();
