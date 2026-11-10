@@ -69,6 +69,8 @@ public final class Vault {
         public int x0, z0, x1, z1, h;
         /** The walls: outer x and z, and which z the glass front is on. */
         public int fx0, fx1, fza, fzb, front;
+        /** A tank: full of water, entered through an airlock so none of it reaches the hall. */
+        public boolean water;
         public CompoundTag look = new CompoundTag();
 
         CompoundTag save() {
@@ -77,6 +79,7 @@ public final class Vault {
             t.putString("ty", type); t.putString("n", name);
             t.putIntArray("b", new int[]{x0, z0, x1, z1, h, fx0, fx1, fza, fzb, front});
             t.put("look", look);
+            t.putBoolean("w", water);
             return t;
         }
 
@@ -87,10 +90,24 @@ public final class Vault {
             int[] b = t.getIntArray("b");
             if (b.length == 10) { c.x0 = b[0]; c.z0 = b[1]; c.x1 = b[2]; c.z1 = b[3]; c.h = b[4]; c.fx0 = b[5]; c.fx1 = b[6]; c.fza = b[7]; c.fzb = b[8]; c.front = b[9]; }
             c.look = t.getCompound("look");
+            c.water = t.getBoolean("w");
             return c;
         }
 
         Vec3 centre() { return new Vec3((x0 + x1) / 2.0 + 0.5, Y + 1, (z0 + z1) / 2.0 + 0.5); }
+
+        /** Into the cell from the hall: +1 for cells north of it (z below the front), so "in" is -1 there. */
+        int in() { return front < 0 ? -1 : 1; }
+
+        /** The airlock: three wide, three deep, three high, just inside the outer door. */
+        boolean inLock(int x, int y, int z) {
+            int d = (z - front) * in();
+            return x >= fx0 + 1 && x <= fx0 + 3 && d >= 1 && d <= 3 && y >= Y + 1 && y <= Y + 3;
+        }
+
+        BlockPos innerDoor() { return new BlockPos(fx0 + 2, Y + 1, front + 4 * in()); }
+
+        BlockPos outerDoor() { return new BlockPos(fx0 + 1, Y + 1, front); }
 
         boolean holds(Entity e) { return e.getX() >= x0 && e.getX() <= x1 + 1 && e.getZ() >= z0 && e.getZ() <= z1 + 1 && e.getY() >= Y && e.getY() <= Y + h + 1; }
     }
@@ -320,17 +337,26 @@ public final class Vault {
 
     /** A cell made to measure: walls of containment panel, a glass front on the corridor with an iron door, room to spare. */
     private static Cell makeCell(ServerLevel v, Region r, LivingEntity e) {
-        int w = Math.max(7, (int) Math.ceil(e.getBbWidth()) + 4), h = Math.max(6, (int) Math.ceil(e.getBbHeight()) + 3);
+        boolean water = aquatic(e);
+        int w = Math.max(water ? 10 : 7, (int) Math.ceil(e.getBbWidth()) + 4 + (water ? 4 : 0)), h = Math.max(water ? 7 : 6, (int) Math.ceil(e.getBbHeight()) + 3);
         boolean north = r.nextNorth <= r.nextSouth;
         int o = r.ox(), x0 = o + (north ? r.nextNorth : r.nextSouth), x1 = x0 + w + 1;
         int zFront = north ? -4 : 4, zBack = north ? -4 - (w + 1) : 4 + (w + 1);
         Cell c = new Cell();
         c.fx0 = x0; c.fx1 = x1; c.fza = Math.min(zFront, zBack); c.fzb = Math.max(zFront, zBack); c.front = zFront;
         c.x0 = x0 + 1; c.x1 = x1 - 1; c.z0 = c.fza + 1; c.z1 = c.fzb - 1; c.h = h;
+        c.water = water;
         extendHall(v, r, x1 - o + 3);
         drawCell(v, c);
         if (north) r.nextNorth = x1 - o + 2; else r.nextSouth = x1 - o + 2;
         return c;
+    }
+
+    /** Things that live in water and would die out of it. */
+    static boolean aquatic(LivingEntity e) {
+        if (e instanceof net.minecraft.world.entity.animal.WaterAnimal || e instanceof net.minecraft.world.entity.monster.Guardian) return true;
+        if (e.getType().is(net.minecraft.tags.EntityTypeTags.AQUATIC)) return true;
+        return e instanceof Mob m && m.getNavigation() instanceof net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
     }
 
     private static void drawCell(ServerLevel v, Cell c) {
@@ -348,10 +374,63 @@ public final class Vault {
             v.setBlock(q, s, F);
         }
         v.setBlock(new BlockPos((c.fx0 + c.fx1) / 2, Y + c.h + 1, (c.fza + c.fzb) / 2), lamp, F);
+        if (c.water) tank(v, c, wall);
         // the door: a Foundation containment door, Level 5 scanner on the corridor side, exit button inside
         var out = c.front < 0 ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH;
         for (int y = 1; y <= 3; y++) { v.setBlock(new BlockPos(c.fx0 + 3, Y + y, c.front), wall, F); v.setBlock(new BlockPos(c.fx0 + 1, Y + 3, c.front), wall, F); v.setBlock(new BlockPos(c.fx0 + 2, Y + 3, c.front), wall, F); }
         new Doors(v).gate(c.fx0 + 1, c.front, out);
+    }
+
+    /** The tank: water to the ceiling, a sandy floor with weed in it, lights down low, and the airlock by the door. */
+    private static void tank(ServerLevel v, Cell c, BlockState wall) {
+        BlockState water = Blocks.WATER.defaultBlockState(), sand = Blocks.SAND.defaultBlockState(), glass = Blocks.TINTED_GLASS.defaultBlockState(),
+                lockGlass = Blocks.GLASS.defaultBlockState(), grass = Blocks.SEAGRASS.defaultBlockState(), lantern = Blocks.SEA_LANTERN.defaultBlockState(), air = Blocks.AIR.defaultBlockState();
+        boolean flooded = lockFlooded(v, c);
+        for (BlockPos q : BlockPos.betweenClosed(c.x0, Y, c.z0, c.x1, Y + c.h, c.z1)) {
+            int x = q.getX(), y = q.getY(), z = q.getZ();
+            if (c.inLock(x, y, z)) { v.setBlock(q, flooded ? water : air, F); continue; }
+            int d = (z - c.front) * c.in();
+            boolean lockWall = x >= c.fx0 + 1 && x <= c.fx0 + 4 && d >= 1 && d <= 4 && y >= Y + 1 && y <= Y + 4 && !(x <= c.fx0 + 3 && d <= 3 && y <= Y + 3);
+            if (y == Y) { v.setBlock(q, (x + z) % 7 == 0 ? lantern : sand, F); continue; }
+            if (lockWall) { v.setBlock(q, y == Y + 4 ? wall : lockGlass, F); continue; }
+            boolean weed = y == Y + 1 && Math.floorMod(x * 31 + z * 17, 5) == 0;
+            v.setBlock(q, weed ? grass : water, F);
+        }
+        // the inner door: iron, only you open it, and only with the outer door shut
+        BlockPos d = c.innerDoor();
+        var face = c.in() < 0 ? net.minecraft.core.Direction.NORTH : net.minecraft.core.Direction.SOUTH;
+        BlockState door = Blocks.IRON_DOOR.defaultBlockState().setValue(net.minecraft.world.level.block.DoorBlock.FACING, face);
+        v.setBlock(d, door.setValue(net.minecraft.world.level.block.DoorBlock.HALF, net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER), F);
+        v.setBlock(d.above(), door.setValue(net.minecraft.world.level.block.DoorBlock.HALF, net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), F);
+        // a light in the airlock's ceiling
+        v.setBlock(new BlockPos(c.fx0 + 2, Y + 4, c.front + 2 * c.in()), lantern, F);
+    }
+
+    private static boolean lockFlooded(ServerLevel v, Cell c) {
+        return v.getFluidState(new BlockPos(c.fx0 + 2, Y + 1, c.front + 2 * c.in())).is(net.minecraft.tags.FluidTags.WATER);
+    }
+
+    private static boolean open(ServerLevel v, BlockPos pos) {
+        BlockState st = v.getBlockState(pos);
+        return st.hasProperty(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN) && st.getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.OPEN);
+    }
+
+    /** Flood the airlock (the inner door is opening) or drain it (it has shut). */
+    private static void lock(ServerLevel v, Cell c, boolean flood) {
+        for (int x = c.fx0 + 1; x <= c.fx0 + 3; x++) for (int dd = 1; dd <= 3; dd++) for (int y = Y + 1; y <= Y + 3; y++) {
+            BlockPos q = new BlockPos(x, y, c.front + dd * c.in());
+            v.setBlock(q, flood ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState(), F);
+            if (!flood && v.random.nextInt(3) == 0) v.sendParticles(ParticleTypes.BUBBLE_POP, x + 0.5, y + 0.3, q.getZ() + 0.5, 2, 0.3, 0.2, 0.3, 0.01);
+        }
+        BlockPos mid = new BlockPos(c.fx0 + 2, Y + 2, c.front + 2 * c.in());
+        v.playSound(null, mid, flood ? SoundEvents.BUCKET_EMPTY : SoundEvents.BUCKET_FILL, SoundSource.BLOCKS, 1F, flood ? 0.6F : 0.7F);
+        v.playSound(null, mid, SoundEvents.PISTON_EXTEND, SoundSource.BLOCKS, 0.5F, 0.6F);
+    }
+
+    /** Which tank's inner door is this, if any. */
+    private static Cell tankWithDoor(Region r, BlockPos pos) {
+        for (Cell c : r.cells) if (c.water && (c.innerDoor().equals(pos) || c.innerDoor().above().equals(pos))) return c;
+        return null;
     }
 
     /** SCP Unleashed's doors, placed the way the facility builder places them. */
@@ -661,6 +740,20 @@ public final class Vault {
             return true;
         });
         for (Entity e : v.getEntities(EntityType.ITEM_DISPLAY, x -> x.getTags().contains("bp_throne") && !x.isVehicle())) e.discard();
+        // airlocks: never both doors open; a flooded airlock with the hall door open is shut and drained at once; no water in the hall
+        for (Region r : data(s).regions.values()) for (Cell c : r.cells) {
+            if (!c.water || !v.isLoaded(c.outerDoor())) continue;
+            if (!open(v, c.outerDoor())) continue;
+            BlockPos in = c.innerDoor();
+            BlockState st = v.getBlockState(in);
+            if (st.getBlock() instanceof net.minecraft.world.level.block.DoorBlock d && st.getValue(net.minecraft.world.level.block.DoorBlock.OPEN))
+                d.setOpen(null, v, st, in, false);
+            if (lockFlooded(v, c)) lock(v, c, false);
+            for (int x = c.fx0; x <= c.fx0 + 4; x++) for (int y = Y + 1; y <= Y + 3; y++) for (int dd = 0; dd <= 2; dd++) {
+                BlockPos q = new BlockPos(x, y, c.front - dd * c.in());
+                if (dd > 0 && v.getFluidState(q).is(net.minecraft.tags.FluidTags.WATER)) v.setBlock(q, Blocks.AIR.defaultBlockState(), F);
+            }
+        }
         if (now % 40 != 3) return;
         for (Map.Entry<UUID, Region> en : data(s).regions.entrySet())
             for (Cell c : en.getValue().cells) {
@@ -723,6 +816,17 @@ public final class Vault {
             event.setCanceled(true);
             event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
             if (!chief) return;
+            boolean opening = !st.getValue(net.minecraft.world.level.block.DoorBlock.OPEN);
+            Cell tank = r == null ? null : tankWithDoor(r, pos);
+            if (tank != null) {
+                ServerLevel v = (ServerLevel) p.level();
+                if (opening && open(v, tank.outerDoor())) { say(p, "Shut the outer door first. The airlock won't flood with it open."); return; }
+                if (opening) lock(v, tank, true);
+                door.setOpen(p, p.level(), st, pos, opening);
+                if (!opening) lock(v, tank, false);
+                p.swing(event.getHand(), true);
+                return;
+            }
             door.setOpen(p, p.level(), st, pos, !st.getValue(net.minecraft.world.level.block.DoorBlock.OPEN));
             p.swing(event.getHand(), true);
             return;
@@ -749,6 +853,7 @@ public final class Vault {
             if (e instanceof LivingEntity le) x.putString("hp", (int) Math.ceil(le.getHealth()) + " / " + (int) Math.ceil(le.getMaxHealth()));
             x.put("look", c.look);
             x.putString("size", (c.x1 - c.x0 + 1) + " x " + (c.z1 - c.z0 + 1) + " x " + c.h);
+            x.putBoolean("w", c.water);
             cells.add(x);
         }
         out.put("cells", cells);

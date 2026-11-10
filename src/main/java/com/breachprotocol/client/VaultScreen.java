@@ -164,7 +164,7 @@ public class VaultScreen extends Screen {
             if (on) g.fill(x + 2, ry, x + 4, ry + rh - 2, AC);
             g.drawString(font, String.format("%02d", i + 1), x + 8, ry + 6, on ? AC : DIM, false);
             g.drawString(font, clip(c.getString("n"), lw - 50), x + 26, ry + 3, occ ? TEXT : MUTED, false);
-            small(g, occ ? "HELD" : "EMPTY", x + 26, ry + 13, occ ? OK : DIM);
+            small(g, (occ ? "HELD" : "EMPTY") + (c.getBoolean("w") ? "  ·  TANK" : ""), x + 26, ry + 13, occ ? OK : DIM);
             g.fill(x + lw - 10, ry + 8, x + lw - 6, ry + 12, occ ? OK : 0xFF3A3448);
             final int n = i;
             hits.add(new Hit(x + 2, ry, lw - 4, rh - 2, () -> selected = n));
@@ -195,7 +195,8 @@ public class VaultScreen extends Screen {
                     centred(g, "(it won't hold still to be seen)", bxx + bw / 2, by + bh / 2, DIM);
                 }
             } else centred(g, occ ? "HELD" : "EMPTY", bxx + bw / 2, by + bh / 2 - 4, occ ? MUTED : DIM);
-            small(g, "CELL " + String.format("%02d", selected + 1), bxx + 5, by + 5, AC);
+            if (c.getBoolean("w")) g.fill(bxx + 1, by + 1, bxx + bw - 1, by + bh - 1, 0x302060C0);
+            small(g, (c.getBoolean("w") ? "TANK " : "CELL ") + String.format("%02d", selected + 1) + (c.getBoolean("w") ? "  ·  AIRLOCK" : ""), bxx + 5, by + 5, AC);
             String sz = c.getString("size");
             small(g, sz, bxx + bw - 5 - (int) (font.width(sz) * 0.75F), by + 5, DIM);
             int iy = by + bh + 6;
