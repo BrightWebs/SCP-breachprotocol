@@ -220,20 +220,27 @@ public final class PowerKills {
 
     /**
      * A creature killed by a power gives its XP straight to whoever used it (it's usually far off, where the
-     * orbs would never be picked up), and twice over for the Administrator and SCP-Ω.
+     * orbs would never be picked up, and other mods may eat the drop), twice over for the Administrator and SCP-Ω.
      */
-    @SubscribeEvent(priority = EventPriority.LOW)
-    public static void xp(net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent event) {
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void xpOnDeath(LivingDeathEvent event) {
         LivingEntity v = event.getEntity();
-        if (v.level().isClientSide() || event.isCanceled()) return;
-        ServerPlayer p = powerKiller(v, null);
+        if (v.level().isClientSide() || event.isCanceled() || !(v.level() instanceof ServerLevel sl) || v instanceof net.minecraft.world.entity.player.Player) return;
+        ServerPlayer p = powerKiller(v, event.getSource());
         if (p == null || p.isRemoved()) return;
-        int xp = event.getDroppedExperience();
-        if (xp <= 0) return;
+        int xp;
+        try { xp = v.getExperienceReward(sl, p); } catch (Throwable t) { xp = 0; }
+        if (xp <= 0) xp = Math.max(1, (int) Math.ceil(v.getMaxHealth() / 4)); // something that gives none by itself still gives a little
         if (Vault.chief(p)) xp *= 2;
-        event.setDroppedExperience(0);
+        v.getPersistentData().putBoolean("bp_pk_xp", true);
         p.giveExperiencePoints(xp);
-        p.playNotifySound(net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.3F, 0.9F + p.getRandom().nextFloat() * 0.3F);
+        p.playNotifySound(net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.35F, 0.9F + p.getRandom().nextFloat() * 0.3F);
+    }
+
+    /** ...and no orbs left behind for the same kill. */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void noOrbs(net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent event) {
+        if (event.getEntity().getPersistentData().getBoolean("bp_pk_xp")) event.setDroppedExperience(0);
     }
 
     /** The player whose power (or Rage, or ram) brought this down, if one did in the last few seconds. */
