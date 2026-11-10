@@ -455,6 +455,22 @@ public final class SuperFlight {
     }
 
     private static void land(LocalPlayer p) {
+        // touching down fast: straight into the running gear that matches your speed, and on you go
+        double hs = new Vec3(vel.x, 0, vel.z).length();
+        if (hs > RUN[1] && canLaunch(p) && !p.isPassenger() && !p.isFallFlying()) {
+            int g = 1;
+            while (g + 1 < RUN.length && RUN[g + 1] <= hs + 0.05) g++;
+            runGear = g;
+            runIdle = 0;
+            send("pow:run:gear:" + g);
+            p.setDeltaMovement(vel.x, Math.min(0, vel.y), vel.z);
+            p.setSprinting(true);
+            Minecraft mc = Minecraft.getInstance();
+            p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.7F, 0.8F);
+            shake = Math.max(shake, 4);
+            if (mc.level != null) for (int i = 0; i < 16; i++)
+                mc.level.addParticle(ParticleTypes.CLOUD, p.getX() + (Math.random() - 0.5) * 1.5, p.getY() + 0.1, p.getZ() + (Math.random() - 0.5) * 1.5, -vel.x * 0.1, 0.05, -vel.z * 0.1);
+        }
         flying = false;
         FlightState.CHARGING.clear();
         if (FlightState.localLying) { FlightState.localLying = false; send("pow:fly:lie:0"); }
