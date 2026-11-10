@@ -19,6 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.projectile.Projectile;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -175,6 +176,8 @@ public final class Containment extends SavedData {
         BlockPos pos = m.blockPosition();
         Sites.Site site = Sites.at(l, pos);
         Entry e = entries.get(m.getUUID());
+        // out of its cell on the Foundation's own business (an escort): not a breach
+        if (e != null && ESCORT.containsKey(e.id)) { e.seen = now; return; }
         if (e == null) {
             if (site == null) return;
             e = new Entry();
@@ -301,6 +304,45 @@ public final class Containment extends SavedData {
     }
 
     // ================================================================== the Council's orders
+
+    // ================================================================== escorts: a held anomaly out on Foundation business
+
+    private record Escort(long until, Vec3 back, net.minecraft.resources.ResourceKey<Level> dim) {}
+
+    private static final Map<UUID, Escort> ESCORT = new HashMap<>();
+
+    /** Staff bring a held anomaly to someone for a while, then take it back to exactly where it was. */
+    public static boolean escort(ServerPlayer to, Mob m, int ticks) {
+        if (m.level() != to.level()) return false;
+        ESCORT.put(m.getUUID(), new Escort(m.level().getGameTime() + ticks, m.position(), m.level().dimension()));
+        Vec3 at = to.position().add(to.getLookAngle().multiply(2, 0, 2));
+        m.getNavigation().stop();
+        m.teleportTo(at.x, to.getY(), at.z);
+        m.setPersistenceRequired();
+        return true;
+    }
+
+    @SubscribeEvent
+    public static void escorts(ServerTickEvent.Post event) {
+        if (ESCORT.isEmpty() || event.getServer().getTickCount() % 20 != 0) return;
+        MinecraftServer srv = event.getServer();
+        ESCORT.entrySet().removeIf(en -> {
+            Escort x = en.getValue();
+            ServerLevel l = srv.getLevel(x.dim());
+            if (l == null || l.getGameTime() < x.until()) return false;
+            Entity e = l.getEntity(en.getKey());
+            if (e == null) return l.getGameTime() > x.until() + 24000; // not loaded: it goes back when it is
+            e.teleportTo(x.back().x, x.back().y, x.back().z);
+            if (e instanceof Mob m) m.getNavigation().stop();
+            return true;
+        });
+    }
+
+    /** A held anomaly's body, if it's loaded anywhere. */
+    public static Mob loaded(MinecraftServer srv, UUID id) {
+        for (ServerLevel l : srv.getAllLevels()) if (l.getEntity(id) instanceof Mob m && m.isAlive()) return m;
+        return null;
+    }
 
     /** When each ordered recapture team gets there. */
     private static final Map<UUID, Long> HUNT_DUE = new HashMap<>();

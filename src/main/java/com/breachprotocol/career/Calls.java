@@ -170,12 +170,19 @@ public final class Calls {
                 "Proposal: let SCP-999 roam the staff cafeteria. Morale has never been lower.",
                 List.of(
                         opt("Approve", (p, d) -> {
-                            if (p.level().dimension() == Level.OVERWORLD) {
-                                var spot = Career.surfaceSpot(p.serverLevel(), p.blockPosition(), 4, 8, p.getRandom());
-                                var blob = Unleashed.entity(Unleashed.SCP_999);
-                                if (spot != null && blob.isPresent()) Career.spawnAt(p.serverLevel(), blob.get(), spot);
-                            }
-                            return stab(p, 5, "It's already giggling. I sent one to you, too.");
+                            // ours, out of its cell for a visit; or one that's loose close by; or one somebody has to go and find
+                            Career.Source src = Career.source(p, Unleashed.SCP_999, 40, 80);
+                            if (src == null) return stab(p, 5, "Approved. We'll find it a place.");
+                            return switch (src.kind()) {
+                                case 0 -> src.mob() != null && com.breachprotocol.career.Containment.escort(p, src.mob(), 20 * 150)
+                                        ? stab(p, 5, "Staff are bringing SCP-999 up from " + src.where() + ". It's already giggling. It goes back to its cell in a few minutes.")
+                                        : stab(p, 5, "SCP-999 is in " + src.where() + ". Staff will walk it to the cafeteria from there.");
+                                case 1 -> {
+                                    if (src.mob() != null) src.mob().getNavigation().moveTo(p, 1.0);
+                                    yield stab(p, 5, "There's one loose " + src.where() + ", just by you. It's already wobbling your way.");
+                                }
+                                default -> stab(p, 4, "Approved, but we don't hold a 999. One was seen " + src.where() + ". Someone has to go and bring it in.");
+                            };
                         }),
                         opt("Deny", (p, d) -> stab(p, -1, "...I'll tell it you said no. It will be sad.")))), true);
 

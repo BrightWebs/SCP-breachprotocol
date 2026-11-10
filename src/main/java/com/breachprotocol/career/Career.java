@@ -510,6 +510,34 @@ public final class Career {
 
     /** A loose anomaly near you, outside every site, that no assignment of yours covers yet. */
     @org.jetbrains.annotations.Nullable
+    /** Where an anomaly needed for something comes from: 0 one of our cells, 1 one loose nearby, 2 out there somewhere. */
+    public record Source(Mob mob, Vec3 pos, String where, int kind) {}
+
+    /**
+     * An anomaly of this kind, for a task or an order: the one the Foundation holds, if it holds one (from
+     * its cell); otherwise one loose close by; otherwise one out there, min..max blocks away, that someone
+     * will have to go and find.
+     */
+    public static Source source(ServerPlayer p, String type, int min, int max) {
+        net.minecraft.server.MinecraftServer srv = p.server;
+        for (Containment.Entry e : Containment.all(srv)) {
+            if (e.status != Containment.HELD || !e.type.equals(type)) continue;
+            Mob m = Containment.loaded(srv, e.id);
+            return new Source(m, m != null ? m.position() : new Vec3(e.x + 0.5, e.y, e.z + 0.5), e.where(), 0);
+        }
+        var et = Unleashed.entity(type);
+        if (et.isEmpty()) return null;
+        ServerLevel l = p.serverLevel();
+        Mob near = null;
+        for (Mob m : l.getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(96), m -> m.getType() == et.get() && m.isAlive() && !Unleashed.isContained(m)))
+            if (near == null || m.distanceToSqr(p) < near.distanceToSqr(p)) near = m;
+        if (near != null) return new Source(near, near.position(), "near " + near.getBlockX() + ", " + near.getBlockZ(), 1);
+        Vec3 spot = surfaceSpot(l, p.blockPosition(), min, max, p.getRandom());
+        if (spot == null) return null;
+        net.minecraft.world.entity.Entity made = spawnAt(l, et.get(), spot);
+        return new Source(made instanceof Mob mm ? mm : null, spot, "near " + (int) spot.x + ", " + (int) spot.z, 2);
+    }
+
     public static Mob looseNear(ServerPlayer p, double range) {
         CareerData d = data(p);
         Mob best = null;
@@ -545,9 +573,10 @@ public final class Career {
                     opts.removeIf(e -> Unleashed.entity(e).isEmpty());
                     if (opts.isEmpty()) return;
                     id = opts.get(rnd.nextInt(opts.size()));
-                    spot = surfaceSpot(level, p.blockPosition(), 30, 50, rnd);
-                    if (spot == null) return;
-                    spawnAt(level, Unleashed.entity(id).get(), spot);
+                    // ours, from its cell, if we hold one; one loose nearby; or one out there to be found
+                    Source src = source(p, id, 30, 50);
+                    if (src == null) return;
+                    spot = src.pos();
                 }
                 m.item = id;
                 m.designation = Unleashed.designation(id);
@@ -568,9 +597,10 @@ public final class Career {
                     opts.removeIf(e -> Unleashed.entity(e).isEmpty());
                     if (opts.isEmpty()) return;
                     id = opts.get(rnd.nextInt(opts.size()));
-                    spot = surfaceSpot(level, p.blockPosition(), 35, 60, rnd);
-                    if (spot == null) return;
-                    spawnAt(level, Unleashed.entity(id).get(), spot);
+                    // ours, from its cell, if we hold one; one loose nearby; or one out there to be found
+                    Source src = source(p, id, 35, 60);
+                    if (src == null) return;
+                    spot = src.pos();
                 }
                 m.item = id;
                 m.designation = Unleashed.designation(id);
@@ -657,15 +687,23 @@ public final class Career {
                 m.target = 30;
                 m.giver = 2;
                 m.xp = 50 + tier * 5;
-                boolean have = !level.getEntitiesOfClass(net.minecraft.world.entity.Entity.class, p.getBoundingBox().inflate(64), e -> e.getType() == blob.get()).isEmpty();
-                if (!have) {
-                    Vec3 spot = surfaceSpot(level, p.blockPosition(), 10, 20, rnd);
-                    if (spot == null) return;
-                    spawnAt(level, blob.get(), spot);
-                    setPos(m, spot);
+                Source src = source(p, Unleashed.SCP_999, 40, 80);
+                if (src == null) return;
+                setPos(m, src.pos());
+                switch (src.kind()) {
+                    case 0 -> {
+                        m.description = "Morale protocol: SCP-999 is in " + src.where() + ". Go down and spend 30 seconds with it. It needs the company. So do you.";
+                        message(p, O5.O5_2, "SCP-999 has been asking for you from " + src.where() + ". I'm told that's not possible, but here we are. Go and see it.");
+                    }
+                    case 1 -> {
+                        m.description = "Morale protocol: there's an SCP-999 loose " + src.where() + ". Spend 30 seconds close to it.";
+                        message(p, O5.O5_2, "There's an SCP-999 wandering " + src.where() + ". It's harmless, it's lonely, and you look like you need it. Go.");
+                    }
+                    default -> {
+                        m.description = "Morale protocol: we don't hold an SCP-999. One was seen " + src.where() + ". Find it and spend 30 seconds close to it.";
+                        message(p, O5.O5_2, "We don't have a 999 of our own. A patrol spotted one " + src.where() + ". Someone has to go and find it. You, preferably.");
+                    }
                 }
-                m.description = "Morale protocol: spend 30 seconds close to SCP-999. It needs the company. So do you.";
-                message(p, O5.O5_2, "SCP-999 has been asking for you. I'm told that's not possible, but here we are. Go and see it.");
             }
             case RECOVER -> {
                 List<String> options = recoverableFor(r);
