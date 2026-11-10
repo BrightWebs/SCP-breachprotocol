@@ -17,6 +17,10 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -27,7 +31,8 @@ import java.util.UUID;
  * the game, and other mods, count it as their kill: stats, loot, and Manas Reborn's EP.
  *
  * <p>With Manas Reborn, a creature killed by a power gives its killer all of its EP: whatever Manas
- * gives on its own, topped up to 100%.</p>
+ * gives on its own, topped up to 100%. And the Administrator (and SCP-Ω) takes every skill it had:
+ * all of them, at once, at the mastery it had them; one you already hold is left as it is.</p>
  */
 @EventBusSubscriber(modid = BreachProtocol.MODID)
 public final class PowerKills {
@@ -84,7 +89,77 @@ public final class PowerKills {
         try { return ((Number) maxEP.invoke(null, e)).doubleValue(); } catch (Throwable t) { return 0; }
     }
 
-    private record Pending(ServerPlayer killer, double victimEP, double before) {}
+    // ---------------------------------------------------------------- Manas Reborn's skills
+
+    private static Boolean skills;
+    private static Method skillsFrom, learned, has, skillOf, temporary, toNBT, fromNBT, learn;
+
+    private static boolean skills() {
+        if (skills == null) {
+            skills = false;
+            try {
+                Class<?> api = Class.forName("io.github.manasmods.manascore.skill.api.SkillAPI");
+                Class<?> store = Class.forName("io.github.manasmods.manascore.skill.api.Skills");
+                Class<?> inst = Class.forName("io.github.manasmods.manascore.skill.api.ManasSkillInstance");
+                Class<?> skill = Class.forName("io.github.manasmods.manascore.skill.api.ManasSkill");
+                Class<?> helper = Class.forName("io.github.manasmods.manas_reborn.ability.SkillHelper");
+                skillsFrom = api.getMethod("getSkillsFrom", LivingEntity.class);
+                learned = store.getMethod("getLearnedSkills");
+                has = store.getMethod("getSkill", skill);
+                skillOf = inst.getMethod("getSkill");
+                temporary = inst.getMethod("isTemporarySkill");
+                toNBT = inst.getMethod("toNBT");
+                fromNBT = inst.getMethod("fromNBT", CompoundTag.class);
+                learn = helper.getMethod("learnSkill", LivingEntity.class, inst);
+                skills = true;
+            } catch (Throwable t) {
+                BreachProtocol.LOGGER.warn("Manas Reborn is here but its skills couldn't be reached: {}", t.toString());
+            }
+        }
+        return skills;
+    }
+
+    /** The creature's own skills (not the temporary ones), copied as they stand. */
+    private static List<CompoundTag> skillsOf(LivingEntity v) {
+        List<CompoundTag> out = new ArrayList<>();
+        if (!skills()) return out;
+        try {
+            Object st = skillsFrom.invoke(null, v);
+            if (st == null) return out;
+            for (Object i : new ArrayList<>((Collection<?>) learned.invoke(st))) {
+                if ((boolean) temporary.invoke(i)) continue;
+                out.add(((CompoundTag) toNBT.invoke(i)).copy());
+            }
+        } catch (Throwable t) {
+            BreachProtocol.LOGGER.debug("Couldn't read the skills of {}: {}", v, t.toString());
+        }
+        return out;
+    }
+
+    /** Every one of them the killer doesn't already have. */
+    private static void take(ServerPlayer p, List<CompoundTag> list) {
+        if (list.isEmpty() || !skills()) return;
+        int got = 0;
+        try {
+            Object mine = skillsFrom.invoke(null, p);
+            if (mine == null) return;
+            for (CompoundTag t : list) {
+                try {
+                    Object inst = fromNBT.invoke(null, t);
+                    if (inst == null) continue;
+                    if (((Optional<?>) has.invoke(mine, skillOf.invoke(inst))).isPresent()) continue; // already yours
+                    if ((boolean) learn.invoke(null, p, inst)) got++;
+                } catch (Throwable one) {
+                    BreachProtocol.LOGGER.debug("Skipped a skill: {}", one.toString());
+                }
+            }
+        } catch (Throwable t) {
+            BreachProtocol.LOGGER.debug("Couldn't hand over skills: {}", t.toString());
+        }
+        if (got > 0) p.playNotifySound(net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.7F, 0.6F);
+    }
+
+    private record Pending(ServerPlayer killer, double victimEP, double before, List<CompoundTag> skills) {}
 
     private static final Map<UUID, Pending> PENDING = new HashMap<>();
 
@@ -95,7 +170,7 @@ public final class PowerKills {
         if (v.level().isClientSide() || !manas()) return;
         ServerPlayer killer = powerKiller(v, event.getSource());
         if (killer == null) return;
-        PENDING.put(v.getUUID(), new Pending(killer, ep(v), ep(killer)));
+        PENDING.put(v.getUUID(), new Pending(killer, ep(v), ep(killer), Vault.chief(killer) ? skillsOf(v) : List.of()));
     }
 
     /** After everyone (Manas Reborn included) has had their say: make it up to 100% of the creature's EP. */
@@ -106,6 +181,7 @@ public final class PowerKills {
         double gained = ep(pd.killer()) - pd.before();
         double owed = pd.victimEP() - Math.max(0, gained);
         if (owed > 0.5) try { increaseEP.invoke(null, pd.killer(), owed); } catch (Throwable ignored) {}
+        take(pd.killer(), pd.skills());
     }
 
     /** The player whose power (or Rage, or ram) brought this down, if one did in the last few seconds. */
