@@ -212,5 +212,7 @@
   "dialogue.foundation.menu": "...",
   "key.breachprotocol.power1": "Power slot 1",
   "key.breachprotocol.power2": "Power slot 2",
-  "key.breachprotocol.console": "Open the implant console"
+  "key.breachprotocol.console": "Open the implant console",
+  "breachprotocol.skill.shapeshift": "Shapeshift",
+  "breachprotocol.skill.shapeshift.description": "The Administrator's. Two modes. Mimic: use it and become whatever you're looking at, creature or block, at once. Crouch and use it to come back. Shapeshift: crouch and use it to choose any creature or block there is. Use it to come back."
 }

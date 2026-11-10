@@ -207,7 +207,7 @@ public final class PowerKeys {
         if (flash0 > 0) flash0--;
         if (flash1 > 0) flash1--;
         if (mc.level != null && mc.player != null && mc.player.tickCount % 40 == 0) look(mc);
-        if (mc.player != null) VaultScreen.watch();
+        if (mc.player != null) { VaultScreen.watch(); ShapeshiftScreen.watch(); }
         while (CONSOLE.consumeClick()) if (mc.screen == null) openConsole();
         for (int i = 0; i < 2; i++) {
             KeyMapping k = SLOTS[i];

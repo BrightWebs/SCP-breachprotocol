@@ -1067,6 +1067,7 @@ public final class Career {
         Dominion.addToSync(p, t);
         BreachMissions.addToSync(p, t);
         Vault.addToSync(p, t);
+        Shapeshift.addToSync(p, t);
         t.putInt("trial", data(p).trial);
         t.putInt("trialKills", data(p).trialKills);
         if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) Forces.addToSync(p, t);

@@ -13,6 +13,12 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+// Compile-time stand-ins for the few ManasCore / Manas Reborn classes the optional Shapeshift skill is
+// built against. They are never packaged: in game the real classes are used, and only when those mods are there.
+sourceSets {
+    manasStubs
+}
+
 neoForge {
     version = project.neo_version
 
@@ -36,10 +42,14 @@ neoForge {
             sourceSet(sourceSets.main)
         }
     }
+
+    addModdingDependenciesTo(sourceSets.manasStubs)
 }
 
 dependencies {
     // No compile dependencies: SCP Unleashed is reached at runtime by registry ID and reflection.
+    // Manas Reborn's skill API: compile-only stand-ins (see sourceSets.manasStubs), never shipped.
+    compileOnly sourceSets.manasStubs.output
 }
 
 tasks.withType(ProcessResources).configureEach {
