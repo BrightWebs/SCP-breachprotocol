@@ -98,6 +98,8 @@ public final class ManasBridge {
         try { MimicFormHelper.clearSource(p, SOURCE); } catch (Throwable t) { BreachProtocol.LOGGER.debug("Shapeshift revert: {}", t.toString()); }
         p.getPersistentData().remove(FORM);
         p.getPersistentData().remove(TRAITS);
+        p.getPersistentData().remove(TYPE);
+        undisguise(p);
         giveBack(p);
         puff(p, false);
         Career.sync(p);
@@ -158,12 +160,71 @@ public final class ManasBridge {
             if (e.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) != null) dmg = Math.max(dmg, e.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE));
             tr.putDouble("dmg", dmg);
             p.getPersistentData().put(TRAITS, tr);
+            p.getPersistentData().putString(TYPE, id);
+            p.getPersistentData().putInt("bp_shape_move", 0);
+            disguise(p, e);
             done(p, e.getName().getString(), "mobs", id);
             readout(p, e, lent, tr);
         } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift (creature): {}", t.toString()); say(p, "It wouldn't take.", ChatFormatting.RED); }
     }
 
-    private static final String LENT = "bp_shape_lent", KNOWN_SKILLS = "bp_shape_skills", TRAITS = "bp_shape_traits";
+    private static final String LENT = "bp_shape_lent", KNOWN_SKILLS = "bp_shape_skills", TRAITS = "bp_shape_traits", TYPE = "bp_shape_type";
+
+    /**
+     * Appraisal sees the creature: Manas Reborn reads its "fake" health, spiritual health, armor, aura and
+     * magicules before the real ones, so they're set to the creature's while you wear it (and cleared after).
+     */
+    private static void disguise(ServerPlayer p, LivingEntity e) {
+        Object mine = existence(p);
+        if (mine == null) return;
+        Object theirs = existence(e);
+        double shp = num(theirs, "getSpiritualHealth"), aura = num(theirs, "getAura"), mana = num(theirs, "getMana");
+        call(mine, "setFakeHealth", float.class, Math.max(1F, e.getHealth()));
+        call(mine, "setFakeSpiritualHealth", double.class, Math.max(1, shp));
+        call(mine, "setFakeArmor", double.class, Math.max(0.001, e.getArmorValue()));
+        call(mine, "setFakeAura", double.class, Math.max(1, aura));
+        call(mine, "setFakeMana", double.class, Math.max(1, mana));
+        call(mine, "markEnergyDirty", null, null);
+        call(mine, "markDirty", null, null);
+    }
+
+    private static void undisguise(ServerPlayer p) {
+        Object mine = existence(p);
+        if (mine == null) return;
+        call(mine, "setFakeHealth", float.class, 0F);
+        call(mine, "setFakeSpiritualHealth", double.class, 0D);
+        call(mine, "setFakeArmor", double.class, 0D);
+        call(mine, "setFakeAura", double.class, 0D);
+        call(mine, "setFakeMana", double.class, 0D);
+        call(mine, "markEnergyDirty", null, null);
+        call(mine, "markDirty", null, null);
+    }
+
+    private static Object existence(LivingEntity e) {
+        try { return Class.forName("io.github.manasmods.manas_reborn.storage.ManasStorages").getMethod("getExistenceFrom", LivingEntity.class).invoke(null, e); }
+        catch (Throwable t) { return null; }
+    }
+
+    private static double num(Object o, String m) {
+        if (o == null) return 0;
+        try { return ((Number) o.getClass().getMethod(m).invoke(o)).doubleValue(); } catch (Throwable t) { return 0; }
+    }
+
+    private static void call(Object o, String m, Class<?> arg, Object v) {
+        try {
+            if (arg == null) o.getClass().getMethod(m).invoke(o);
+            else o.getClass().getMethod(m, arg).invoke(o, v);
+        } catch (Throwable t) { BreachProtocol.LOGGER.debug("Shapeshift disguise {}: {}", m, t.toString()); }
+    }
+
+    /** The race key in a creature's form: its own move (crouch: the next one). */
+    private static void move(ServerPlayer p, boolean next) {
+        CompoundTag pd = p.getPersistentData();
+        if (!pd.contains(FORM) || !pd.contains(TYPE)) return;
+        ResourceLocation rl = ResourceLocation.tryParse(pd.getString(TYPE));
+        EntityType<?> t = rl == null ? null : BuiltInRegistries.ENTITY_TYPE.getOptional(rl).orElse(null);
+        if (t != null) com.breachprotocol.career.CreatureMoves.use(p, t, next);
+    }
 
     /** Everything the form gave you, said once, in chat. */
     private static void readout(ServerPlayer p, LivingEntity e, List<String> lent, CompoundTag tr) {
@@ -241,6 +302,7 @@ public final class ManasBridge {
     public static void action(ServerPlayer p, String a) {
         if (!has(p)) return;
         if (a.equals("revert")) { revert(p); return; }
+        if (a.startsWith("move:")) { move(p, a.endsWith("1")); return; }
         if (a.startsWith("hit:")) { try { hit(p, Integer.parseInt(a.substring(4))); } catch (NumberFormatException ignored) {} return; }
         int c = a.indexOf(':');
         if (c < 0) return;
@@ -271,6 +333,8 @@ public final class ManasBridge {
         if (!shifted(p)) return;
         try { MimicFormHelper.clearSource(p, SOURCE); } catch (Throwable ignored) {}
         p.getPersistentData().remove(TRAITS);
+        p.getPersistentData().remove(TYPE);
+        undisguise(p);
         giveBack(p);
     }
 

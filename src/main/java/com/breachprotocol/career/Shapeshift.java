@@ -102,6 +102,7 @@ public final class Shapeshift {
         t.putBoolean("shapeHas", has);
         if (!has) return;
         t.putString("shapeForm", pd.getString("bp_shape_form"));
+        t.putBoolean("shapeCreature", pd.contains("bp_shape_type"));
         if (pd.contains("bp_shape_mobs")) t.put("shapeMobs", pd.get("bp_shape_mobs").copy());
         if (pd.contains("bp_shape_blocks")) t.put("shapeBlocks", pd.get("bp_shape_blocks").copy());
     }

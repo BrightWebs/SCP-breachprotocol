@@ -20,6 +20,22 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public final class ShapeAttack {
     private ShapeAttack() {}
 
+    private static net.minecraft.client.KeyMapping race;
+    private static boolean raceWas;
+
+    /** Manas Reborn's race key: in a creature's form, the creature's own moves (crouch: the next one). */
+    @SubscribeEvent
+    public static void tick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
+        if (race == null) for (net.minecraft.client.KeyMapping k : mc.options.keyMappings) if (k.getName().equals("manas_reborn.keybinding.race_ability")) { race = k; break; }
+        if (race == null) return;
+        boolean down = race.isDown() && mc.screen == null;
+        if (down && !raceWas && ClientCareerState.tag.getBoolean("shapeCreature"))
+            PacketDistributor.sendToServer(new PhoneActionPayload("shape:move:" + (mc.player.isShiftKeyDown() ? 1 : 0), 0));
+        raceWas = down;
+    }
+
     @SubscribeEvent
     public static void attack(InputEvent.InteractionKeyMappingTriggered event) {
         if (!event.isAttack()) return;
