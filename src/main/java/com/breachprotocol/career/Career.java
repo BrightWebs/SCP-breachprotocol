@@ -340,8 +340,13 @@ public final class Career {
         if (Clearance.linked(p, "rifts")) for (net.minecraft.world.entity.Entity r : p.level().getEntities(p, p.getBoundingBox().inflate(96), UnleashedApi::isRift)) {
             if (d.seenRifts.add(r.getId())) {
                 String rarity = UnleashedApi.riftLabel(r);
+                Rank rk = d.getRank();
+                boolean council = rk.atLeast(Rank.OVERSEER) || d.ascended || rk == Rank.ADMINISTRATOR;
                 message(p, O5.O5_9, "Rift detected: " + rarity.substring(0, 1).toUpperCase() + rarity.substring(1) + " rift near " + r.getBlockX() + ", " + r.getBlockZ()
-                        + ". Draw it out with a Rift Extractor. Containment > Rifts will guide you.");
+                        + ". It has to be drawn out with a Rift Extractor. Who goes?",
+                        rk.atLeast(Rank.LEVEL_4) || d.ascended ? new Reply("Send a D-Class crew with an extractor.", "rift_dclass#" + r.getId(), "Two D-Class and an extractor are on their way. Expect losses.") : null,
+                        council ? new Reply("Send the MTF.", "rift_mtf#" + r.getId(), "An extraction team is on its way. They've done this before.") : null,
+                        new Reply("I'll handle it myself.", "guide_ent:" + r.getId(), "Follow the arrow. Bring an extractor."));
                 d.dirty = true;
             }
         }

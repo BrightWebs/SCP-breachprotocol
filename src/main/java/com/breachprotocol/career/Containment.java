@@ -193,7 +193,9 @@ public final class Containment extends SavedData {
                 WorldNews.record(l.getServer(), WorldNews.Kind.CONTAINED, e.type, e.designation + " was entered in the registry, held in " + e.where(), 2, site.ownerName);
                 notifyOwner(l.getServer(), site, O5.O5_10, e.designation + " is on the books: held in " + e.where() + ". The registry will watch it from here.");
             } else {
-                notifyOwner(l.getServer(), site, O5.O5_6, "Something unregistered is loose inside " + site.name + ": " + e.designation + ". It isn't in any cell of ours.");
+                Career.Reply[] t = Response.orders(e);
+                notifyOwner(l.getServer(), site, O5.O5_6, "Something unregistered is loose inside " + site.name + ": " + e.designation + ". It isn't in any cell of ours. Your orders?", t);
+                BreachMissions.open(l.getServer(), e);
             }
             return;
         }

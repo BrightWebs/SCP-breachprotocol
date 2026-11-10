@@ -92,6 +92,25 @@ public final class BreachMissions {
         Career.sync(q);
     }
 
+    /** The Guide arrow onto anything (a rift, a spot): the client starts it when it sees the request. */
+    public static void guideTo(ServerPlayer q, int x, int y, int z, int eid, String label) {
+        CompoundTag g = new CompoundTag();
+        g.putInt("x", x); g.putInt("y", y); g.putInt("z", z);
+        g.putInt("eid", eid);
+        g.putString("label", label);
+        g.putInt("n", q.getPersistentData().getInt("bp_guide_n") + 1);
+        q.getPersistentData().putInt("bp_guide_n", g.getInt("n"));
+        q.getPersistentData().put("bp_guide_req", g);
+        Career.sync(q);
+    }
+
+    /** "guide_ent:<entity id>" from a reply: the arrow onto it, following it while it's in reach. */
+    public static void guideEntity(ServerPlayer q, int eid, String label) {
+        net.minecraft.world.entity.Entity e = q.serverLevel().getEntity(eid);
+        if (e == null) return;
+        guideTo(q, e.getBlockX(), e.getBlockY(), e.getBlockZ(), eid, label);
+    }
+
     public static void addToSync(ServerPlayer p, CompoundTag t) {
         if (p.getPersistentData().contains("bp_guide_req")) t.put("guideReq", p.getPersistentData().getCompound("bp_guide_req").copy());
     }

@@ -90,7 +90,7 @@ public final class Response {
                 new Career.Reply("Send Site Security.", "resp:SECURITY:" + id, "Site Security is moving on " + d + ". They'll report when it's secured."),
                 new Career.Reply("Send Epsilon-11.", "resp:EPSILON_11:" + id, "Nine-Tailed Fox is on its way. Recontainment is what they do."),
                 new Career.Reply("Send Nu-7.", "resp:NU_7:" + id, "Hammer Down is deploying. Whatever's in their way won't be."),
-                new Career.Reply("Leave it to me.", "resp:SELF:" + id, "Understood. Nobody moves on it without your word.")};
+                new Career.Reply("I'll handle it myself.", "resp:SELF:" + id, "Understood. Nobody moves on it without your word. Follow the arrow.")};
     }
 
     /** A breach just happened: if you don't answer, the chain of command will. */
@@ -111,6 +111,8 @@ public final class Response {
             Team t = TEAMS.remove(id);
             if (t != null) standDown(p.server, t);
             BreachMissions.status(p.server, id, "You're handling it yourself.");
+            Mission mm = BreachMissions.find(Career.data(p), id);
+            if (mm != null) BreachMissions.guide(p, mm, Containment.loaded(p.server, id));
             return;
         }
         if (u.equals("GUIDE")) {
