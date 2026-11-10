@@ -249,14 +249,44 @@ public final class Toggles {
             event.setCanceled(true);
             return;
         }
-        // his blows
-        if (event.getSource().getDirectEntity() instanceof ServerPlayer p && raging(p)) {
-            PowerKills.credit(p, v);
-            event.setAmount(Math.max(event.getAmount() * 4F, 20F));
-            Vec3 push = v.position().subtract(p.position()).multiply(1, 0, 1).normalize().scale(1.6);
-            v.push(push.x, 0.45, push.z);
-            v.hurtMarked = true;
+        blow(event);
+    }
+
+    private static boolean REDEALING;
+    private static final net.minecraft.resources.ResourceKey<net.minecraft.world.damagesource.DamageType> CAUGHT =
+            net.minecraft.resources.ResourceKey.create(net.minecraft.core.registries.Registries.DAMAGE_TYPE, ResourceLocation.fromNamespaceAndPath("scp_unleashed", "scp096_caught"));
+    private static final String[] SEALS = {"anti_skill", "anti_magic", "energy_blockade", "silence"};
+
+    /**
+     * The Administrator's (and SCP-Omega's) bare blows land the way SCP-096's do: as its own "caught" damage,
+     * which nothing turns aside (armor, enchantments, resistances, invulnerability), and with whatever Manas
+     * Reborn gives the one struck (skills, magic, energy) sealed off first. In Rage, four times as hard and
+     * thrown back.
+     */
+    private static void blow(LivingIncomingDamageEvent event) {
+        if (REDEALING) return;
+        var src = event.getSource();
+        if (!(src.getDirectEntity() instanceof ServerPlayer p) || src.getEntity() != p || !src.is(net.minecraft.world.damagesource.DamageTypes.PLAYER_ATTACK) || !Vault.chief(p)) return;
+        LivingEntity v = event.getEntity();
+        boolean rage = raging(p);
+        float amount = rage ? Math.max(event.getAmount() * 4F, 20F) : event.getAmount();
+        // their gifts sealed before the blow lands
+        int dur = rage ? 600 : 200;
+        for (String id : SEALS) {
+            var h = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getHolder(ResourceLocation.fromNamespaceAndPath("manas_reborn", id));
+            h.ifPresent(e -> v.addEffect(new net.minecraft.world.effect.MobEffectInstance(e, dur, 0, false, true, true), p));
         }
+        var reg = p.serverLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.DAMAGE_TYPE);
+        if (reg.getHolder(CAUGHT).isEmpty()) { if (rage) event.setAmount(amount); return; } // no SCP Unleashed: an ordinary (if harder) blow
+        event.setCanceled(true);
+        PowerKills.credit(p, v);
+        v.invulnerableTime = 0;
+        REDEALING = true;
+        try { v.hurt(PowerKills.as(p, CAUGHT), amount); } finally { REDEALING = false; }
+        double kb = rage ? 1.6 : 0.4;
+        Vec3 push = v.position().subtract(p.position()).multiply(1, 0, 1).normalize().scale(kb);
+        v.push(push.x, rage ? 0.45 : 0.2, push.z);
+        v.hurtMarked = true;
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
