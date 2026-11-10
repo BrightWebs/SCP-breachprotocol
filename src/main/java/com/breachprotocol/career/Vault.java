@@ -57,7 +57,7 @@ public final class Vault {
     private Vault() {}
 
     public static final ResourceKey<Level> DIM = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "vault"));
-    private static final int Y = 64, SPACING = 4000, CHESTS = 20;
+    private static final int Y = 64, SPACING = 4000, CHESTS = 20, LAYOUT = 2;
     /** Placed quietly: no knock-on updates, so nothing pops off its wall or floor while the Vault is being built or patched. */
     private static final int F = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS;
 
@@ -124,6 +124,8 @@ public final class Vault {
     public static final class Region {
         public int slot, nextNorth = 2, nextSouth = 2, hallTo = 12, throneX;
         public boolean built, migrated;
+        /** Which version of the layout this was last patched to. */
+        public int layout;
         /** The storeroom: twenty chests of fifty-four slots, up to 999 of anything in each. */
         public final ItemStack[] item = new ItemStack[CHESTS * 54];
         public final int[] count = new int[CHESTS * 54];
@@ -153,6 +155,7 @@ public final class Vault {
                 r.backDim = c.getString("bd"); r.backPos = c.getLong("bp");
                 for (Tag y : c.getList("cells", Tag.TAG_COMPOUND)) r.cells.add(Cell.load((CompoundTag) y));
                 r.migrated = c.getBoolean("mig");
+                r.layout = c.getInt("lay");
                 for (Tag y : c.getList("store", Tag.TAG_COMPOUND)) {
                     CompoundTag it = (CompoundTag) y;
                     int k = it.getInt("k");
@@ -182,6 +185,7 @@ public final class Vault {
                 for (Cell x : r.cells) cl.add(x.save());
                 c.put("cells", cl);
                 c.putBoolean("mig", r.migrated);
+                c.putInt("lay", r.layout);
                 ListTag st = new ListTag();
                 for (int k = 0; k < r.item.length; k++) {
                     if (r.item[k] == null || r.count[k] <= 0) continue;
@@ -212,6 +216,8 @@ public final class Vault {
         ServerLevel v = level(p.server);
         if (v != null && !r.built) { build(v, r, false); extendHall(v, r, 12); }
         if (v != null && r.built && !r.migrated) migrate(v, r);
+        // a layout fix since this was last patched (holes left by misplaced buttons, cells drawn from old saves): patch it now
+        if (v != null && r.built && r.layout < LAYOUT) { r.layout = LAYOUT; repair(v, r); }
         return r;
     }
 
@@ -592,7 +598,13 @@ public final class Vault {
     /** SCP Unleashed's doors, placed the way the facility builder places them. */
     private static final class Doors extends com.breachprotocol.world.FacilityBuilder {
         Doors(ServerLevel v) { super(v, BlockPos.ZERO); }
-        void gate(int x, int z, net.minecraft.core.Direction out) { gate("containment_room_door", 2, 2, x, z, Y, out, 5); }
+        /** The door, its scanner on the hall side and its exit button inside, both on the frame column at x + 2 (never on a cell's outer wall). */
+        void gate(int x, int z, net.minecraft.core.Direction out) {
+            door("containment_room_door", 2, 2, x, z, Y, out);
+            BlockPos jamb = new BlockPos(x + 2, Y + 2, z);
+            l.setBlock(jamb.relative(out), st("keycard_scanner[facing=" + f(out) + ",level=5,status=idle]"), FLAGS);
+            l.setBlock(jamb.relative(out.getOpposite()), st("door_button[facing=" + f(out.getOpposite()) + ",powered=false]"), FLAGS);
+        }
     }
 
     /** Everything back the way it was built: storeroom (chests keep their contents), corridor, throne room, every cell, and every captive back inside its own. */
