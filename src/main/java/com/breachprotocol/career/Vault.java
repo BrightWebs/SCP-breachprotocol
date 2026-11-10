@@ -114,7 +114,10 @@ public final class Vault {
 
     public static final class Region {
         public int slot, nextNorth = 2, nextSouth = 2, hallTo = 12, throneX;
-        public boolean built;
+        public boolean built, migrated;
+        /** The storeroom: twenty chests of fifty-four slots, up to 999 of anything in each. */
+        public final ItemStack[] item = new ItemStack[CHESTS * 54];
+        public final int[] count = new int[CHESTS * 54];
         public String backDim = "";
         public long backPos;
         public final List<Cell> cells = new ArrayList<>();
@@ -140,6 +143,15 @@ public final class Vault {
                 r.nextNorth = c.getInt("nn"); r.nextSouth = c.getInt("ns"); r.hallTo = c.getInt("hall"); r.throneX = c.getInt("tx");
                 r.backDim = c.getString("bd"); r.backPos = c.getLong("bp");
                 for (Tag y : c.getList("cells", Tag.TAG_COMPOUND)) r.cells.add(Cell.load((CompoundTag) y));
+                r.migrated = c.getBoolean("mig");
+                for (Tag y : c.getList("store", Tag.TAG_COMPOUND)) {
+                    CompoundTag it = (CompoundTag) y;
+                    int k = it.getInt("k");
+                    ItemStack st = ItemStack.parseOptional(p, it.getCompound("i"));
+                    if (k < 0 || k >= r.item.length || st.isEmpty() || it.getInt("n") <= 0) continue;
+                    r.item[k] = st.copyWithCount(1);
+                    r.count[k] = it.getInt("n");
+                }
                 d.regions.put(c.getUUID("owner"), r);
             }
             return d;
@@ -160,6 +172,17 @@ public final class Vault {
                 ListTag cl = new ListTag();
                 for (Cell x : r.cells) cl.add(x.save());
                 c.put("cells", cl);
+                c.putBoolean("mig", r.migrated);
+                ListTag st = new ListTag();
+                for (int k = 0; k < r.item.length; k++) {
+                    if (r.item[k] == null || r.count[k] <= 0) continue;
+                    CompoundTag it = new CompoundTag();
+                    it.putInt("k", k);
+                    it.put("i", r.item[k].copyWithCount(1).save(p));
+                    it.putInt("n", r.count[k]);
+                    st.add(it);
+                }
+                c.put("store", st);
                 l.add(c);
             }
             t.put("regions", l);
@@ -179,6 +202,7 @@ public final class Vault {
         d.setDirty();
         ServerLevel v = level(p.server);
         if (v != null && !r.built) { build(v, r, false); extendHall(v, r, 12); }
+        if (v != null && r.built && !r.migrated) migrate(v, r);
         return r;
     }
 
@@ -383,16 +407,25 @@ public final class Vault {
     private static boolean fit(ServerLevel v, Region r, Cell c, LivingEntity e) {
         int[] n = needs(e);
         if ((n[0] == 1) == c.water && c.x1 - c.x0 + 1 >= n[1] && c.z1 - c.z0 + 1 >= n[1] && c.h >= n[2]) return false;
-        demolish(v, r, c);
-        Cell nc = makeCell(v, r, e);
-        c.fx0 = nc.fx0; c.fx1 = nc.fx1; c.fza = nc.fza; c.fzb = nc.fzb; c.front = nc.front;
-        c.x0 = nc.x0; c.x1 = nc.x1; c.z0 = nc.z0; c.z1 = nc.z1; c.h = nc.h; c.water = nc.water;
+        rebuildFor(v, r, c, e);
         Vec3 at = c.centre();
         e.teleportTo(at.x, at.y, at.z);
         e.setDeltaMovement(Vec3.ZERO);
         e.fallDistance = 0;
         data(v.getServer()).setDirty();
         return true;
+    }
+
+    /** The cell keeps its number; the room is taken down and built again, elsewhere along the hall, to suit this. */
+    private static void rebuildFor(ServerLevel v, Region r, Cell c, LivingEntity e) {
+        demolish(v, r, c);
+        Cell nc = makeCell(v, r, e);
+        c.fx0 = nc.fx0; c.fx1 = nc.fx1; c.fza = nc.fza; c.fzb = nc.fzb; c.front = nc.front;
+        c.x0 = nc.x0; c.x1 = nc.x1; c.z0 = nc.z0; c.z1 = nc.z1; c.h = nc.h; c.water = nc.water;
+        Vec3 m = c.centre();
+        v.sendParticles(ParticleTypes.END_ROD, m.x, m.y + 1, m.z, 40, (c.x1 - c.x0) / 3.0, c.h / 3.0, (c.z1 - c.z0) / 3.0, 0.02);
+        v.playSound(null, BlockPos.containing(m), SoundEvents.BEACON_POWER_SELECT, SoundSource.BLOCKS, 1F, 1.2F);
+        data(v.getServer()).setDirty();
     }
 
     /** A cell taken down: gone back to the void, its stretch of hall made whole, its neighbours across the hall redrawn. */
@@ -538,7 +571,19 @@ public final class Vault {
         if (e == null) { say(p, "Look at what you want held, then trap it."); return; }
         if (e.isPassenger() || e.isVehicle()) e.ejectPassengers();
         Region r = region(p);
-        Cell c = makeCell(v, r, e);
+        // an empty cell first: one that already suits it as it is, or else the first empty one, rebuilt to fit
+        int[] need = needs(e);
+        Cell c = null, empty = null;
+        boolean reused = false, rebuilt = false;
+        for (Cell x : r.cells) {
+            Entity in = x.entity == null ? null : v.getEntity(x.entity);
+            if (in != null && in.isAlive()) continue;
+            if (empty == null) empty = x;
+            if ((need[0] == 1) == x.water && x.x1 - x.x0 + 1 >= need[1] && x.z1 - x.z0 + 1 >= need[1] && x.h >= need[2]) { c = x; break; }
+        }
+        if (c != null) reused = true;
+        else if (empty != null) { c = empty; rebuildFor(v, r, c, e); reused = rebuilt = true; }
+        else c = makeCell(v, r, e);
         c.type = Objects.requireNonNull(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())).toString();
         c.name = Unleashed.isAnomaly(e) ? Unleashed.designation(e) : e.getName().getString();
         CompoundTag look = new CompoundTag();
@@ -552,11 +597,13 @@ public final class Vault {
         if (moved == null) { say(p, "It wouldn't go."); return; }
         if (moved instanceof Mob m) { m.setPersistenceRequired(); m.setTarget(null); }
         c.entity = moved.getUUID();
-        r.cells.add(c);
+        if (!reused) r.cells.add(c);
         repair(v, r);
         data(p.server).setDirty();
         v.sendParticles(ParticleTypes.PORTAL, at.x, at.y + 1, at.z, 60, 1, 1, 1, 0.4);
-        say(p, c.name + " is in your vault, cell " + r.cells.size() + ".");
+        int no = r.cells.indexOf(c) + 1;
+        String kind = c.water ? "a tank, " : "";
+        say(p, c.name + " is in your vault, cell " + no + (rebuilt ? " (rebuilt to fit: " + kind + (c.x1 - c.x0 + 1) + " × " + (c.z1 - c.z0 + 1) + " × " + c.h + ")." : "."));
         Career.sync(p);
     }
 
@@ -566,18 +613,21 @@ public final class Vault {
         if (v == null || r == null || index < 0 || index >= r.cells.size() || !chief(p)) return;
         Cell c = r.cells.get(index);
         Entity e = c.entity == null ? null : v.getEntity(c.entity);
-        if (e == null || !e.isAlive()) { say(p, "Cell " + (index + 1) + " is empty. Whatever was in it is gone."); c.entity = null; data(p.server).setDirty(); Career.sync(p); return; }
+        if (e == null || !e.isAlive()) { say(p, "Cell " + (index + 1) + " is empty. Whatever was in it is gone."); forget(c); data(p.server).setDirty(); Career.sync(p); return; }
         v.sendParticles(ParticleTypes.REVERSE_PORTAL, e.getX(), e.getY() + 1, e.getZ(), 40, 0.6, 0.8, 0.6, 0.15);
         Vec3 at = p.position().add(p.getLookAngle().multiply(1, 0, 1).normalize().scale(Math.max(2.5, e.getBbWidth() + 1.5)));
         Entity moved = e.changeDimension(new DimensionTransition(p.serverLevel(), at, Vec3.ZERO, p.getYRot() + 180, 0, DimensionTransition.DO_NOTHING));
         if (moved == null) return;
         p.serverLevel().sendParticles(ParticleTypes.PORTAL, at.x, at.y + 1, at.z, 60, 0.6, 1, 0.6, 0.5);
         p.serverLevel().playSound(null, BlockPos.containing(at), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1F, 1.2F);
-        c.entity = null;
+        String was = c.name;
+        forget(c);
         data(p.server).setDirty();
-        say(p, c.name + " is out, at your side.");
+        say(p, was + " is out, at your side. Cell " + (index + 1) + " stands empty.");
         Career.sync(p);
     }
+
+    private static void forget(Cell c) { c.entity = null; c.name = ""; c.type = ""; c.look = new CompoundTag(); }
 
     /** "Put it back": what came out of a cell goes back into the same one. */
     public static void restore(ServerPlayer p, int index) {
@@ -625,44 +675,77 @@ public final class Vault {
 
     // ================================================================== the storeroom
 
+    public static final int CAP = 999;
+
     private static Container container(ServerLevel v, int o, int k, int half) {
         return v.getBlockEntity(chest(o, k, half)) instanceof ChestBlockEntity c ? c : null;
     }
 
+    /** The old chests' contents move into the storeroom proper (which holds 999 a slot); the chests stay, as the way in. */
+    private static void migrate(ServerLevel v, Region r) {
+        r.migrated = true;
+        for (int k = 0; k < CHESTS; k++) for (int h = 0; h < 2; h++) {
+            Container c = container(v, r.ox(), k, h);
+            if (c == null) continue;
+            for (int i = 0; i < c.getContainerSize(); i++) {
+                ItemStack st = c.getItem(i);
+                if (st.isEmpty()) continue;
+                int idx = k * 54 + h * 27 + i;
+                if (r.item[idx] == null) { r.item[idx] = st.copyWithCount(1); r.count[idx] = st.getCount(); }
+                else store(r, st.copy());
+                c.setItem(i, ItemStack.EMPTY);
+            }
+            c.setChanged();
+        }
+        data(v.getServer()).setDirty();
+    }
+
+    /** Into the store: onto what's like it first (to 999), then the first free slot. Returns what's left. */
+    private static ItemStack store(Region r, ItemStack stack) {
+        int left = stack.getCount();
+        for (int k = 0; k < r.item.length && left > 0; k++)
+            if (r.item[k] != null && r.count[k] < CAP && ItemStack.isSameItemSameComponents(r.item[k], stack)) {
+                int n = Math.min(left, CAP - r.count[k]);
+                r.count[k] += n; left -= n;
+            }
+        for (int k = 0; k < r.item.length && left > 0; k++)
+            if (r.item[k] == null || r.count[k] <= 0) {
+                int n = Math.min(left, CAP);
+                r.item[k] = stack.copyWithCount(1); r.count[k] = n; left -= n;
+            }
+        return left <= 0 ? ItemStack.EMPTY : stack.copyWithCount(left);
+    }
+
     /** Into the storeroom; whatever doesn't fit comes back. */
     public static ItemStack deposit(MinecraftServer s, UUID owner, ItemStack stack) {
-        ServerLevel v = level(s);
         Region r = data(s).regions.get(owner);
-        if (v == null || r == null || !r.built || stack.isEmpty()) return stack;
-        ItemStack left = stack.copy();
-        for (int pass = 0; pass < 2 && !left.isEmpty(); pass++)
-            for (int k = 0; k < CHESTS && !left.isEmpty(); k++) for (int h = 0; h < 2 && !left.isEmpty(); h++) {
-                Container c = container(v, r.ox(), k, h);
-                if (c == null) continue;
-                for (int i = 0; i < c.getContainerSize() && !left.isEmpty(); i++) {
-                    ItemStack in = c.getItem(i);
-                    if (pass == 0 && !in.isEmpty() && ItemStack.isSameItemSameComponents(in, left) && in.getCount() < in.getMaxStackSize()) {
-                        int n = Math.min(left.getCount(), in.getMaxStackSize() - in.getCount());
-                        in.grow(n); left.shrink(n); c.setChanged();
-                    } else if (pass == 1 && in.isEmpty()) { c.setItem(i, left.copy()); left = ItemStack.EMPTY; }
-                }
-            }
+        if (level(s) == null || r == null || !r.built || stack.isEmpty()) return stack;
+        ItemStack left = store(r, stack);
+        data(s).setDirty();
         return left;
     }
 
     public static boolean has(MinecraftServer s, UUID owner) { Region r = data(s).regions.get(owner); return r != null && r.built && level(s) != null; }
 
-    public static void take(ServerPlayer p, int chestIndex, int slot) {
-        ServerLevel v = level(p.server);
+    /** A stack out of a slot (all: as much as your inventory holds). Whatever won't fit stays where it is. */
+    public static void take(ServerPlayer p, int chestIndex, int slot, boolean all) {
         Region r = data(p.server).regions.get(p.getUUID());
-        if (v == null || r == null || !chief(p) || chestIndex < 0 || chestIndex >= CHESTS || slot < 0 || slot >= 54) return;
-        Container c = container(v, r.ox(), chestIndex, slot / 27);
-        if (c == null) return;
-        ItemStack s = c.removeItemNoUpdate(slot % 27);
-        c.setChanged();
-        if (s.isEmpty()) return;
-        if (!p.getInventory().add(s)) p.drop(s, false);
-        p.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.5F, 1.2F);
+        if (r == null || !chief(p) || chestIndex < 0 || chestIndex >= CHESTS || slot < 0 || slot >= 54) return;
+        int k = chestIndex * 54 + slot;
+        if (r.item[k] == null || r.count[k] <= 0) return;
+        int moved = 0;
+        do {
+            int n = Math.min(r.count[k], r.item[k].getMaxStackSize());
+            ItemStack give = r.item[k].copyWithCount(n);
+            p.getInventory().add(give);
+            int got = n - give.getCount();
+            if (got <= 0) break;
+            r.count[k] -= got; moved += got;
+        } while (all && r.count[k] > 0);
+        if (r.count[k] <= 0) { r.item[k] = null; r.count[k] = 0; }
+        data(p.server).setDirty();
+        if (moved > 0) p.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.5F, 1.2F);
+        else say(p, "Your inventory's full.");
         Career.sync(p);
     }
 
@@ -888,7 +971,18 @@ public final class Vault {
             p.swing(event.getHand(), true);
             return;
         }
-        if (!chief && st.getBlock() instanceof ChestBlock) { event.setCanceled(true); say(p, "The storeroom isn't yours."); }
+        if (st.getBlock() instanceof ChestBlock && r != null) {
+            event.setCanceled(true);
+            event.setCancellationResult(net.minecraft.world.InteractionResult.SUCCESS);
+            if (!chief) { say(p, "The storeroom isn't yours."); return; }
+            for (int k = 0; k < CHESTS; k++) if (chest(r.ox(), k, 0).equals(pos) || chest(r.ox(), k, 1).equals(pos)) {
+                p.getPersistentData().putLong("bp_vault_open", p.level().getGameTime());
+                p.getPersistentData().putInt("bp_vault_open_k", k);
+                p.playNotifySound(SoundEvents.CHEST_OPEN, SoundSource.BLOCKS, 0.5F, 1F);
+                view(p);
+                return;
+            }
+        }
     }
 
     // ================================================================== the client's view (only while the Vault screen is open)
@@ -917,22 +1011,21 @@ public final class Vault {
         ListTag chests = new ListTag();
         for (int k = 0; k < CHESTS; k++) {
             ListTag items = new ListTag();
-            for (int h = 0; h < 2; h++) {
-                Container c = container(v, r.ox(), k, h);
-                if (c == null) continue;
-                for (int i = 0; i < c.getContainerSize(); i++) {
-                    ItemStack st = c.getItem(i);
-                    if (st.isEmpty()) continue;
-                    CompoundTag it = new CompoundTag();
-                    it.putInt("s", h * 27 + i);
-                    it.put("i", st.save(p.registryAccess()));
-                    items.add(it);
-                }
+            for (int i = 0; i < 54; i++) {
+                int idx = k * 54 + i;
+                if (r.item[idx] == null || r.count[idx] <= 0) continue;
+                CompoundTag it = new CompoundTag();
+                it.putInt("s", i);
+                it.put("i", r.item[idx].copyWithCount(1).save(p.registryAccess()));
+                it.putInt("n", r.count[idx]);
+                items.add(it);
             }
             chests.add(items);
         }
         out.put("chests", chests);
         out.putBoolean("inside", p.level().dimension() == DIM);
+        CompoundTag pd = p.getPersistentData();
+        if (pd.contains("bp_vault_open")) { out.putLong("openAt", pd.getLong("bp_vault_open")); out.putInt("openK", pd.getInt("bp_vault_open_k")); }
         out.putBoolean("seated", p.getVehicle() != null && p.getVehicle().getTags().contains("bp_throne"));
         t.put("vault", out);
     }
@@ -954,7 +1047,7 @@ public final class Vault {
                 case "throne" -> toThrone(p);
                 case "out" -> release(p, Integer.parseInt(s[1]));
                 case "back" -> restore(p, Integer.parseInt(s[1]));
-                case "take" -> take(p, Integer.parseInt(s[1]), Integer.parseInt(s[2]));
+                case "take" -> take(p, Integer.parseInt(s[1]), Integer.parseInt(s[2]), s.length > 3 && s[3].equals("all"));
                 default -> {}
             }
         } catch (RuntimeException ignored) {}

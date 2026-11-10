@@ -37,6 +37,26 @@ public class VaultScreen extends Screen {
 
     public VaultScreen() { super(Component.literal("The Vault")); }
 
+    /** Opened from one of the storeroom's chests: the board, at that chest. */
+    private static int jump = -1;
+
+    public static VaultScreen atChest(int k) { tab = 1; jump = k; return new VaultScreen(); }
+
+    /** The server says a storeroom chest was opened: open the board there. */
+    private static long lastOpen = Long.MIN_VALUE;
+
+    static void watch() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        CompoundTag v = vault();
+        if (!v.contains("openAt")) return;
+        long at = v.getLong("openAt");
+        if (at == lastOpen) return;
+        lastOpen = at;
+        if (Math.abs(mc.level.getGameTime() - at) > 60) return; // an old one, from before you logged in
+        if (mc.screen == null || mc.screen instanceof VaultScreen) mc.setScreen(atChest(v.getInt("openK")));
+    }
+
     @Override
     protected void init() { send("vault:view"); }
 
@@ -67,7 +87,9 @@ public class VaultScreen extends Screen {
             for (Tag it : (ListTag) t) {
                 CompoundTag c = (CompoundTag) it;
                 ItemStack s = ItemStack.parseOptional(reg, c.getCompound("i"));
-                if (!s.isEmpty()) items.add(Map.entry(c.getInt("s"), s));
+                if (s.isEmpty()) continue;
+                s.setCount(Math.max(1, c.getInt("n")));
+                items.add(Map.entry(c.getInt("s"), s));
             }
             chests.add(items);
         }
@@ -163,7 +185,7 @@ public class VaultScreen extends Screen {
             g.fill(x + 2, ry, x + lw - 2, ry + rh - 2, on ? 0x60402868 : hov ? 0x25FFFFFF : 0);
             if (on) g.fill(x + 2, ry, x + 4, ry + rh - 2, AC);
             g.drawString(font, String.format("%02d", i + 1), x + 8, ry + 6, on ? AC : DIM, false);
-            g.drawString(font, clip(c.getString("n"), lw - 50), x + 26, ry + 3, occ ? TEXT : MUTED, false);
+            g.drawString(font, clip(c.getString("n").isEmpty() ? "Empty cell" : c.getString("n"), lw - 50), x + 26, ry + 3, occ ? TEXT : DIM, false);
             small(g, (occ ? "HELD" : "EMPTY") + (c.getBoolean("w") ? "  ·  TANK" : ""), x + 26, ry + 13, occ ? OK : DIM);
             g.fill(x + lw - 10, ry + 8, x + lw - 6, ry + 12, occ ? OK : 0xFF3A3448);
             final int n = i;
@@ -200,13 +222,13 @@ public class VaultScreen extends Screen {
             String sz = c.getString("size");
             small(g, sz, bxx + bw - 5 - (int) (font.width(sz) * 0.75F), by + 5, DIM);
             int iy = by + bh + 6;
-            g.drawString(font, clip(c.getString("n"), pw - 16), px + 8, iy, TEXT, false);
-            small(g, occ ? (c.contains("hp") ? "HEALTH " + c.getString("hp") : "HELD") : "WHATEVER WAS HERE IS OUT", px + 8, iy + 11, occ ? OK : DIM);
+            g.drawString(font, clip(occ && !c.getString("n").isEmpty() ? c.getString("n") : "Empty cell", pw - 16), px + 8, iy, occ ? TEXT : MUTED, false);
+            small(g, occ ? (c.contains("hp") ? "HEALTH " + c.getString("hp") : "HELD") : "READY FOR THE NEXT ONE  ·  REBUILT TO FIT IF IT MUST BE", px + 8, iy + 11, occ ? OK : DIM);
             int ay = iy + 24;
             final int idx = selected;
             int ax = px + 8;
             if (occ) ax = button(g, ax, ay, "Pull it out", OK, mx, my, () -> send("vault:out:" + idx)) + 4;
-            else ax = button(g, ax, ay, "Put it back", AC, mx, my, () -> send("vault:back:" + idx)) + 4;
+            else ax = button(g, ax, ay, "Put it in here", AC, mx, my, () -> send("vault:back:" + idx)) + 4;
             if (!occ) small(g, "LOOK AT IT FIRST", ax + 2, ay + 6, DIM);
             else ax = button(g, ax, ay, "Trap another", BAD, mx, my, () -> send("vault:trap")) + 4;
             trap = false;
@@ -251,6 +273,7 @@ public class VaultScreen extends Screen {
         g.fill(boardX, boardY, boardX + boardW, boardY + boardH, PANEL);
         frame(g, boardX, boardY, boardW, boardH, LINE);
         int max = Math.max(0, chests.size() * blockH - boardH + 4);
+        if (jump >= 0 && !chests.isEmpty()) { boardScroll = jump * blockH; jump = -1; }
         boardScroll = Math.max(0, Math.min(boardScroll, max));
         int gw = 9 * 18, gx = boardX + 5;
         g.enableScissor(boardX + 1, boardY + 1, boardX + boardW - 1, boardY + boardH - 1);
@@ -278,7 +301,7 @@ public class VaultScreen extends Screen {
                     hover = st;
                 }
                 final int kk = k, ss = s;
-                if (vis) hits.add(new Hit(sx, syy, 17, 17, () -> send("vault:take:" + kk + ":" + ss)));
+                if (vis) hits.add(new Hit(sx, syy, 17, 17, () -> send("vault:take:" + kk + ":" + ss + (Screen.hasShiftDown() ? ":all" : ""))));
             }
         }
         g.disableScissor();
@@ -311,7 +334,8 @@ public class VaultScreen extends Screen {
         int ty = ggy + 4 * 18 + 10;
         small(g, "CLICK: STORE THAT STACK", ggx, ty, MUTED);
         small(g, "SHIFT+CLICK: EVERY STACK OF IT", ggx, ty + 9, MUTED);
-        small(g, "CLICK A CHEST'S ITEM: TAKE IT", ggx, ty + 18, MUTED);
+        small(g, "CHEST ITEM: A STACK  ·  SHIFT: ALL", ggx, ty + 18, MUTED);
+        small(g, "UP TO 999 OF ANYTHING A SLOT", ggx, ty + 27, DIM);
         int by2 = y + h - 22;
         int nb = button(g, ggx, by2, "Store all", OK, mx, my, () -> send("vault:rest"));
         small(g, "HOTBAR STAYS", nb + 5, by2 + 6, DIM);
