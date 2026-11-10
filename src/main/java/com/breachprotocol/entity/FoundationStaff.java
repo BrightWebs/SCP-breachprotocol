@@ -361,7 +361,39 @@ public class FoundationStaff extends PathfinderMob implements Person {
     }
 
     /** Night-shift guards sleep by day. */
-    private boolean nightShift() { return role() == Role.GUARD && gene(50) < 0.4F; }
+    /** A third of the site works the night rotation, so every desk and post is manned around the clock. */
+    private boolean nightShift() { return role() != Role.SECRETARY && gene(50) < 0.34F; }
+
+    /** Desk work: their chair is their post (clerks, researchers, technicians, medics, heads, the secretary). Guards stand, janitors walk the floor. */
+    public boolean deskJob() {
+        return unit == null && role() != Role.GUARD && role() != Role.JANITOR;
+    }
+
+    /** On shift at a desk: in the chair, and nowhere else. */
+    public boolean onDuty() { return deskJob() && "post".equals(mode) && activity.equals("work") && errand.isEmpty(); }
+
+    /** Their own chair: the nearest seat to their post that nobody else has taken (kept once chosen). */
+    public BlockPos seat() {
+        if (post == null) return null;
+        var pd = getPersistentData();
+        if (pd.contains("bp_seat")) {
+            BlockPos s = BlockPos.of(pd.getLong("bp_seat"));
+            if (Seats.isSeat(level().getBlockState(s))) return s;
+            pd.remove("bp_seat");
+        }
+        java.util.Set<Long> taken = new java.util.HashSet<>();
+        for (FoundationStaff o : level().getEntitiesOfClass(FoundationStaff.class, new net.minecraft.world.phys.AABB(post).inflate(16)))
+            if (o != this && o.getPersistentData().contains("bp_seat")) taken.add(o.getPersistentData().getLong("bp_seat"));
+        BlockPos best = null;
+        double bd = Double.MAX_VALUE;
+        for (BlockPos q : BlockPos.betweenClosed(post.offset(-6, -1, -6), post.offset(6, 1, 6))) {
+            if (!Seats.isSeat(level().getBlockState(q)) || taken.contains(q.asLong()) || !com.breachprotocol.world.Site01.mayUseChair(this, q)) continue;
+            double d = q.distSqr(post);
+            if (d < bd) { bd = d; best = q.immutable(); }
+        }
+        if (best != null) pd.putLong("bp_seat", best.asLong());
+        return best;
+    }
 
     /** The hour of the day (0-23). */
     private int hour() { return (int) ((level().getDayTime() % 24000) / 1000 + 6) % 24; }
@@ -369,12 +401,12 @@ public class FoundationStaff extends PathfinderMob implements Person {
     /** What they should be doing now: work, lunch, free time or sleep. */
     private String scheduled() {
         int h = hour();
-        if (nightShift()) return h >= 18 || h < 6 ? "work" : h >= 8 && h < 16 ? "sleep" : "free";
-        boolean sec = role() == Role.SECRETARY;
-        if (sec ? h >= 23 || h < 7 : h >= 22 || h < 6) return "sleep";
-        if (h == 12 && !sec) return "lunch";
-        if (sec ? h >= 8 && h < 18 : h >= 7 && h < 17) return "work";
-        return "free";
+        // the Executive Secretary keeps the Administrator's hours
+        if (role() == Role.SECRETARY) return h >= 23 || h < 7 ? "sleep" : "work";
+        // the Foundation never closes: an eighteen-hour shift, six hours' sleep, meals taken at the desk;
+        // the night rotation is the day's mirror image, so nothing is ever left unmanned
+        int start = nightShift() ? 18 : 6;
+        return (h - start + 24) % 24 < 18 ? "work" : "sleep";
     }
 
     private void schedule() {
@@ -615,11 +647,11 @@ public class FoundationStaff extends PathfinderMob implements Person {
             public boolean canUse() { return role() != Role.GUARD && super.canUse(); }
         });
         goalSelector.addGoal(2, new FollowGoal(this, () -> "follow".equals(mode) && leader != null && level() instanceof net.minecraft.server.level.ServerLevel sl ? sl.getPlayerByUUID(leader) : null));
-        goalSelector.addGoal(3, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> !"follow".equals(mode) && goal == null && !isSleeping() && com.breachprotocol.world.Site01.mayUseChair(this, pos)));
+        goalSelector.addGoal(3, new SitGoal(this, null, 0.006F, 20 * 30, 20 * 150, 8, pos -> !"follow".equals(mode) && goal == null && !isSleeping() && !onDuty() && com.breachprotocol.world.Site01.mayUseChair(this, pos)));
         goalSelector.addGoal(4, new LookAtPlayerGoal(this, Player.class, 8F, 0.6F));
         goalSelector.addGoal(5, new WaterAvoidingRandomStrollGoal(this, 0.6, 0.01F) {
             @Override
-            public boolean canUse() { return "post".equals(mode) && goal == null && !isSleeping() && super.canUse(); }
+            public boolean canUse() { return "post".equals(mode) && goal == null && !isSleeping() && !onDuty() && super.canUse(); }
         });
         goalSelector.addGoal(6, new RandomLookAroundGoal(this));
     }
@@ -909,6 +941,11 @@ public class FoundationStaff extends PathfinderMob implements Person {
             else getNavigation().moveTo(sitTarget.getX() + 0.5, sitTarget.getY(), sitTarget.getZ() + 0.5, 0.9);
         }
         if (post != null && tickCount % 200 == 0 && "post".equals(mode) && goal == null && (activity.isEmpty() || activity.equals("work"))) restrictTo(post, 12);
+        // on shift at a desk: back in their chair whenever they're out of it (after a word with someone, a door, a scare)
+        if (onDuty() && goal == null && sitTarget == null && !Seats.seated(this) && tickCount % 100 == 40 && Dialogue.talkingTo(this) == null) {
+            BlockPos s = seat();
+            if (s != null && !Seats.occupied(level(), s)) { sitTarget = s; sitTries = 0; }
+        }
         if (tickCount % 100 == 0) schedule();
         if (isSleeping()) return;
         travelTick();
