@@ -263,7 +263,13 @@ public final class Career {
 
     /** Budget and Council deliveries: with a secretary, they go to her (and into the chest by your desk), not your pockets. */
     public static void budget(ServerPlayer p, Item item, int count) {
-        if ((rank(p) == Rank.ADMINISTRATOR || isAscended(p)) && Secretary.deliver(p, new ItemStack(item, count))) return;
+        if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) {
+            // the storeroom in your Vault first, then your secretary
+            ItemStack left = Vault.has(p.server, p.getUUID()) ? Vault.deposit(p.server, p.getUUID(), new ItemStack(item, count)) : new ItemStack(item, count);
+            if (left.isEmpty() || Secretary.deliver(p, left)) return;
+            give(p, left.getItem(), left.getCount());
+            return;
+        }
         give(p, item, count);
     }
 
@@ -1060,6 +1066,7 @@ public final class Career {
         Containment.addToSync(p, t);
         Dominion.addToSync(p, t);
         BreachMissions.addToSync(p, t);
+        Vault.addToSync(p, t);
         t.putInt("trial", data(p).trial);
         t.putInt("trialKills", data(p).trialKills);
         if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) Forces.addToSync(p, t);

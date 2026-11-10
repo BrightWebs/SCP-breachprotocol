@@ -176,6 +176,14 @@ public final class Containment extends SavedData {
         BlockPos pos = m.blockPosition();
         Sites.Site site = Sites.at(l, pos);
         Entry e = entries.get(m.getUUID());
+        // in the Administrator's Vault: held, whatever cell it's in
+        if (l.dimension() == Vault.DIM) {
+            if (e != null) {
+                e.seen = now; e.pending = 0; e.order = "";
+                if (e.status != HELD) { e.status = HELD; e.since = now; e.wild = false; e.cell = "the Vault"; }
+            }
+            return;
+        }
         // out of its cell on the Foundation's own business (an escort): not a breach
         if (e != null && ESCORT.containsKey(e.id)) { e.seen = now; return; }
         if (e == null) {

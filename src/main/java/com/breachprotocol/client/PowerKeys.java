@@ -216,6 +216,7 @@ public final class PowerKeys {
         Powers.Power p = slot(i);
         if (p == null) return;
         Minecraft mc = Minecraft.getInstance();
+        if (p.id().equals("vault")) { mc.setScreen(new VaultScreen()); return; }
         if (cooldownLeft(p) > 0) { mc.player.playSound(SoundEvents.NOTE_BLOCK_BASS.value(), 0.4F, 0.5F); return; }
         PacketDistributor.sendToServer(new PhoneActionPayload("pow:" + p.id() + ":" + range(p), 0));
         if (i == 0) flash0 = 8; else flash1 = 8;
