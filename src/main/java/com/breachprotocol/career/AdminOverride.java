@@ -45,8 +45,8 @@ import java.lang.reflect.Method;
  * mould around you, cure everyone near you.
  */
 @EventBusSubscriber(modid = BreachProtocol.MODID)
-public final class Override {
-    private Override() {}
+public final class AdminOverride {
+    private AdminOverride() {}
 
     static boolean chief(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
 

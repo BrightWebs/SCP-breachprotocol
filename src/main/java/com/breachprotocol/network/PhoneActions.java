@@ -58,7 +58,7 @@ public final class PhoneActions {
             case "contact_remove" -> com.breachprotocol.career.Contacts.remove(p, arg);
             default -> {
                 if (action.startsWith("msg_reply:")) { try { Career.reply(p, arg, Integer.parseInt(action.substring(10))); } catch (NumberFormatException ignored) {} }
-                else if (action.startsWith("ovr:")) com.breachprotocol.career.Override.action(p, action.substring(4));
+                else if (action.startsWith("ovr:")) com.breachprotocol.career.AdminOverride.action(p, action.substring(4));
                 else if (action.startsWith("resp:")) com.breachprotocol.career.Response.ordered(p, action.substring(5));
                 else if (action.startsWith("cont:")) com.breachprotocol.career.Containment.ordered(p, action.substring(5));
                 else if (action.startsWith("inf:stop:")) com.breachprotocol.entity.McaFoundation.dismissInformant(p, action.substring(9));
