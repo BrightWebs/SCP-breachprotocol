@@ -337,8 +337,9 @@ public final class Vault {
 
     /** A cell made to measure: walls of containment panel, a glass front on the corridor with an iron door, room to spare. */
     private static Cell makeCell(ServerLevel v, Region r, LivingEntity e) {
-        boolean water = aquatic(e);
-        int w = Math.max(water ? 10 : 7, (int) Math.ceil(e.getBbWidth()) + 4 + (water ? 4 : 0)), h = Math.max(water ? 7 : 6, (int) Math.ceil(e.getBbHeight()) + 3);
+        int[] need = needs(e);
+        boolean water = need[0] == 1;
+        int w = need[1], h = need[2];
         boolean north = r.nextNorth <= r.nextSouth;
         int o = r.ox(), x0 = o + (north ? r.nextNorth : r.nextSouth), x1 = x0 + w + 1;
         int zFront = north ? -4 : 4, zBack = north ? -4 - (w + 1) : 4 + (w + 1);
@@ -356,7 +357,50 @@ public final class Vault {
     static boolean aquatic(LivingEntity e) {
         if (e instanceof net.minecraft.world.entity.animal.WaterAnimal || e instanceof net.minecraft.world.entity.monster.Guardian) return true;
         if (e.getType().is(net.minecraft.tags.EntityTypeTags.AQUATIC)) return true;
-        return e instanceof Mob m && m.getNavigation() instanceof net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation;
+        if (e instanceof Mob m && m.getNavigation() instanceof net.minecraft.world.entity.ai.navigation.WaterBoundPathNavigation) return true;
+        if (!e.canBreatheUnderwater()) return false;
+        // other mods' sea creatures (Manas Reborn's megalodon and the like): they breathe water, and either swim
+        // like fish, were caught in the water, or are plainly sea things by name
+        if (e instanceof Mob m && m.getNavigation() instanceof net.minecraft.world.entity.ai.navigation.AmphibiousPathNavigation && e.isInWater()) return true;
+        if (e.isUnderWater()) return true;
+        String id = String.valueOf(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())).toLowerCase(Locale.ROOT) + " " + e.getClass().getSimpleName().toLowerCase(Locale.ROOT);
+        for (String k : SEA) if (id.contains(k)) return true;
+        return false;
+    }
+
+    private static final String[] SEA = {"megalodon", "shark", "fish", "whale", "squid", "octopus", "kraken", "leviathan", "moray", "manta", "stingray", "jellyfish", "dolphin", "orca", "seaserpent", "sea_serpent", "piranha", "angler", "mosasaur", "plesiosaur", "siren", "coelacanth", "barracuda"};
+
+    /** What a creature needs: water or not, and a cell (inside) this wide and deep, and this high. Long things get room for their length, not just their hitbox. */
+    static int[] needs(LivingEntity e) {
+        boolean water = aquatic(e);
+        double bw = e.getBbWidth(), bh = e.getBbHeight(), big = Math.max(bw, bh);
+        int w = water ? Math.max(12, (int) Math.ceil(big * 2) + 6) : Math.max(7, (int) Math.ceil(Math.max(bw, bh * 0.8)) + 4);
+        int h = water ? Math.max(8, (int) Math.ceil(big) + 4) : Math.max(6, (int) Math.ceil(bh) + 3);
+        return new int[]{water ? 1 : 0, w, h};
+    }
+
+    /** Does this cell suit what's in it? If not, a new one that does, and the old one taken down. */
+    private static boolean fit(ServerLevel v, Region r, Cell c, LivingEntity e) {
+        int[] n = needs(e);
+        if ((n[0] == 1) == c.water && c.x1 - c.x0 + 1 >= n[1] && c.z1 - c.z0 + 1 >= n[1] && c.h >= n[2]) return false;
+        demolish(v, r, c);
+        Cell nc = makeCell(v, r, e);
+        c.fx0 = nc.fx0; c.fx1 = nc.fx1; c.fza = nc.fza; c.fzb = nc.fzb; c.front = nc.front;
+        c.x0 = nc.x0; c.x1 = nc.x1; c.z0 = nc.z0; c.z1 = nc.z1; c.h = nc.h; c.water = nc.water;
+        Vec3 at = c.centre();
+        e.teleportTo(at.x, at.y, at.z);
+        e.setDeltaMovement(Vec3.ZERO);
+        e.fallDistance = 0;
+        data(v.getServer()).setDirty();
+        return true;
+    }
+
+    /** A cell taken down: gone back to the void, its stretch of hall made whole, its neighbours across the hall redrawn. */
+    private static void demolish(ServerLevel v, Region r, Cell c) {
+        for (BlockPos q : BlockPos.betweenClosed(c.fx0, 0, c.fza, c.fx1, Y + c.h + 1, c.fzb))
+            if (Math.abs(q.getZ()) > 4 || q.getY() < Y) v.setBlock(q, Blocks.AIR.defaultBlockState(), F);
+        hall(v, r, c.fx0, c.fx1);
+        for (Cell o : r.cells) if (o != c && o.fx1 >= c.fx0 && o.fx0 <= c.fx1) drawCell(v, o);
     }
 
     private static void drawCell(ServerLevel v, Cell c) {
@@ -383,7 +427,10 @@ public final class Vault {
 
     /** The tank: water to the ceiling, a sandy floor with weed in it, lights down low, and the airlock by the door. */
     private static void tank(ServerLevel v, Cell c, BlockState wall) {
-        BlockState water = Blocks.WATER.defaultBlockState(), sand = Blocks.SAND.defaultBlockState(), glass = Blocks.TINTED_GLASS.defaultBlockState(),
+        // anything that spilled under the tank before (the void below eats nothing, it just pools) goes
+        for (BlockPos q : BlockPos.betweenClosed(c.fx0, 0, c.fza, c.fx1, Y - 1, c.fzb)) if (!v.getBlockState(q).isAir()) v.setBlock(q, Blocks.AIR.defaultBlockState(), F);
+        // a floor that stays put: prismarine, not sand (sand falls)
+        BlockState water = Blocks.WATER.defaultBlockState(), sand = Blocks.DARK_PRISMARINE.defaultBlockState(), glass = Blocks.TINTED_GLASS.defaultBlockState(),
                 lockGlass = Blocks.GLASS.defaultBlockState(), grass = Blocks.SEAGRASS.defaultBlockState(), lantern = Blocks.SEA_LANTERN.defaultBlockState(), air = Blocks.AIR.defaultBlockState();
         boolean flooded = lockFlooded(v, c);
         for (BlockPos q : BlockPos.betweenClosed(c.x0, Y, c.z0, c.x1, Y + c.h, c.z1)) {
@@ -459,9 +506,11 @@ public final class Vault {
         hall(v, r, o - 3, o + r.hallTo);
         throne(v, r, r.throneX == 0 ? o + r.hallTo + 1 : r.throneX);
         int back = 0;
-        for (Cell c : r.cells) {
+        for (int i = 0; i < r.cells.size(); i++) {
+            Cell c = r.cells.get(i);
             drawCell(v, c);
             Entity e = c.entity == null ? null : v.getEntity(c.entity);
+            if (e instanceof LivingEntity le && le.isAlive() && fit(v, r, c, le)) { back++; continue; }
             if (e != null && e.isAlive() && !c.holds(e)) { Vec3 at = c.centre(); e.teleportTo(at.x, at.y, at.z); e.setDeltaMovement(Vec3.ZERO); back++; }
         }
         // decorations that were knocked loose before and are lying about
@@ -544,6 +593,7 @@ public final class Vault {
         Entity moved = e.changeDimension(new DimensionTransition(v, at, Vec3.ZERO, e.getYRot(), 0, DimensionTransition.DO_NOTHING));
         if (moved == null) return;
         c.entity = moved.getUUID();
+        if (moved instanceof LivingEntity ml) fit(v, r, c, ml);
         c.name = Unleashed.isAnomaly(e) ? Unleashed.designation(e) : e.getName().getString();
         CompoundTag look = new CompoundTag();
         moved.saveAsPassenger(look);
@@ -759,6 +809,13 @@ public final class Vault {
             for (Cell c : en.getValue().cells) {
                 Entity e = c.entity == null ? null : v.getEntity(c.entity);
                 if (e != null && e.getY() < Y - 6) { Vec3 at = c.centre(); e.teleportTo(at.x, at.y, at.z); e.setDeltaMovement(Vec3.ZERO); e.fallDistance = 0; }
+            }
+        // every twenty seconds: anything in a cell that doesn't suit it (too small, or dry for a sea creature) is moved to one that does
+        if (now % 400 == 3) for (Region r : data(s).regions.values())
+            for (int i = 0; i < r.cells.size(); i++) {
+                Cell c = r.cells.get(i);
+                Entity e = c.entity == null ? null : v.getEntity(c.entity);
+                if (e instanceof LivingEntity le && le.isAlive()) fit(v, r, c, le);
             }
         for (ServerPlayer p : v.players()) if (p.getY() < Y - 6) {
             Region r = data(s).regions.get(p.getUUID());
