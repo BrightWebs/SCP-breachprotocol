@@ -194,6 +194,7 @@ public class ShapeshiftScreen extends Screen {
             Map<String, Mob> byId = new HashMap<>();
             for (Mob m : mobs) byId.put(m.id(), m);
             for (String id : known("shapeMobs")) {
+                if (!creature(id.substring(id.indexOf(':') + 1))) continue;
                 Mob m = byId.get(id);
                 if (m == null) {
                     var rl = net.minecraft.resources.ResourceLocation.tryParse(id);
