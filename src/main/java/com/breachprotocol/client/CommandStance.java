@@ -41,11 +41,11 @@ public final class CommandStance {
     private CommandStance() {}
 
     private static final int HOLD = 5;
-    static final String[] ORDERS = {"calm", "follow", "stay", "hunt", "release", "end"};
-    private static final String[] LABELS = {"Calm", "Follow", "Stay", "Hunt", "Release", "End"};
+    static final String[] ORDERS = {"calm", "follow", "stay", "cell", "hunt", "release", "end"};
+    private static final String[] LABELS = {"Calm", "Follow", "Stay", "Cell", "Hunt", "Release", "End"};
     private static final String[] HINTS = {"It will never raise a hand to you", "It walks at your side", "It holds its ground",
-            "Then look at its prey", "Back to its own nature", "It dies"};
-    private static final int[] COLOURS = {0x7FE0A0, 0x9FD8FF, 0xC8D0DA, 0xFFB050, 0xB8B8B8, 0xFF5A5A};
+            "It walks back to its cell", "Then look at its prey", "Back to its own nature", "It dies"};
+    private static final int[] COLOURS = {0x7FE0A0, 0x9FD8FF, 0xC8D0DA, 0xA8B8FF, 0xFFB050, 0xB8B8B8, 0xFF5A5A};
 
     private static int held, sel, pickTicks;
     private static boolean shiftAtPress;

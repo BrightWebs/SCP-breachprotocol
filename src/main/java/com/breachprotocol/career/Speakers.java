@@ -214,7 +214,7 @@ public final class Speakers {
             }
             case "cell" -> {
                 said = "Back to your cell.";
-                line = Containment.returnToCell(p.server, e.getUUID()) ? (k.equals("682") ? "(It goes. Every step of the way it looks back at you.)" : "As you wish.") : "(It looks at you. There's no cell of its to go back to.)";
+                line = e instanceof Mob wm && Walkback.start(p.server, wm) ? (k.equals("682") ? "(It goes. Every step of the way it looks back at you.)" : "As you wish.") : "(It looks at you. There's no cell of its to go back to.)";
             }
             case "tell" -> {
                 said = "What's near us, Cain?";

@@ -2,6 +2,7 @@ package com.breachprotocol.career;
 
 import com.breachprotocol.BreachProtocol;
 import com.breachprotocol.compat.Unleashed;
+import com.breachprotocol.compat.UnleashedApi;
 import com.breachprotocol.entity.FoundationStaff;
 import com.breachprotocol.entity.O5MemberEntity;
 import net.minecraft.ChatFormatting;
@@ -106,7 +107,7 @@ public final class Dominion {
                 p.serverLevel().sendParticles(n == DREAD ? ParticleTypes.SCULK_SOUL : n == SOVEREIGN ? ParticleTypes.END_ROD : ParticleTypes.ASH, p.getX(), p.getY() + 1, p.getZ(), 40, 0.8, 1, 0.8, 0.04);
                 if (n != UNMASKED) for (Mob m : p.serverLevel().getEntitiesOfClass(Mob.class, p.getBoundingBox().inflate(32), m -> m.getTarget() == p && turnsFrom(p, m))) m.setTarget(null);
             }
-            case "calm", "follow", "stay", "release", "end" -> {
+            case "calm", "follow", "stay", "cell", "release", "end" -> {
                 Entity e = p.serverLevel().getEntity(arg);
                 if (e instanceof LivingEntity le) order(p, le, a[1], null);
             }
@@ -181,6 +182,11 @@ public final class Dominion {
                 l.sendParticles(ParticleTypes.ANGRY_VILLAGER, e.getX(), e.getY() + e.getBbHeight() + 0.3, e.getZ(), 6, 0.3, 0.2, 0.3, 0);
                 l.sendParticles(ParticleTypes.SCULK_SOUL, victim.getX(), victim.getY() + 1, victim.getZ(), 14, 0.4, 0.6, 0.4, 0.02);
                 tell(p, name(e) + " turns towards " + name(victim) + ".");
+            }
+            case "cell" -> {
+                if (e instanceof Mob mob && Walkback.start(p.server, mob)) tell(p, name(e) + " turns and walks back to its cell.");
+                else tell(p, name(e) + " has no cell of its own to go back to.");
+                return;
             }
             case "release" -> {
                 clear(t);
@@ -335,6 +341,41 @@ public final class Dominion {
         }
     }
 
+    /**
+     * A hunt, carried out the way this creature kills: SCP-096 is provoked (its crying, then the charge),
+     * SCP-173 snaps a neck the moment it's on them, SCP-106 drags them into the pocket dimension; anything
+     * else is walked onto its prey and strikes with its own attack (or, with none, with its weight).
+     */
+    private static void hunt(ServerLevel l, Mob m, LivingEntity victim) {
+        String id = Unleashed.idOf(m) == null ? "" : Unleashed.idOf(m).getPath();
+        double reach = Math.pow(m.getBbWidth() / 2 + victim.getBbWidth() / 2 + 1.6, 2);
+        double d = m.distanceToSqr(victim);
+        if (UnleashedApi.isShyGuy(m)) {
+            // it has to have "seen" them: then its own rage does the rest
+            Object keys = UnleashedApi.call(UnleashedApi.method("scp096.Scp096ShyGuy", "targetKeys"), m);
+            if (!(keys instanceof java.util.Set<?> set) || !set.contains(victim.getUUID()))
+                UnleashedApi.call(UnleashedApi.method("scp096.Scp096ShyGuy", "provoke", ServerLevel.class, LivingEntity.class), m, l, victim);
+            return;
+        }
+        m.setTarget(victim);
+        if (d > reach) { m.getNavigation().moveTo(victim, 1.35); return; }
+        if (m.tickCount % 20 >= 10) return; // one blow a second
+        if (id.startsWith("scp173")) {
+            l.playSound(null, victim.blockPosition(), SoundEvents.SKELETON_HURT, SoundSource.HOSTILE, 1.3F, 0.5F);
+            victim.hurt(l.damageSources().mobAttack(m), Float.MAX_VALUE);
+        } else if (id.startsWith("scp106")) {
+            var pass = UnleashedApi.method("scp106.Scp106Doorways", "pass", ServerLevel.class, BlockPos.class, LivingEntity.class);
+            if (pass != null) UnleashedApi.call(pass, null, l, victim.blockPosition(), victim);
+            if (victim.level() == l && victim.isAlive()) victim.hurt(l.damageSources().mobAttack(m), 8F);
+        } else if (m.getAttribute(Attributes.ATTACK_DAMAGE) != null) {
+            m.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            m.doHurtTarget(victim);
+        } else {
+            m.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            victim.hurt(l.damageSources().mobAttack(m), 4F);
+        }
+    }
+
     private static void keep(ServerLevel l, Mob m) {
         CompoundTag t = m.getPersistentData();
         // the hunt comes first
@@ -346,14 +387,7 @@ public final class Dominion {
                 if (master != null) tell(master, name(m) + (v == null || v.isAlive() ? " lost its prey" : " got its prey") + ", and comes back to you.");
             }
             else {
-                m.setTarget(victim);
-                double d = m.distanceToSqr(victim);
-                if (d > 4) m.getNavigation().moveTo(victim, 1.3);
-                else if (m.getAttribute(Attributes.ATTACK_DAMAGE) == null && m.tickCount % 20 < 10) {
-                    // creatures with no attack of their own still go for it
-                    victim.hurt(l.damageSources().mobAttack(m), 4F);
-                    m.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-                }
+                hunt(l, m, victim);
                 return;
             }
         }

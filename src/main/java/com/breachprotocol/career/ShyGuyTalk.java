@@ -68,6 +68,7 @@ public final class ShyGuyTalk {
         Dialogue.begin(p, "shyguy:" + id, "SCP-096 · \"The Shy Guy\"", "Euclid · it trembles at the sight of you", id);
         Dialogue.line(p, "", calm ? "SCP-096 sits quietly. It knows your face." : "SCP-096 is in front of you, hands over its face, shaking.", 0);
         Dialogue.option(p, "\"Calm down, buddy.\"", "/shyguy calm " + id, "It calms, and never panics at your face again", 0x7FE0FF);
+        Dialogue.option(p, "\"Back to your cell.\"", "/shyguy cell " + id, "It walks back, stooping through the door", 0xA8D8FF);
         Dialogue.option(p, "\"Die.\"", "/shyguy die " + id, "It decomposes where it stands", 0xFF5050);
         Dialogue.option(p, "Leave it be", "close", "Walk away", 0x9AA4B2);
         Dialogue.send(p, true);
@@ -87,6 +88,19 @@ public final class ShyGuyTalk {
                     Entity e = p.serverLevel().getEntity(IntegerArgumentType.getInteger(c, "id"));
                     if (!allowed(p) || e == null || !UnleashedApi.isShyGuy(e) || e.distanceTo(p) > 24) return 0;
                     calm(p, e);
+                    return 1;
+                })))
+                .then(Commands.literal("cell").then(Commands.argument("id", IntegerArgumentType.integer()).executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    Entity e = p.serverLevel().getEntity(IntegerArgumentType.getInteger(c, "id"));
+                    if (!allowed(p) || !(e instanceof net.minecraft.world.entity.Mob m) || !UnleashedApi.isShyGuy(e) || e.distanceTo(p) > 24) return 0;
+                    calm(null, e);
+                    boolean ok = Walkback.start(p.server, m);
+                    Dialogue.line(p, "You", "Back to your cell.", 0xD08CFF);
+                    Dialogue.line(p, "", ok ? "SCP-096 gets up, hands still over its face, and shuffles off toward its cell." : "SCP-096 doesn't move. It has no cell of its own to go back to.", 0);
+                    Dialogue.clearOptions(p);
+                    Dialogue.option(p, "Leave", "close", "Close", 0x9AA4B2);
+                    Dialogue.send(p, false);
                     return 1;
                 })))
                 .then(Commands.literal("die").then(Commands.argument("id", IntegerArgumentType.integer()).executes(c -> {
