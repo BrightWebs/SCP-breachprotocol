@@ -1573,8 +1573,15 @@ public class PhoneScreen extends Screen {
         small(g, siteHere.isEmpty() ? "NOT AT A SITE  \u00B7  CELLS HERE DON'T COUNT" : "AT " + siteHere.toUpperCase(Locale.ROOT), SX + SW / 2, y - 2, siteHere.isEmpty() ? AMBER : 0xFF5BE36F);
         y += 9;
         if (list.isEmpty()) { empty(g, y - 20, "All quiet", "No anomalies detected within 64m."); return y + 60; }
-        for (Tag tg : list) {
-            CompoundTag a = (CompoundTag) tg;
+        // what's loose first, then what's safely held: two lists, not one
+        List<CompoundTag> loose = new ArrayList<>(), held = new ArrayList<>();
+        for (Tag tg : list) (((CompoundTag) tg).getBoolean("c") ? held : loose).add((CompoundTag) tg);
+        List<CompoundTag> ordered = new ArrayList<>(loose);
+        ordered.addAll(held);
+        for (int i = 0; i < ordered.size(); i++) {
+            CompoundTag a = ordered.get(i);
+            if (i == 0 && !loose.isEmpty()) { small(g, "\u25B2 LOOSE  \u00B7  " + loose.size(), x + 4 + (int) (font.width("\u25B2 LOOSE  \u00B7  " + loose.size()) * 0.375F), y, 0xFFFF7A7A); y += 10; }
+            if (i == loose.size()) { if (i > 0) y += 4; small(g, "\u25A0 CONTAINED  \u00B7  " + held.size(), x + 4 + (int) (font.width("\u25A0 CONTAINED  \u00B7  " + held.size()) * 0.375F), y, 0xFF7FD6FF); y += 10; }
             boolean contained = a.getBoolean("c"), containable = a.getBoolean("k");
             int h = 30, id = a.getInt("id");
             boolean hov = over(x, y, w, h);
