@@ -572,6 +572,9 @@ public class FoundationStaff extends PathfinderMob implements Person {
     /** What they've been told to do: work at their post, follow someone, or wait somewhere. */
     private String mode = "post";
     private UUID leader;
+
+    /** Who they're following, if they are (for following you through teleports: see career.Escort). */
+    public UUID following() { return "follow".equals(mode) ? leader : null; }
     private BlockPos stayAt, sitTarget;
     /** An errand they're running (going to Medical, taking shelter, fleeing), and when they go back to their post. */
     private String errand = "";

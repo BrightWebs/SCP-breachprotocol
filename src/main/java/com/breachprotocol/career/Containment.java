@@ -341,6 +341,23 @@ public final class Containment extends SavedData {
         });
     }
 
+    /** An anomaly walks back into its own cell (on the Administrator's word). */
+    public static boolean returnToCell(MinecraftServer srv, UUID id) {
+        Entry e = get(srv).entries.get(id);
+        Mob m = loaded(srv, id);
+        if (e == null || m == null || e.cell.isEmpty()) return false;
+        for (Sites.Cell c : Sites.get(srv).cells) {
+            if (!c.name.equals(e.cell) || !c.dim.equals(m.level().dimension().location().toString())) continue;
+            m.getNavigation().stop();
+            m.setTarget(null);
+            m.teleportTo((c.x0 + c.x1) / 2.0 + 0.5, c.y0 + 1, (c.z0 + c.z1) / 2.0 + 0.5);
+            m.getPersistentData().remove("bp_dom_follow");
+            m.getPersistentData().remove("bp_dom_stay");
+            return true;
+        }
+        return false;
+    }
+
     /** A held anomaly's body, if it's loaded anywhere. */
     public static Mob loaded(MinecraftServer srv, UUID id) {
         for (ServerLevel l : srv.getAllLevels()) if (l.getEntity(id) instanceof Mob m && m.isAlive()) return m;
