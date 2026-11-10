@@ -94,7 +94,8 @@ public final class AddonEvents {
         }
         if (p.level() instanceof net.minecraft.server.level.ServerLevel sl) {
             sl.sendParticles(net.minecraft.core.particles.ParticleTypes.END_ROD, guardian.getX(), guardian.getY() + 1, guardian.getZ(), 20, 2.0, 0.5, 2.0, 0.02);
-            sl.sendParticles(net.minecraft.core.particles.ParticleTypes.GLOW, p.getX(), p.getY() + 1, p.getZ(), 6, 0.4, 0.6, 0.4, 0.01);
+            if (!(p instanceof net.minecraft.server.level.ServerPlayer sp && com.breachprotocol.career.Shapeshift.disguised(sp)))
+                sl.sendParticles(net.minecraft.core.particles.ParticleTypes.GLOW, p.getX(), p.getY() + 1, p.getZ(), 6, 0.4, 0.6, 0.4, 0.01);
         }
     }
 

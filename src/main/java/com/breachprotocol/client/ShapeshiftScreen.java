@@ -35,6 +35,8 @@ public class ShapeshiftScreen extends Screen {
 
     private final List<Hit> hits = new ArrayList<>();
     private static int tab = 0;
+    /** Your forms (the ones you've been before), or everything there is. */
+    private static boolean all = false;
     private String query = "";
     private int scroll = 0;
     private Mob hover;
@@ -43,6 +45,27 @@ public class ShapeshiftScreen extends Screen {
     private static final Map<EntityType<?>, LivingEntity> MODELS = new HashMap<>();
 
     public ShapeshiftScreen() { super(Component.literal("Shapeshift")); }
+
+    /** The Shapeshift key (J by default): straight to the menu. */
+    public static final net.minecraft.client.KeyMapping KEY = new net.minecraft.client.KeyMapping("key.breachprotocol.shapeshift", com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_J, "key.categories.breachprotocol");
+
+    static void key() {
+        Minecraft mc = Minecraft.getInstance();
+        while (KEY.consumeClick()) {
+            if (mc.screen != null || mc.player == null) continue;
+            if (!ClientCareerState.tag.getBoolean("shapeHas")) {
+                mc.player.displayClientMessage(Component.literal("You don't have Shapeshift (the Administrator's, with Manas Reborn).").withStyle(net.minecraft.ChatFormatting.GRAY), true);
+                continue;
+            }
+            mc.setScreen(new ShapeshiftScreen());
+        }
+    }
+
+    private static List<String> known(String key) {
+        List<String> out = new ArrayList<>();
+        for (net.minecraft.nbt.Tag t : ClientCareerState.tag.getList(key, net.minecraft.nbt.Tag.TAG_STRING)) out.add(t.getAsString());
+        return out;
+    }
 
     @Override
     public boolean isPauseScreen() { return false; }
@@ -106,8 +129,9 @@ public class ShapeshiftScreen extends Screen {
         g.fill(x + 1, y + 1, x + pw - 1, y + 26, PANEL);
         g.fill(x + 1, y + 26, x + pw - 1, y + 27, AC & 0x60FFFFFF);
         g.drawString(font, "SHAPESHIFT", x + 10, y + 6, AC, false);
-        PowerKeys.small(g, font, "CHOOSE A FORM  ·  USE THE SKILL AGAIN (STANDING) TO COME BACK", x + 10, y + 17, MUTED);
-        String[] tabs = {"Creatures", "Blocks"};
+        String form = ClientCareerState.tag.getString("shapeForm");
+        PowerKeys.small(g, font, form.isEmpty() ? "YOU ARE YOURSELF  ·  CHOOSE A FORM" : "YOU ARE " + form.toUpperCase(Locale.ROOT), x + 10, y + 17, form.isEmpty() ? MUTED : AC);
+        String[] tabs = {"Polymorph", "Mimic"};
         int tx = x + pw - 10;
         for (int i = tabs.length - 1; i >= 0; i--) {
             int w = font.width(tabs[i]) + 14;
@@ -120,11 +144,34 @@ public class ShapeshiftScreen extends Screen {
             hits.add(new Hit(tx, y + 6, w, 15, () -> { tab = n; scroll = 0; }));
             tx -= 4;
         }
-        // search
+        // your forms / everything, search, and the way back
         int sy = y + 32;
-        g.fill(x + 10, sy, x + pw - 10, sy + 14, PANEL);
-        frame(g, x + 10, sy, pw - 20, 14, LINE);
-        g.drawString(font, query.isEmpty() ? "Type to search..." : query + ((System.currentTimeMillis() / 500) % 2 == 0 ? "_" : ""), x + 14, sy + 3, query.isEmpty() ? DIM : TEXT, false);
+        String[] views = {"Your forms", "Everything"};
+        int vx = x + 10;
+        for (int i = 0; i < 2; i++) {
+            int w = font.width(views[i]) + 12;
+            boolean on = all == (i == 1), hov = in(mx, my, vx, sy, w, 14);
+            g.fill(vx, sy, vx + w, sy + 14, on ? 0x50402060 : hov ? 0x30FFFFFF : PANEL);
+            frame(g, vx, sy, w, 14, on ? AC : LINE);
+            g.drawString(font, views[i], vx + 6, sy + 3, on ? TEXT : MUTED, false);
+            final boolean v = i == 1;
+            hits.add(new Hit(vx, sy, w, 14, () -> { all = v; scroll = 0; }));
+            vx += w + 3;
+        }
+        int sw = x + pw - 10 - vx - 3;
+        if (!form.isEmpty()) {
+            String back = "Change back";
+            int bw = font.width(back) + 12, bx = x + pw - 10 - bw;
+            boolean hov = in(mx, my, bx, sy, bw, 14);
+            g.fill(bx, sy, bx + bw, sy + 14, hov ? 0x60C04040 : 0x30C04040);
+            frame(g, bx, sy, bw, 14, 0xFFE07070);
+            g.drawString(font, back, bx + 6, sy + 3, TEXT, false);
+            hits.add(new Hit(bx, sy, bw, 14, () -> { send("shape:revert"); onClose(); }));
+            sw -= bw + 3;
+        }
+        g.fill(vx, sy, vx + sw, sy + 14, PANEL);
+        frame(g, vx, sy, sw, 14, LINE);
+        g.drawString(font, query.isEmpty() ? "Search..." : query + ((System.currentTimeMillis() / 500) % 2 == 0 ? "_" : ""), vx + 4, sy + 3, query.isEmpty() ? DIM : TEXT, false);
         int cy = sy + 20, ch = y + ph - cy - 8;
         if (tab == 0) creatures(g, x + 10, cy, pw - 20, ch, mx, my);
         else blockGrid(g, x + 10, cy, pw - 20, ch, mx, my);
@@ -132,7 +179,12 @@ public class ShapeshiftScreen extends Screen {
 
     private void creatures(GuiGraphics g, int x, int y, int w, int h, int mx, int my) {
         List<Mob> list = new ArrayList<>();
-        for (Mob m : mobs) if (matches(m.name(), m.id())) list.add(m);
+        if (all) { for (Mob m : mobs) if (matches(m.name(), m.id())) list.add(m); }
+        else {
+            Map<String, Mob> byId = new HashMap<>();
+            for (Mob m : mobs) byId.put(m.id(), m);
+            for (String id : known("shapeMobs")) { Mob m = byId.get(id); if (m != null && matches(m.name(), m.id())) list.add(m); }
+        }
         int lw = w - 150, rh = 14, rows = (h - 4) / rh;
         scroll = Math.max(0, Math.min(scroll, Math.max(0, list.size() - rows)));
         g.fill(x, y, x + lw, y + h, PANEL);
@@ -148,7 +200,12 @@ public class ShapeshiftScreen extends Screen {
             if (!ns.equals("minecraft")) PowerKeys.small(g, font, ns.toUpperCase(Locale.ROOT), x + lw - 8 - (int) (font.width(ns) * 0.75F), ry + 4, DIM);
             hits.add(new Hit(x + 2, ry, lw - 4, rh, () -> { send("shape:mob:" + m.id()); onClose(); }));
         }
-        if (list.isEmpty()) g.drawString(font, "Nothing by that name.", x + 6, y + 6, DIM, false);
+        if (list.isEmpty()) {
+            if (!all && query.isEmpty()) {
+                g.drawString(font, "No creature forms yet.", x + 6, y + 6, MUTED, false);
+                PowerKeys.small(g, font, "USE MIMIC MODE ON ONE, OR PICK FROM EVERYTHING", x + 6, y + 18, DIM);
+            } else g.drawString(font, "Nothing by that name.", x + 6, y + 6, DIM, false);
+        }
         // the preview
         int px = x + lw + 6, pw = w - lw - 6;
         g.fill(px, y, px + pw, y + h, 0xFF0C0914);
@@ -169,7 +226,12 @@ public class ShapeshiftScreen extends Screen {
 
     private void blockGrid(GuiGraphics g, int x, int y, int w, int h, int mx, int my) {
         List<Blk> list = new ArrayList<>();
-        for (Blk b : blocks) if (matches(b.name(), b.id())) list.add(b);
+        if (all) { for (Blk b : blocks) if (matches(b.name(), b.id())) list.add(b); }
+        else {
+            Map<String, Blk> byId = new HashMap<>();
+            for (Blk b : blocks) byId.put(b.id(), b);
+            for (String id : known("shapeBlocks")) { Blk b = byId.get(id); if (b != null && matches(b.name(), b.id())) list.add(b); }
+        }
         int cols = Math.max(1, (w - 4) / 20), rows = (h - 4) / 20;
         int maxRow = Math.max(0, (list.size() + cols - 1) / cols - rows);
         scroll = Math.max(0, Math.min(scroll, maxRow));
@@ -187,7 +249,12 @@ public class ShapeshiftScreen extends Screen {
             if (hov) tip = b;
             hits.add(new Hit(sx, syy, 18, 18, () -> { send("shape:block:" + b.id()); onClose(); }));
         }
-        if (list.isEmpty()) g.drawString(font, "Nothing by that name.", x + 6, y + 6, DIM, false);
+        if (list.isEmpty()) {
+            if (!all && query.isEmpty()) {
+                g.drawString(font, "No object forms yet.", x + 6, y + 6, MUTED, false);
+                PowerKeys.small(g, font, "USE MIMIC MODE ON ONE, OR PICK FROM EVERYTHING", x + 6, y + 18, DIM);
+            } else g.drawString(font, "Nothing by that name.", x + 6, y + 6, DIM, false);
+        }
         if (tip != null) g.renderTooltip(font, Component.literal(tip.name()), mx, my);
     }
 

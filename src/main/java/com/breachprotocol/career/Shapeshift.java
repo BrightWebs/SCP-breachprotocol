@@ -52,7 +52,19 @@ public final class Shapeshift {
         try { com.breachprotocol.compat.manas.ManasBridge.action(p, a); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift: {}", t.toString()); }
     }
 
+    /** In another form: nothing about them (the Administrator's light included) gives them away. */
+    public static boolean disguised(ServerPlayer p) { return p.getPersistentData().contains("bp_shape_form"); }
+
     public static void addToSync(ServerPlayer p, CompoundTag t) {
-        if (p.getPersistentData().contains("bp_shape_open")) t.putLong("shapeOpen", p.getPersistentData().getLong("bp_shape_open"));
+        CompoundTag pd = p.getPersistentData();
+        if (pd.contains("bp_shape_open")) t.putLong("shapeOpen", pd.getLong("bp_shape_open"));
+        if (!present()) return;
+        boolean has;
+        try { has = com.breachprotocol.compat.manas.ManasBridge.has(p); } catch (Throwable e) { has = false; }
+        t.putBoolean("shapeHas", has);
+        if (!has) return;
+        t.putString("shapeForm", pd.getString("bp_shape_form"));
+        if (pd.contains("bp_shape_mobs")) t.put("shapeMobs", pd.get("bp_shape_mobs").copy());
+        if (pd.contains("bp_shape_blocks")) t.put("shapeBlocks", pd.get("bp_shape_blocks").copy());
     }
 }

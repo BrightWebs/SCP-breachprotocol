@@ -120,7 +120,7 @@ public final class PowerKills {
     }
 
     /** The creature's own skills (not the temporary ones), copied as they stand. */
-    private static List<CompoundTag> skillsOf(LivingEntity v) {
+    public static List<CompoundTag> skillsOf(LivingEntity v) {
         List<CompoundTag> out = new ArrayList<>();
         if (!skills()) return out;
         try {
@@ -157,6 +157,40 @@ public final class PowerKills {
             BreachProtocol.LOGGER.debug("Couldn't hand over skills: {}", t.toString());
         }
         if (got > 0) p.playNotifySound(net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.7F, 0.6F);
+    }
+
+    /** Lend these skills (the ones not already held); returns the ids of those that were lent, to take back later. */
+    public static List<String> lend(ServerPlayer p, List<CompoundTag> list) {
+        List<String> lent = new ArrayList<>();
+        if (list.isEmpty() || !skills()) return lent;
+        try {
+            Object mine = skillsFrom.invoke(null, p);
+            if (mine == null) return lent;
+            for (CompoundTag t : list) {
+                try {
+                    Object inst = fromNBT.invoke(null, t);
+                    if (inst == null) continue;
+                    Object sk = skillOf.invoke(inst);
+                    if (((Optional<?>) has.invoke(mine, sk)).isPresent()) continue;
+                    if ((boolean) learn.invoke(null, p, inst)) lent.add(String.valueOf(sk.getClass().getMethod("getRegistryName").invoke(sk)));
+                } catch (Throwable one) { BreachProtocol.LOGGER.debug("Skipped lending a skill: {}", one.toString()); }
+            }
+        } catch (Throwable t) { BreachProtocol.LOGGER.debug("Couldn't lend skills: {}", t.toString()); }
+        return lent;
+    }
+
+    /** Take back what was lent. */
+    public static void reclaim(ServerPlayer p, List<String> ids) {
+        if (ids.isEmpty() || !skills()) return;
+        try {
+            Object mine = skillsFrom.invoke(null, p);
+            if (mine == null) return;
+            Method forget = mine.getClass().getMethod("forgetSkill", net.minecraft.resources.ResourceLocation.class, net.minecraft.network.chat.MutableComponent.class);
+            for (String id : ids) {
+                net.minecraft.resources.ResourceLocation rl = net.minecraft.resources.ResourceLocation.tryParse(id);
+                if (rl != null) try { forget.invoke(mine, rl, null); } catch (Throwable one) { BreachProtocol.LOGGER.debug("Couldn't take back {}: {}", id, one.toString()); }
+            }
+        } catch (Throwable t) { BreachProtocol.LOGGER.debug("Couldn't take back skills: {}", t.toString()); }
     }
 
     private record Pending(ServerPlayer killer, double victimEP, double before, List<CompoundTag> skills) {}

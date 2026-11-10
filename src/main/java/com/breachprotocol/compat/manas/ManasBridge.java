@@ -68,6 +68,7 @@ public final class ManasBridge {
 
     static void pressed(ServerPlayer p, int mode) {
         boolean crouch = p.isShiftKeyDown();
+        BreachProtocol.LOGGER.info("Shapeshift used by {} (mode {}, {})", p.getGameProfile().getName(), mode, crouch ? "crouching" : "standing");
         if (mode == 0) { if (crouch) revert(p); else copy(p); }
         else { if (crouch) menu(p); else revert(p); }
     }
@@ -83,7 +84,9 @@ public final class ManasBridge {
         if (!shifted(p)) { say(p, "You're already yourself.", ChatFormatting.GRAY); return; }
         try { MimicFormHelper.clearSource(p, SOURCE); } catch (Throwable t) { BreachProtocol.LOGGER.debug("Shapeshift revert: {}", t.toString()); }
         p.getPersistentData().remove(FORM);
+        giveBack(p);
         puff(p, false);
+        Career.sync(p);
         say(p, "You're yourself again.", ChatFormatting.LIGHT_PURPLE);
     }
 
@@ -93,7 +96,12 @@ public final class ManasBridge {
         HitResult block = p.pick(48, 0, false);
         double max = block.getType() == HitResult.Type.MISS ? 48 * 48 : block.getLocation().distanceToSqr(eye);
         EntityHitResult hit = ProjectileUtil.getEntityHitResult(p, eye, end, p.getBoundingBox().expandTowards(look.scale(48)).inflate(1), e -> e instanceof LivingEntity && e != p && e.isAlive(), max);
-        if (hit != null && hit.getEntity() instanceof LivingEntity le) { becomeCreature(p, le); return; }
+        if (hit != null && hit.getEntity() instanceof LivingEntity le) {
+            List<CompoundTag> sk = com.breachprotocol.career.PowerKills.skillsOf(le);
+            rememberSkills(p, BuiltInRegistries.ENTITY_TYPE.getKey(le.getType()).toString(), sk);
+            becomeCreature(p, le, sk);
+            return;
+        }
         if (block instanceof BlockHitResult bh && block.getType() == HitResult.Type.BLOCK) {
             ServerLevel l = p.serverLevel();
             BlockState st = l.getBlockState(bh.getBlockPos());
@@ -104,24 +112,61 @@ public final class ManasBridge {
                 if (!MimicBlockHelper.canApplyBlock(p, MimicBlockHelper.getFormBlocksTall(parts))) { say(p, "Not here: there's no room to stand as that.", ChatFormatting.RED); return; }
                 CompoundTag be = MimicBlockHelper.captureBlockEntityData(l, f.primaryPos());
                 clear(p);
-                if (MimicBlockHelper.applyBlock(p, parts, be == null ? new CompoundTag() : be, 1.0F, SOURCE, 100)) done(p, st.getBlock().getName().getString());
+                if (MimicBlockHelper.applyBlock(p, parts, be == null ? new CompoundTag() : be, 1.0F, SOURCE, 100))
+                    done(p, st.getBlock().getName().getString(), "blocks", BuiltInRegistries.BLOCK.getKey(st.getBlock()).toString());
             } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift (block): {}", t.toString()); say(p, "It wouldn't take.", ChatFormatting.RED); }
             return;
         }
         say(p, "Look at a creature or a block, then use it.", ChatFormatting.GRAY);
     }
 
-    private static void becomeCreature(ServerPlayer p, LivingEntity e) {
+    /** Become it: its form, and (while you wear it) every Manas skill it has. Skills seen on a real one are remembered for the menu. */
+    private static void becomeCreature(ServerPlayer p, LivingEntity e, List<CompoundTag> skills) {
         try {
             if (!MimicFormHelper.canApplyForm(p, e)) { say(p, "That form won't hold.", ChatFormatting.RED); return; }
             clear(p);
-            if (MimicFormHelper.applyForm(p, e, 1.0F, true, SOURCE, 100, true)) done(p, e.getName().getString());
+            if (!MimicFormHelper.applyForm(p, e, 1.0F, true, SOURCE, 100, true)) { say(p, "It wouldn't take.", ChatFormatting.RED); return; }
+            String id = BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString();
+            List<String> lent = com.breachprotocol.career.PowerKills.lend(p, skills);
+            net.minecraft.nbt.ListTag l = new net.minecraft.nbt.ListTag();
+            for (String x : lent) l.add(net.minecraft.nbt.StringTag.valueOf(x));
+            p.getPersistentData().put(LENT, l);
+            done(p, e.getName().getString(), "mobs", id);
+            if (!lent.isEmpty()) say(p, "You are " + e.getName().getString() + ", and everything it can do, you can: " + lent.size() + (lent.size() == 1 ? " skill." : " skills."), ChatFormatting.LIGHT_PURPLE);
         } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift (creature): {}", t.toString()); say(p, "It wouldn't take.", ChatFormatting.RED); }
+    }
+
+    private static final String LENT = "bp_shape_lent", KNOWN_SKILLS = "bp_shape_skills";
+
+    private static void giveBack(ServerPlayer p) {
+        CompoundTag pd = p.getPersistentData();
+        if (!pd.contains(LENT)) return;
+        List<String> ids = new java.util.ArrayList<>();
+        for (net.minecraft.nbt.Tag t : pd.getList(LENT, net.minecraft.nbt.Tag.TAG_STRING)) ids.add(t.getAsString());
+        pd.remove(LENT);
+        com.breachprotocol.career.PowerKills.reclaim(p, ids);
+    }
+
+    /** What a kind of creature could do, last time you copied a real one. */
+    private static List<CompoundTag> knownSkills(ServerPlayer p, String id) {
+        List<CompoundTag> out = new java.util.ArrayList<>();
+        for (net.minecraft.nbt.Tag t : p.getPersistentData().getCompound(KNOWN_SKILLS).getList(id, net.minecraft.nbt.Tag.TAG_COMPOUND)) out.add((CompoundTag) t);
+        return out;
+    }
+
+    private static void rememberSkills(ServerPlayer p, String id, List<CompoundTag> skills) {
+        if (skills.isEmpty()) return;
+        CompoundTag all = p.getPersistentData().getCompound(KNOWN_SKILLS);
+        net.minecraft.nbt.ListTag l = new net.minecraft.nbt.ListTag();
+        l.addAll(skills);
+        all.put(id, l);
+        p.getPersistentData().put(KNOWN_SKILLS, all);
     }
 
     /** From the menu: "mob:namespace:path" or "block:namespace:path". */
     public static void action(ServerPlayer p, String a) {
         if (!has(p)) return;
+        if (a.equals("revert")) { revert(p); return; }
         int c = a.indexOf(':');
         if (c < 0) return;
         String kind = a.substring(0, c), id = a.substring(c + 1);
@@ -133,7 +178,7 @@ public final class ManasBridge {
             Entity e = type.create(p.serverLevel());
             if (!(e instanceof LivingEntity le)) { if (e != null) e.discard(); say(p, "That isn't something you can be.", ChatFormatting.RED); return; }
             le.moveTo(p.getX(), p.getY(), p.getZ(), p.getYRot(), 0);
-            becomeCreature(p, le);
+            becomeCreature(p, le, knownSkills(p, rl.toString()));
             le.discard();
         } else if (kind.equals("block")) {
             Block b = BuiltInRegistries.BLOCK.getOptional(rl).orElse(null);
@@ -142,7 +187,7 @@ public final class ManasBridge {
             try {
                 if (!MimicBlockHelper.canApplyBlock(p, 1)) { say(p, "Not here: there's no room to stand as that.", ChatFormatting.RED); return; }
                 clear(p);
-                if (MimicBlockHelper.applyBlock(p, List.of(new MimicBlockPart(st, 0, 0, 0)), new CompoundTag(), 1.0F, SOURCE, 100)) done(p, b.getName().getString());
+                if (MimicBlockHelper.applyBlock(p, List.of(new MimicBlockPart(st, 0, 0, 0)), new CompoundTag(), 1.0F, SOURCE, 100)) done(p, b.getName().getString(), "blocks", rl.toString());
             } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift (block): {}", t.toString()); say(p, "It wouldn't take.", ChatFormatting.RED); }
         }
     }
@@ -150,12 +195,21 @@ public final class ManasBridge {
     private static void clear(ServerPlayer p) {
         if (!shifted(p)) return;
         try { MimicFormHelper.clearSource(p, SOURCE); } catch (Throwable ignored) {}
+        giveBack(p);
     }
 
-    private static void done(ServerPlayer p, String what) {
-        p.getPersistentData().putString(FORM, what);
+    /** In the form; and it goes at the top of your list of forms ("mobs" or "blocks") for the menu. */
+    private static void done(ServerPlayer p, String what, String list, String id) {
+        CompoundTag pd = p.getPersistentData();
+        pd.putString(FORM, what);
+        String key = "bp_shape_" + list;
+        net.minecraft.nbt.ListTag old = pd.getList(key, net.minecraft.nbt.Tag.TAG_STRING), now = new net.minecraft.nbt.ListTag();
+        now.add(net.minecraft.nbt.StringTag.valueOf(id));
+        for (net.minecraft.nbt.Tag t : old) if (!t.getAsString().equals(id) && now.size() < 400) now.add(t);
+        pd.put(key, now);
         puff(p, true);
-        say(p, "You are " + what + ". " + "Use Shapeshift again to come back.", ChatFormatting.LIGHT_PURPLE);
+        say(p, "You are " + what + ". Use Shapeshift again to come back.", ChatFormatting.LIGHT_PURPLE);
+        Career.sync(p);
     }
 
     private static void puff(ServerPlayer p, boolean in) {

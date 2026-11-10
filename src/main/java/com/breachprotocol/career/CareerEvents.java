@@ -79,7 +79,7 @@ public final class CareerEvents {
             p.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, 1, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.FIRE_RESISTANCE, 60, 0, true, false, false));
             if (!p.getAbilities().mayfly && !p.isSpectator()) applyAscendedAbilities(p);
-            p.serverLevel().sendParticles(ParticleTypes.END_ROD, p.getX(), p.getY() + 1, p.getZ(), 2, 0.4, 0.6, 0.4, 0.01);
+            if (!Shapeshift.disguised(p)) p.serverLevel().sendParticles(ParticleTypes.END_ROD, p.getX(), p.getY() + 1, p.getZ(), 2, 0.4, 0.6, 0.4, 0.01); // a perfect mimic gives nothing away
         }
     }
 
