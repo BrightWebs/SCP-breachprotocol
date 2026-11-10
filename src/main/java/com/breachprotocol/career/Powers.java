@@ -115,6 +115,9 @@ public final class Powers {
     private static boolean fire(ServerPlayer p, ServerLevel l, Power pw, int r, List<LivingEntity> tg, boolean auto) {
         quiet = auto;
         try {
+            // every blow a power lands is the player's: their kill, for the game and for other mods
+            for (LivingEntity e : tg) PowerKills.credit(p, e);
+            if (pw.aim() == Aim.LOOK_TARGET) { LivingEntity t = looked(p, Math.max(r, 8)); if (t != null) PowerKills.credit(p, t); }
             return run(p, l, pw, r, tg, auto);
         } catch (Throwable t) {
             com.breachprotocol.BreachProtocol.LOGGER.warn("Power {} failed: {}", pw.id(), t.toString());
@@ -188,7 +191,7 @@ public final class Powers {
                     if (!(hit instanceof Integer n) || n == 0 || e.isAlive()) {
                         // the Guardian's own strike spares some things; the implant doesn't
                         UnleashedApi.call(UnleashedApi.method("scp001gate.Scp001GateStrike", "burn", ServerLevel.class, Entity.class), null, l, e);
-                        e.hurt(src instanceof DamageSource ds ? ds : l.damageSources().magic(), 40F);
+                        e.hurt(src instanceof DamageSource ds && ds.getEntity() == p ? ds : PowerKills.magic(p), 40F);
                     }
                     l.sendParticles(ParticleTypes.END_ROD, e.getX(), e.getY() + 6, e.getZ(), 24, 0.1, 3, 0.1, 0);
                 }
@@ -285,7 +288,7 @@ public final class Powers {
                 List<LivingEntity> f = tg;
                 for (LivingEntity e : f) {
                     e.igniteForSeconds(8);
-                    e.hurt(l.damageSources().onFire(), 4F);
+                    e.hurt(PowerKills.as(p, net.minecraft.world.damagesource.DamageTypes.ON_FIRE), 4F);
                     particles(l, "scp457_flame", ParticleTypes.FLAME, e.position().add(0, e.getBbHeight() / 2, 0), 24, e.getBbWidth() / 2, 0.05);
                 }
                 sound(l, p, "scp457_ignite", SoundEvents.BLAZE_SHOOT, 1F);
@@ -301,7 +304,7 @@ public final class Powers {
                     LivingEntity e = f.get(i);
                     Vec3 to = e.position().add(0, e.getBbHeight() / 2, 0);
                     line(l, "tesla_spark", ParticleTypes.ELECTRIC_SPARK, from, to);
-                    e.hurt(l.damageSources().lightningBolt(), 8F);
+                    e.hurt(PowerKills.as(p, net.minecraft.world.damagesource.DamageTypes.LIGHTNING_BOLT), 8F);
                     from = to;
                 }
                 sound(l, p, "tesla_discharge", SoundEvents.LIGHTNING_BOLT_IMPACT, 1F);

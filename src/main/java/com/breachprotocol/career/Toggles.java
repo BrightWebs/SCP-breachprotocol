@@ -251,6 +251,7 @@ public final class Toggles {
         }
         // his blows
         if (event.getSource().getDirectEntity() instanceof ServerPlayer p && raging(p)) {
+            PowerKills.credit(p, v);
             event.setAmount(Math.max(event.getAmount() * 4F, 20F));
             Vec3 push = v.position().subtract(p.position()).multiply(1, 0, 1).normalize().scale(1.6);
             v.push(push.x, 0.45, push.z);

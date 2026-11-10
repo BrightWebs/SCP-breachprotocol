@@ -150,7 +150,7 @@ public final class Flight {
         var box = p.getBoundingBox().expandTowards(dir.scale(3)).inflate(1.0);
         for (net.minecraft.world.entity.LivingEntity e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> e != p && e.isAlive() && !e.isSpectator())) {
             if (Targets.yours(p, e) || e instanceof ServerPlayer q && (q.isCreative() || !Targets.hostile(p, q))) continue;
-            e.hurt(l.damageSources().playerAttack(p), 40F);
+            PowerKills.hurt(p, e, l.damageSources().playerAttack(p), 40F);
             Vec3 side = e.position().subtract(p.position()).normalize();
             e.push(dir.x * 2.5 + side.x, 0.8, dir.z * 2.5 + side.z);
             e.hurtMarked = true;

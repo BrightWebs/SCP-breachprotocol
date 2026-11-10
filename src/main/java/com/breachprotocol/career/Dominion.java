@@ -208,8 +208,11 @@ public final class Dominion {
         l.sendParticles(ParticleTypes.SOUL, at.x, at.y + e.getBbHeight() / 2, at.z, 30, e.getBbWidth() / 2, e.getBbHeight() / 2, e.getBbWidth() / 2, 0.05);
         l.sendParticles(ParticleTypes.REVERSE_PORTAL, at.x, at.y + e.getBbHeight() / 2, at.z, 40, e.getBbWidth() / 2, e.getBbHeight() / 2, e.getBbWidth() / 2, 0.2);
         l.playSound(null, at.x, at.y, at.z, SoundEvents.WARDEN_SONIC_BOOM, SoundSource.HOSTILE, 0.6F, 1.6F);
-        e.hurt(l.damageSources().genericKill(), Float.MAX_VALUE);
-        if (e.isAlive()) { e.setHealth(0); e.die(l.damageSources().genericKill()); }
+        // the player's kill: it counts as theirs (stats, loot, other mods' rewards)
+        PowerKills.credit(p, e);
+        var src = PowerKills.as(p, net.minecraft.world.damagesource.DamageTypes.GENERIC_KILL);
+        e.hurt(src, Float.MAX_VALUE);
+        if (e.isAlive()) { e.setHealth(0); e.die(src); }
         if (e.isAlive() && !(e instanceof net.minecraft.world.entity.player.Player)) e.discard();
         tell(p, n + " is no more.");
     }
