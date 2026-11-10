@@ -133,7 +133,7 @@ public final class Targets {
 
     // ------------------------------------------------------------------ settings outlive death
 
-    private static final String[] KEEP = {"bp_aura", "bp_tgt_", "bp_auto", "bp_pcd_"};
+    private static final String[] KEEP = {"bp_aura", "bp_tgt_", "bp_auto", "bp_pcd_", "bp_phone"};
 
     @SubscribeEvent
     public static void clone(PlayerEvent.Clone event) {

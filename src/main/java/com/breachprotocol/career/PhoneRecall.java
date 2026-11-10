@@ -34,15 +34,32 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Your phone answers to your implant. A phone you carry is marked as yours; wherever it ends up on the
- * ground (dropped, thrown, left where you died, after /kill), it's remembered, and the Recall Phone
- * power pulls it back: it lifts, and flies to you through walls, from any distance, from any dimension.
+ * Your phone answers to your implant. Every phone has an owner (its ID): the first person to carry it.
+ * Recall Phone brings yours back whatever happened to it: lying on the ground anywhere (it lifts and
+ * flies to you through walls, from any distance or dimension), in another player's pocket (it tears
+ * itself loose and flies to you), or out of reach entirely (in a chest, burnt, despawned: a new one is
+ * issued to you, the same as the last one you held, and the lost copy is wiped wherever it turns up).
  */
 @EventBusSubscriber(modid = BreachProtocol.MODID)
 public final class PhoneRecall {
     private PhoneRecall() {}
 
-    private static final String OWNER = "bp_owner", WHERE = "bp_phone_at", DIM = "bp_phone_dim";
+    private static final String OWNER = "bp_owner", OWNER_NAME = "bp_owner_n", GEN = "bp_gen",
+            WHERE = "bp_phone_at", DIM = "bp_phone_dim", CUR_GEN = "bp_phone_gen", COPY = "bp_phone_copy";
+
+    private static CompoundTag data(ItemStack s) { return s.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag(); }
+
+    private static int gen(ItemStack s) { return data(s).getInt(GEN); }
+
+    private static int curGen(ServerPlayer p) { return p.getPersistentData().getInt(CUR_GEN); }
+
+    /** An old copy of a phone that's since been replaced: its owner's later phone is the real one. */
+    private static boolean stale(MinecraftServer srv, ItemStack s) {
+        UUID o = owner(s);
+        if (o == null) return false;
+        ServerPlayer ow = srv.getPlayerList().getPlayer(o);
+        return ow != null && gen(s) < curGen(ow);
+    }
 
     private static boolean phone(ItemStack s) { return !s.isEmpty() && s.is(ModItems.PHONE.get()); }
 
@@ -51,7 +68,10 @@ public final class PhoneRecall {
         return t.hasUUID(OWNER) ? t.getUUID(OWNER) : null;
     }
 
-    /** Phones in your inventory are yours (checked once a second). */
+    /**
+     * Once a second: a phone with no owner becomes yours (its ID is you); yours is remembered as it is
+     * (so a lost one can be replaced exactly); a replaced copy, in anyone's hands, goes dead.
+     */
     @SubscribeEvent
     public static void mark(net.neoforged.neoforge.event.tick.PlayerTickEvent.Post event) {
         if (!(event.getEntity() instanceof ServerPlayer p) || p.tickCount % 20 != 7) return;
@@ -59,7 +79,18 @@ public final class PhoneRecall {
         var inv = p.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
-            if (phone(s) && !me.equals(owner(s))) CustomData.update(DataComponents.CUSTOM_DATA, s, t -> t.putUUID(OWNER, me));
+            if (!phone(s)) continue;
+            UUID o = owner(s);
+            if (o == null) {
+                int g = curGen(p);
+                String n = p.getGameProfile().getName();
+                CustomData.update(DataComponents.CUSTOM_DATA, s, t -> { t.putUUID(OWNER, me); t.putString(OWNER_NAME, n); t.putInt(GEN, g); });
+            } else if (stale(p.server, s)) {
+                inv.setItem(i, ItemStack.EMPTY);
+                p.displayClientMessage(Component.literal("The phone's screen goes black. It's been wiped by its owner.").withStyle(ChatFormatting.GRAY), true);
+            } else if (o.equals(me)) {
+                p.getPersistentData().put(COPY, s.save(p.registryAccess()));
+            }
         }
     }
 
@@ -69,6 +100,7 @@ public final class PhoneRecall {
         if (event.getLevel().isClientSide() || !(event.getEntity() instanceof ItemEntity it) || !phone(it.getItem())) return;
         UUID who = owner(it.getItem());
         if (who == null || !(event.getLevel() instanceof ServerLevel l)) return;
+        if (stale(l.getServer(), it.getItem())) { event.setCanceled(true); return; } // a wiped copy: gone
         ServerPlayer p = l.getServer().getPlayerList().getPlayer(who);
         CompoundTag t = p != null ? p.getPersistentData() : null;
         if (t == null) { LOST.put(who, new Spot(l.dimension(), it.blockPosition())); return; }
@@ -86,7 +118,7 @@ public final class PhoneRecall {
     private static final Map<UUID, Flight> FLYING = new HashMap<>();
 
     public static boolean recall(ServerPlayer p) {
-        for (ItemStack s : p.getInventory().items) if (phone(s)) { tell(p, "Your phone's already on you."); return false; }
+        for (ItemStack s : p.getInventory().items) if (phone(s) && p.getUUID().equals(owner(s))) { tell(p, "Your phone's already on you."); return false; }
         for (Flight f : FLYING.values()) if (f.to().equals(p.getUUID())) { tell(p, "It's already on its way."); return false; }
         MinecraftServer srv = p.server;
         // where it was last seen on the ground
@@ -111,8 +143,36 @@ public final class PhoneRecall {
             }
         }
         if (found == null) {
-            tell(p, "No signal. Your phone isn't lying anywhere it can be pulled from (in a chest, or someone else has it).");
-            return false;
+            // in someone's pocket: it tears itself out of it
+            for (ServerPlayer q : srv.getPlayerList().getPlayers()) {
+                if (q == p) continue;
+                var inv = q.getInventory();
+                for (int i = 0; i < inv.getContainerSize() && found == null; i++) {
+                    ItemStack s = inv.getItem(i);
+                    if (!phone(s) || !p.getUUID().equals(owner(s)) || stale(srv, s)) continue;
+                    inv.setItem(i, ItemStack.EMPTY);
+                    found = new ItemEntity(q.serverLevel(), q.getX(), q.getEyeY() - 0.3, q.getZ(), s.copy());
+                    q.serverLevel().addFreshEntity(found);
+                    q.displayClientMessage(Component.literal("The phone in your pocket tears itself loose and flies off. It wasn't yours.").withStyle(ChatFormatting.GRAY), true);
+                    q.serverLevel().playSound(null, q.blockPosition(), SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.8F, 0.6F);
+                }
+                if (found != null) break;
+            }
+        }
+        if (found == null) {
+            // in a chest, burnt, despawned, gone: a new one, exactly as yours was; the old copy is dead wherever it is
+            int g = curGen(p) + 1;
+            p.getPersistentData().putInt(CUR_GEN, g);
+            ItemStack fresh = t.contains(COPY) ? ItemStack.parse(p.registryAccess(), t.getCompound(COPY)).orElse(new ItemStack(ModItems.PHONE.get())) : new ItemStack(ModItems.PHONE.get());
+            if (!phone(fresh)) fresh = new ItemStack(ModItems.PHONE.get());
+            String n = p.getGameProfile().getName();
+            CustomData.update(DataComponents.CUSTOM_DATA, fresh, d -> { d.putUUID(OWNER, p.getUUID()); d.putString(OWNER_NAME, n); d.putInt(GEN, g); });
+            t.remove(WHERE);
+            if (!p.getInventory().add(fresh)) p.drop(fresh, false);
+            p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 0.9F, 1.4F);
+            p.serverLevel().sendParticles(ParticleTypes.ELECTRIC_SPARK, p.getX(), p.getY() + 1, p.getZ(), 20, 0.3, 0.4, 0.3, 0.05);
+            tell(p, "Your phone couldn't be reached, so it's been reissued to you. The lost one is wiped.");
+            return true;
         }
         found.setNoGravity(true);
         found.setPickUpDelay(32767);

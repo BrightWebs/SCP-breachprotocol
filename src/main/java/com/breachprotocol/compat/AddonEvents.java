@@ -102,10 +102,21 @@ public final class AddonEvents {
     @SubscribeEvent
     public static void onUseBlock(PlayerInteractEvent.RightClickBlock event) {
         ItemStack held = event.getItemStack();
-        if (!Clearance.isPhone(held)) return;
         BlockState state = event.getLevel().getBlockState(event.getPos());
         ResourceLocation id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         if (!Unleashed.MODID.equals(id.getNamespace()) || !id.getPath().equals("keycard_scanner")) return;
+        // the Administrator (and SCP-Ω) is the clearance: a hand on the scanner is enough, no card, no phone
+        net.minecraft.world.entity.player.Player pl = event.getEntity();
+        boolean chief = com.breachprotocol.career.Career.isAscended(pl) || pl instanceof net.minecraft.server.level.ServerPlayer sp
+                && com.breachprotocol.career.Career.rank(sp) == com.breachprotocol.career.Rank.ADMINISTRATOR;
+        if (!event.getLevel().isClientSide() && chief && event.getHand() == net.minecraft.world.InteractionHand.MAIN_HAND
+                && !BuiltInRegistries.ITEM.getKey(held.getItem()).getPath().startsWith("keycard")) {
+            ItemInteractionResult r = state.useItemOn(new ItemStack(Unleashed.keycard(Clearance.effective(pl))), event.getLevel(), pl, event.getHand(), event.getHitVec());
+            event.setCanceled(true);
+            event.setCancellationResult(r.result());
+            return;
+        }
+        if (!Clearance.isPhone(held)) return;
         Item card = Clearance.fusedCard(held);
         if (card == null) return; // no fused card: let the scanner show what level it needs
         ItemInteractionResult r = state.useItemOn(new ItemStack(card), event.getLevel(), event.getEntity(), event.getHand(), event.getHitVec());
