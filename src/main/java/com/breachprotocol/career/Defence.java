@@ -122,6 +122,8 @@ public final class Defence {
 
     /** Whether a guard should shoot this. */
     public static boolean threat(FoundationStaff guard, LivingEntity c) {
+        Boolean team = Response.threatFor(guard, c); // a breach team's quarry: shot only on a termination order
+        if (team != null) return team;
         if (c == guard || !c.isAlive() || c instanceof FoundationStaff || c instanceof O5MemberEntity || c.isInvisible() && !(c instanceof Creeper)) return false;
         MinecraftServer s = guard.getServer();
         if (s == null) return false;

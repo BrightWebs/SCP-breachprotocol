@@ -252,6 +252,21 @@ public final class Forces {
         return g;
     }
 
+    /** One more of a unit, called in to a site now (for a response team): stationed there afterwards. */
+    static FoundationStaff call(ServerLevel l, Sites.Site site, Unit u) {
+        Data d = data(l.getServer());
+        FoundationStaff g = spawn(l, site, d.station(site.name), u);
+        d.setDirty();
+        return g;
+    }
+
+    /** The members of a unit stationed at a site. */
+    static java.util.List<UUID> members(MinecraftServer s, String site, Unit u) {
+        java.util.List<UUID> out = new java.util.ArrayList<>();
+        for (Map.Entry<UUID, Unit> e : data(s).station(site).members.entrySet()) if (e.getValue() == u) out.add(e.getKey());
+        return out;
+    }
+
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
         MinecraftServer s = event.getServer();

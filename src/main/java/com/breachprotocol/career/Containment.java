@@ -255,6 +255,7 @@ public final class Containment extends SavedData {
         WorldNews.record(l.getServer(), WorldNews.Kind.BREACH, e.type, e.designation + " broke out of " + from + " at " + where, -6, site == null ? "" : site.ownerName);
         BreachAlerts.announce(l, m.blockPosition(), List.of(e.designation));
         Career.Reply[] orders = breachOrders(l.getServer(), e);
+        Response.breached(l.getServer(), e); // no answer in thirty seconds, and the chain of command sends someone
         if (site != null) {
             notifyOwner(l.getServer(), site, O5.O5_6, "BREACH. " + e.designation + " is out of " + from + " at " + site.name + (e.breaches > 1 ? ". That's breach number " + e.breaches + " for it." : ".") + " Get it back in a cell. Your orders?", orders);
             ServerPlayer owner = player(l.getServer(), site.owner);
@@ -272,11 +273,12 @@ public final class Containment extends SavedData {
     /** What you can order when something gets out: a recapture team, termination, a cell at Site-01, a lockdown. */
     static Career.Reply[] breachOrders(MinecraftServer srv, Entry e) {
         String id = e.id.toString(), d = e.designation;
-        return new Career.Reply[]{
-                new Career.Reply("Send a recapture team after " + d + ".", "cont:hunt:" + id, "Recapture team is moving. They'll bring " + d + " back to a cell."),
+        Career.Reply[] teams = Response.orders(e);
+        return new Career.Reply[]{teams[0], teams[1], teams[2],
                 Site01.data(srv).built ? new Career.Reply("Take it to Site-01. It doesn't get out of there.", "cont:transfer:" + id, "Understood. Transfer to Site-01 the moment we have it.") : null,
                 new Career.Reply("Terminate it.", "cont:terminate:" + id, "Termination team authorised. We'll tell you if it dies."),
-                new Career.Reply("Lock everything down.", "dir:lockdown", "Lockdown. Every anomaly near you is frozen in place.")};
+                new Career.Reply("Lock everything down.", "dir:lockdown", "Lockdown. Every anomaly near you is frozen in place."),
+                teams[3]};
     }
 
     /** "order:uuid" from a message reply: the Council carries it out (Overseers, SCP-Ω, and a site's owner may order it). */
@@ -344,9 +346,6 @@ public final class Containment extends SavedData {
         return null;
     }
 
-    /** When each ordered recapture team gets there. */
-    private static final Map<UUID, Long> HUNT_DUE = new HashMap<>();
-
     /** Gives a standing order for an anomaly ("terminate", "transfer", "hunt"); carried out when it can be reached. */
     public static void order(MinecraftServer s, UUID id, String order) {
         Entry e = get(s).entries.get(id);
@@ -371,7 +370,7 @@ public final class Containment extends SavedData {
                     WorldNews.record(srv, WorldNews.Kind.BREACH, e.type, "the termination team couldn't kill " + e.designation, -4, "");
                     for (ServerPlayer q : srv.getPlayerList().getPlayers())
                         if (Career.rank(q).atLeast(Rank.OVERSEER) || Career.isAscended(q)) Career.message(q, O5.O5_8, "Termination of " + e.designation + " failed. It's still alive. It always is. We'll need a cell.",
-                                    new Career.Reply("Then send a recapture team.", "cont:hunt:" + e.id, "Recapture team is moving."),
+                                    new Career.Reply("Then send Epsilon-11 to bring it in.", "resp:EPSILON_11:" + e.id, "Nine-Tailed Fox is on its way."),
                                     Site01.data(srv).built ? new Career.Reply("Put it at Site-01.", "cont:transfer:" + e.id, "Transfer to Site-01 ordered.") : null);
                     return false;
                 }
@@ -414,30 +413,10 @@ public final class Containment extends SavedData {
                 return false;
             }
             case "hunt" -> {
-                // a recapture team is on its way: a minute later it has the anomaly back in its cell
-                long due = HUNT_DUE.computeIfAbsent(e.id, k -> l.getGameTime() + 1200);
-                if (l.getGameTime() < due) return false;
-                HUNT_DUE.remove(e.id);
-                Sites.Cell home = null;
-                for (Sites.Cell c : Sites.get(srv).cells) if (c.name.equals(e.cell) && c.dim.equals(l.dimension().location().toString())) home = c;
-                if (home == null) {
-                    if (Site01.data(srv).built) { e.order = "transfer"; return carryOut(l, m, e); }
-                    e.order = "";
-                    for (ServerPlayer q : srv.getPlayerList().getPlayers())
-                        if (Career.rank(q).atLeast(Rank.OVERSEER) || Career.isAscended(q) || Career.rank(q) == Rank.ADMINISTRATOR)
-                            Career.message(q, O5.O5_6, "The recapture team has " + e.designation + ", but there's no cell to put it in. Designate one and order it again.");
-                    return false;
-                }
-                m.getNavigation().stop();
-                m.setTarget(null);
-                m.teleportTo((home.x0 + home.x1) / 2.0 + 0.5, home.y0 + 1, (home.z0 + home.z1) / 2.0 + 0.5);
-                m.setPersistenceRequired();
+                // a recapture team: the response unit the breach calls for, sent out for real
                 e.order = "";
-                WorldNews.record(srv, WorldNews.Kind.CONTAINED, e.type, "a recapture team brought " + e.designation + " back to " + home.name, 3, "the Council");
-                for (ServerPlayer q : srv.getPlayerList().getPlayers())
-                    if (Career.rank(q).atLeast(Rank.OVERSEER) || Career.isAscended(q) || Career.rank(q) == Rank.ADMINISTRATOR)
-                        Career.message(q, O5.O5_6, "Recapture team reports " + e.designation + " back in " + home.name + ". Shut the door behind it.");
-                return true;
+                Response.dispatch(srv, e, new Forces.Unit[]{Forces.Unit.SECURITY, Forces.Unit.EPSILON_11, Forces.Unit.NU_7}[Response.severity(e)], "the Council");
+                return false;
             }
             default -> { e.order = ""; return false; }
         }
