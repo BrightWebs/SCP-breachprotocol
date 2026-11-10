@@ -130,6 +130,19 @@ public final class BpCommands {
                     CareerEvents.ascend(p, data);
                     return done(p, c, "You are SCP-Ω.");
                 }))
+                .then(Commands.literal("forms")
+                        .then(Commands.literal("all").executes(c -> {
+                            ServerPlayer p = c.getSource().getPlayerOrException();
+                            if (!Shapeshift.present()) return fail(c, "Shapeshift needs ManasCore and Manas Reborn.");
+                            return ok(c, "Every form is yours: " + Shapeshift.unlockAll(p) + " creatures and blocks.");
+                        }))
+                        .then(Commands.literal("clear").executes(c -> {
+                            ServerPlayer p = c.getSource().getPlayerOrException();
+                            p.getPersistentData().remove("bp_shape_mobs");
+                            p.getPersistentData().remove("bp_shape_blocks");
+                            Career.sync(p);
+                            return ok(c, "Your forms are cleared.");
+                        })))
                 .then(Commands.literal("phone").executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
                     ItemStack s = new ItemStack(com.breachprotocol.registry.ModItems.PHONE.get());

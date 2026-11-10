@@ -50,28 +50,6 @@ public final class Shapeshift {
         }
     }
 
-    @EventBusSubscriber(modid = BreachProtocol.MODID)
-    public static final class Cheat {
-    /** The cheat: /shapeshift all puts every creature and every block among your forms; /shapeshift clear empties them. */
-    @SubscribeEvent
-    public static void commands(net.neoforged.neoforge.event.RegisterCommandsEvent event) {
-        event.getDispatcher().register(net.minecraft.commands.Commands.literal("shapeshift").requires(src -> src.hasPermission(2))
-                .then(net.minecraft.commands.Commands.literal("all").executes(c -> {
-                    int n = unlockAll(c.getSource().getPlayerOrException());
-                    c.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("Every form is yours (" + n + ").").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), false);
-                    return n;
-                }))
-                .then(net.minecraft.commands.Commands.literal("clear").executes(c -> {
-                    ServerPlayer p = c.getSource().getPlayerOrException();
-                    p.getPersistentData().remove("bp_shape_mobs");
-                    p.getPersistentData().remove("bp_shape_blocks");
-                    Career.sync(p);
-                    c.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("Your forms are cleared.").withStyle(net.minecraft.ChatFormatting.GRAY), false);
-                    return 1;
-                })));
-    }
-    }
-
     /** Every living creature and every block, among your forms. Returns how many. */
     public static int unlockAll(ServerPlayer p) {
         net.minecraft.nbt.ListTag mobs = new net.minecraft.nbt.ListTag(), blocks = new net.minecraft.nbt.ListTag();
