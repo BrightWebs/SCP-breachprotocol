@@ -57,7 +57,7 @@ public final class Vault {
     private Vault() {}
 
     public static final ResourceKey<Level> DIM = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "vault"));
-    private static final int Y = 64, SPACING = 4000, CHESTS = 20, LAYOUT = 2;
+    private static final int Y = 64, SPACING = 4000, CHESTS = 20, LAYOUT = 3;
     /** Placed quietly: no knock-on updates, so nothing pops off its wall or floor while the Vault is being built or patched. */
     private static final int F = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS;
 
@@ -379,8 +379,10 @@ public final class Vault {
         int[] need = needs(e);
         boolean water = need[0] == 1;
         int w = need[1], h = need[2];
-        boolean north = r.nextNorth <= r.nextSouth;
-        int o = r.ox(), x0 = o + (north ? r.nextNorth : r.nextSouth), x1 = x0 + w + 1;
+        // the first gap along the hall it fits in, on whichever side has one nearer the door
+        int o = r.ox(), gn = gap(r, true, w + 2, null), gs = gap(r, false, w + 2, null);
+        boolean north = gn <= gs;
+        int x0 = o + (north ? gn : gs), x1 = x0 + w + 1;
         int zFront = north ? -4 : 4, zBack = north ? -4 - (w + 1) : 4 + (w + 1);
         Cell c = new Cell();
         c.fx0 = x0; c.fx1 = x1; c.fza = Math.min(zFront, zBack); c.fzb = Math.max(zFront, zBack); c.front = zFront;
@@ -388,8 +390,69 @@ public final class Vault {
         c.water = water;
         extendHall(v, r, x1 - o + 3);
         drawCell(v, c);
-        if (north) r.nextNorth = x1 - o + 2; else r.nextSouth = x1 - o + 2;
         return c;
+    }
+
+    private static boolean north(Cell c) { return c.front < 0; }
+
+    /** The first x (from the door) on one side where something span blocks wide fits, one block clear of its neighbours. */
+    private static int gap(Region r, boolean north, int span, Cell except) {
+        List<int[]> taken = new ArrayList<>();
+        for (Cell c : r.cells) if (c != except && c.real() && north(c) == north) taken.add(new int[]{c.fx0 - r.ox(), c.fx1 - r.ox()});
+        taken.sort(Comparator.comparingInt(a -> a[0]));
+        int at = 2;
+        for (int[] t : taken) {
+            if (at + span - 1 < t[0] - 1) return at;   // fits before this one, with a block between
+            at = Math.max(at, t[1] + 2);
+        }
+        return at;
+    }
+
+    /**
+     * Cells close up toward the door: any gap left by a cell taken down is filled by sliding the ones beyond it
+     * along (whatever's inside moves with its cell), and the hall, and the throne room at its end, come in to match.
+     */
+    private static void compact(ServerLevel v, Region r) {
+        int o = r.ox();
+        for (boolean side : new boolean[]{true, false}) {
+            List<Cell> row = new ArrayList<>();
+            for (Cell c : r.cells) if (c.real() && north(c) == side) row.add(c);
+            row.sort(Comparator.comparingInt(c -> c.fx0));
+            int cursor = o + 2;
+            for (Cell c : row) {
+                int dx = cursor - c.fx0;
+                if (dx < 0) shift(v, r, c, dx);
+                cursor = c.fx1 + 2;
+            }
+        }
+        shrinkHall(v, r);
+    }
+
+    private static void shift(ServerLevel v, Region r, Cell c, int dx) {
+        AABB was = new AABB(c.fx0, Y - 1, c.fza, c.fx1 + 1, Y + c.h + 2, c.fzb + 1);
+        List<Entity> inside = v.getEntities((Entity) null, was, e -> !(e instanceof net.minecraft.world.entity.Display));
+        demolish(v, r, c);
+        c.fx0 += dx; c.fx1 += dx; c.x0 += dx; c.x1 += dx;
+        drawCell(v, c);
+        for (Entity e : inside) { e.teleportTo(e.getX() + dx, e.getY(), e.getZ()); e.setDeltaMovement(Vec3.ZERO); }
+        data(v.getServer()).setDirty();
+    }
+
+    /** The hall no longer than the cells need; the throne room moves in to its new end. */
+    private static void shrinkHall(ServerLevel v, Region r) {
+        int o = r.ox(), need = 12;
+        for (Cell c : r.cells) if (c.real()) need = Math.max(need, c.fx1 - o + 3);
+        if (need >= r.hallTo || r.throneX == 0) return;
+        int oldT = r.throneX;
+        AABB box = new AABB(o + need + 1, Y - 1, -13, oldT + 28, Y + 15, 14);
+        List<Entity> moving = v.getEntities((Entity) null, box, e -> !(e instanceof net.minecraft.world.entity.Display));
+        for (Entity e : v.getEntities((Entity) null, box, e -> e instanceof net.minecraft.world.entity.Display)) { e.ejectPassengers(); e.discard(); }
+        box(v, o + need + 1, Y, -12, oldT + 26, Y + 13, 12, Blocks.AIR.defaultBlockState());
+        r.hallTo = need;
+        throne(v, r, o + need + 1);
+        int dx = r.throneX - oldT;
+        for (Entity e : moving) { e.teleportTo(e.getX() + dx, e.getY(), e.getZ()); e.setDeltaMovement(Vec3.ZERO); }
+        data(v.getServer()).setDirty();
     }
 
     /** Things that live in water and would die out of it. */
@@ -645,6 +708,8 @@ public final class Vault {
         }
         // the hall again, now that nothing false is drawn in it
         hall(v, r, o - 3, o + r.hallTo);
+        // close up any gaps, and bring the hall and the throne room in to match
+        compact(v, r);
         for (int i = 0; i < r.cells.size(); i++) {
             Cell c = r.cells.get(i);
             drawCell(v, c);
@@ -743,6 +808,7 @@ public final class Vault {
         }
         r.cells.remove(c);
         demolish(v, r, c);
+        compact(v, r);
         data(v.getServer()).setDirty();
     }
 
