@@ -191,7 +191,10 @@ public final class Calls {
                 List.of(
                         opt("Approve cleaning", (p, d) -> {
                             Career.addXp(p, 20, "maintenance");
-                            return stab(p, 2, "Cell clean. All three D-Class kept their eyes open. Mostly.");
+                            // a real crew goes in, with the two watchers calling their blinks
+                            int n = Observation.cleanNow(p.server);
+                            return stab(p, 2, n > 0 ? "Cleaning crew is going in now. The watchers will call their blinks. I'll tell you how many come out."
+                                    : "Cell clean. All three D-Class kept their eyes open. Mostly.");
                         }),
                         opt("Postpone", (p, d) -> {
                             if (p.getRandom().nextFloat() < 0.35F && p.level().dimension() == Level.OVERWORLD && !d.ascended) {

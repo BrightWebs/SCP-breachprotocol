@@ -390,22 +390,26 @@ public class CommandScreen extends Screen {
         String[][] orders = {
                 {"Still everything nearby", "Everything within 32 blocks that means you harm calms down, for good.", "dom:all:calm"},
                 {"Recall my followers", "Everything that follows you comes to your side, wherever it is in this world.", "dom:all:recall"},
-                {"Release everything", "Every creature you've calmed, sent or kept is released to its own nature.", "dom:all:release"}};
+                {"Release everything", "Every creature you've calmed, sent or kept is released to its own nature.", "dom:all:release"},
+                {"End the storm", "SCP-107's rain, whatever it's raining, stops.", "ovr:storm"},
+                {"Kill the mould", "SCP-020 dies back for sixteen blocks around you.", "ovr:mould"},
+                {"Cure everyone here", "Everyone within 32 blocks is cleared of every anomalous affliction.", "ovr:cure"}};
         int yy = y + 2;
         for (String[] o : orders) {
-            boolean hov = in(mx, my, x, yy, w, 34);
-            g.fill(x, yy, x + w, yy + 34, hov ? 0x20FFFFFF : PANEL);
-            frame(g, x, yy, w, 34, hov ? accent() : LINE);
-            g.drawString(font, o[0], x + 10, yy + 6, TEXT, false);
-            small(g, o[1], x + 10, yy + 20, MUTED);
+            boolean hov = in(mx, my, x, yy, w, 26);
+            g.fill(x, yy, x + w, yy + 26, hov ? 0x20FFFFFF : PANEL);
+            frame(g, x, yy, w, 26, hov ? accent() : LINE);
+            g.drawString(font, o[0], x + 10, yy + 4, TEXT, false);
+            small(g, o[1], x + 10, yy + 16, MUTED);
             final String act = o[2];
-            hits.add(new Hit(x, yy, w, 34, () -> { send(act); onClose(); }));
-            yy += 40;
+            hits.add(new Hit(x, yy, w, 26, () -> { send(act); onClose(); }));
+            yy += 29;
         }
         yy += 4;
         small(g, "ONE CREATURE AT A TIME: HOLD " + DialogueHud.ANSWER.getTranslatedKeyMessage().getString().toUpperCase(java.util.Locale.ROOT)
                 + " AND LOOK AT IT. SCROLL TO CHOOSE AN ORDER, LEFT-CLICK TO GIVE IT.", x, yy, MUTED);
         small(g, "CALM · FOLLOW · STAY · HUNT · RELEASE · END", x, yy + 10, DIM);
+        small(g, "CROUCH + EMPTY HAND ON AN ANOMALY: UNDO WHAT IT DID. ON A PERSON: CURE THEM.", x, yy + 20, DIM);
     }
 
     // ---------------------------------------------------------------- pieces
