@@ -76,7 +76,8 @@ public final class Powers {
             new Power("still", "Still", "The Administrator", "☮", 0x7FE0A0, "Everything around you that means you harm calms down, for good.", 1, 20 * 15, 8, 48, 24, Aim.AROUND),
             new Power("judgement", "Judgement", "SCP-Ω", "☠", 0xFF4040, "Every hostile creature within reach dies.", 2, 20 * 60, 8, 48, 24, Aim.AROUND),
             new Power("call", "Call Secretary", "Your office", "☎", 0xF0A8C8, "She hurries to you on foot, taking the lift.", 1, 20 * 30, 0, 0, 0, Aim.SELF),
-            new Power("summon", "Summon Secretary", "Your office", "✉", 0xF0A8C8, "She's at your side at once.", 1, 20 * 60, 0, 0, 0, Aim.SELF));
+            new Power("summon", "Summon Secretary", "Your office", "✉", 0xF0A8C8, "She's at your side at once.", 1, 20 * 60, 0, 0, 0, Aim.SELF),
+            new Power("recall", "Recall Phone", "Your implant", "✆", 0x7FD8C0, "Your phone answers to you. Wherever it's lying (dropped, thrown, left where you died), it lifts and flies back to your hand, through walls, from any distance, from any world.", 1, 0, 0, 0, 0, Aim.SELF));
 
     public static Power get(String id) {
         for (Power p : ALL) if (p.id().equals(id)) return p;
@@ -87,7 +88,7 @@ public final class Powers {
 
     /** Powers that can be left on: they fire by themselves whenever they're ready and something hostile is in range. */
     public static boolean automatic(Power pw) {
-        return pw.aim() != Aim.TOGGLE && switch (pw.id()) { case "pocket", "orbital", "blink", "call", "summon" -> false; default -> true; };
+        return pw.aim() != Aim.TOGGLE && switch (pw.id()) { case "pocket", "orbital", "blink", "call", "summon", "recall" -> false; default -> true; };
     }
 
     /** How often an automatic power fires. Repel, left on, is a shield: it keeps everything hostile out of its circle. */
@@ -367,6 +368,7 @@ public final class Powers {
             }
             case "call" -> { return Dominion.secretary(p, false); }
             case "summon" -> { return Dominion.secretary(p, true); }
+            case "recall" -> { return PhoneRecall.recall(p); }
             default -> { return false; }
         }
     }
