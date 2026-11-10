@@ -519,6 +519,70 @@ public final class Vault {
         v.playSound(null, mid, SoundEvents.PISTON_EXTEND, SoundSource.BLOCKS, 0.5F, 0.6F);
     }
 
+    // ---------------------------------------------------------------- the airlock, by itself
+
+    private static final class Cycle { boolean exit, open, waitOut; long openedAt; UUID who; }
+
+    private static final Map<String, Cycle> CYCLES = new HashMap<>();
+
+    private static String key(Cell c) { return c.fx0 + ":" + c.front; }
+
+    private static boolean inLock(Cell c, Entity e) {
+        double d = (e.getZ() - (c.front + (c.in() > 0 ? 0 : 1))) * c.in();
+        return e.getX() >= c.fx0 + 1 && e.getX() <= c.fx0 + 4 && d >= 1.0 && d <= 3.7 && e.getY() >= Y + 0.5 && e.getY() < Y + 3.5;
+    }
+
+    private static double toDoor(Cell c, Entity e) { return e.position().distanceTo(Vec3.atBottomCenterOf(c.innerDoor())); }
+
+    private static boolean innerOpen(ServerLevel v, Cell c) { return open(v, c.innerDoor()); }
+
+    private static void setInner(ServerLevel v, Cell c, boolean on) {
+        BlockPos d = c.innerDoor();
+        BlockState st = v.getBlockState(d);
+        if (st.getBlock() instanceof net.minecraft.world.level.block.DoorBlock door && st.getValue(net.minecraft.world.level.block.DoorBlock.OPEN) != on) door.setOpen(null, v, st, d, on);
+    }
+
+    /** Step into the airlock with the hall door shut: it floods and the inner door opens; once you're through and clear, it shuts and drains. Coming out, the same the other way round. Only for the Administrator; nothing held gets through. */
+    private static void airlocks(MinecraftServer s, ServerLevel v) {
+        long now = v.getGameTime();
+        for (Region r : data(s).regions.values()) for (Cell c : r.cells) {
+            if (!c.water || !c.real() || !v.isLoaded(c.outerDoor())) continue;
+            Cycle cy = CYCLES.computeIfAbsent(key(c), k -> new Cycle());
+            ServerPlayer near = null;
+            for (ServerPlayer p : v.players()) if (chief(p) && toDoor(c, p) < 6) { near = p; break; }
+            boolean outerShut = !open(v, c.outerDoor());
+            if (!cy.open) {
+                if (near == null || !outerShut) continue;
+                boolean inside = inLock(c, near), tankSide = !inside && toDoor(c, near) < 2.6 && (near.getZ() - c.innerDoor().getZ()) * c.in() > 0.3;
+                if (!inside && !tankSide) continue;
+                if (cy.waitOut) { if (inside) continue; cy.waitOut = false; } // just came out: the airlock waits until you've left it
+                if (inside && now - cy.openedAt < 30) continue;
+                lock(v, c, true);
+                setInner(v, c, true);
+                cy.open = true; cy.exit = tankSide; cy.openedAt = now; cy.who = near.getUUID();
+                v.playSound(null, c.innerDoor(), SoundEvents.IRON_DOOR_OPEN, SoundSource.BLOCKS, 1F, 0.8F);
+            } else {
+                Entity who = cy.who == null ? null : v.getEntity(cy.who);
+                boolean done;
+                if (who == null || !who.isAlive()) done = true;
+                else if (cy.exit) done = inLock(c, who) && toDoor(c, who) > 1.3;           // out of the tank and into the airlock
+                else done = !inLock(c, who) && toDoor(c, who) > 2.2;                       // into the tank and clear of the door
+                if (!done && now - cy.openedAt > 20 * 20) done = true;                    // never left standing open
+                if (!outerShut) done = true;
+                if (!done) continue;
+                setInner(v, c, false);
+                // whatever's held, if it slipped into the airlock, goes back where it belongs
+                Entity held = c.entity == null ? null : v.getEntity(c.entity);
+                if (held != null && inLock(c, held)) { Vec3 m = c.centre(); held.teleportTo(m.x, m.y, m.z); }
+                lock(v, c, false);
+                cy.open = false;
+                cy.waitOut = cy.exit;
+                cy.openedAt = now;
+                v.playSound(null, c.innerDoor(), SoundEvents.IRON_DOOR_CLOSE, SoundSource.BLOCKS, 1F, 0.8F);
+            }
+        }
+    }
+
     /** Which tank's inner door is this, if any. */
     private static Cell tankWithDoor(Region r, BlockPos pos) {
         for (Cell c : r.cells) if (c.water && (c.innerDoor().equals(pos) || c.innerDoor().above().equals(pos))) return c;
@@ -551,6 +615,8 @@ public final class Vault {
         hall(v, r, o - 3, o + r.hallTo);
         throne(v, r, r.throneX == 0 ? o + r.hallTo + 1 : r.throneX);
         int back = 0;
+        // cells already emptied (released before cells were taken down) go
+        for (Cell c : new ArrayList<>(r.cells)) if (c.entity == null) remove(v, r, c);
         // cells lost to an old save: one with something alive in it gets a proper cell; an empty one is let go
         for (int i = 0; i < r.cells.size(); i++) {
             Cell c = r.cells.get(i);
@@ -642,7 +708,7 @@ public final class Vault {
         if (v == null || r == null || index < 0 || index >= r.cells.size() || !chief(p)) return;
         Cell c = r.cells.get(index);
         Entity e = c.entity == null ? null : v.getEntity(c.entity);
-        if (e == null || !e.isAlive()) { say(p, "Cell " + (index + 1) + " is empty. Whatever was in it is gone."); forget(c); data(p.server).setDirty(); Career.sync(p); return; }
+        if (e == null || !e.isAlive()) { say(p, "Cell " + (index + 1) + " was empty. It's gone now."); remove(v, r, c); Career.sync(p); return; }
         v.sendParticles(ParticleTypes.REVERSE_PORTAL, e.getX(), e.getY() + 1, e.getZ(), 40, 0.6, 0.8, 0.6, 0.15);
         Vec3 at = p.position().add(p.getLookAngle().multiply(1, 0, 1).normalize().scale(Math.max(2.5, e.getBbWidth() + 1.5)));
         Entity moved = e.changeDimension(new DimensionTransition(p.serverLevel(), at, Vec3.ZERO, p.getYRot() + 180, 0, DimensionTransition.DO_NOTHING));
@@ -650,10 +716,32 @@ public final class Vault {
         p.serverLevel().sendParticles(ParticleTypes.PORTAL, at.x, at.y + 1, at.z, 60, 0.6, 1, 0.6, 0.5);
         p.serverLevel().playSound(null, BlockPos.containing(at), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 1F, 1.2F);
         String was = c.name;
-        forget(c);
-        data(p.server).setDirty();
-        say(p, was + " is out, at your side. Cell " + (index + 1) + " stands empty.");
+        c.entity = null;
+        remove(v, r, c);
+        say(p, was + " is out, at your side. Its cell is taken down.");
         Career.sync(p);
+    }
+
+    /** A cell nobody's in any more: taken down, and off the list. */
+    private static void remove(ServerLevel v, Region r, Cell c) {
+        if (c.real()) {
+            Vec3 m = c.centre();
+            v.sendParticles(ParticleTypes.REVERSE_PORTAL, m.x, m.y + 1, m.z, 50, (c.x1 - c.x0) / 3.0, c.h / 3.0, (c.z1 - c.z0) / 3.0, 0.05);
+            v.playSound(null, BlockPos.containing(m), SoundEvents.BEACON_DEACTIVATE, SoundSource.BLOCKS, 1F, 0.8F);
+        }
+        r.cells.remove(c);
+        demolish(v, r, c);
+        data(v.getServer()).setDirty();
+    }
+
+    /** A captive died in the Vault: its cell goes with it. */
+    @SubscribeEvent
+    public static void died(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+        LivingEntity e = event.getEntity();
+        if (e.level().isClientSide || e.level().dimension() != DIM || e instanceof Player) return;
+        ServerLevel v = (ServerLevel) e.level();
+        for (Region r : data(v.getServer()).regions.values())
+            for (Cell c : new ArrayList<>(r.cells)) if (e.getUUID().equals(c.entity)) { c.entity = null; remove(v, r, c); return; }
     }
 
     private static void forget(Cell c) { c.entity = null; c.name = ""; c.type = ""; c.look = new CompoundTag(); }
@@ -903,6 +991,7 @@ public final class Vault {
             return true;
         });
         for (Entity e : v.getEntities(EntityType.ITEM_DISPLAY, x -> x.getTags().contains("bp_throne") && !x.isVehicle())) e.discard();
+        airlocks(s, v);
         // airlocks: never both doors open; a flooded airlock with the hall door open is shut and drained at once; no water in the hall
         for (Region r : data(s).regions.values()) for (Cell c : r.cells) {
             if (!c.water || !v.isLoaded(c.outerDoor())) continue;
