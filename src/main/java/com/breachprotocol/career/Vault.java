@@ -610,7 +610,7 @@ public final class Vault {
             }
         for (ServerPlayer p : v.players()) if (p.getY() < Y - 6) {
             Region r = data(s).regions.get(p.getUUID());
-            int o = r == null ? Math.round(p.getX() / SPACING) * SPACING : r.ox();
+            int o = r == null ? (int) Math.round(p.getX() / SPACING) * SPACING : r.ox();
             p.teleportTo(o - 8 + 0.5, Y + 1, 0.5);
             p.setDeltaMovement(Vec3.ZERO); p.fallDistance = 0;
         }
