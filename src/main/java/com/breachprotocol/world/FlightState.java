@@ -23,6 +23,8 @@ public final class FlightState {
     public static final Set<Integer> CHARGING = ConcurrentHashMap.newKeySet();
     /** Client: other players (by entity id) running with a shoulder down. */
     public static final Set<Integer> RAMMING = ConcurrentHashMap.newKeySet();
+    /** Client: other players (by entity id) in the sixth running gear, the ninja run. */
+    public static final Set<Integer> NINJA = ConcurrentHashMap.newKeySet();
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();

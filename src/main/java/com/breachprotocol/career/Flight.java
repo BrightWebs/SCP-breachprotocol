@@ -44,8 +44,14 @@ public final class Flight {
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntity(p, new com.breachprotocol.network.FlightPosePayload(p.getId(), on ? 2 : 0));
     }
 
+    /** Sixth gear: the ninja run (arms swept back), shown to everyone watching. */
+    private static void ninjaPose(ServerPlayer p, boolean on) {
+        net.neoforged.neoforge.network.PacketDistributor.sendToPlayersTrackingEntity(p, new com.breachprotocol.network.FlightPosePayload(p.getId(), on ? 3 : 4));
+    }
+
     private static void stopRun(ServerPlayer p) {
-        RUN.remove(p.getUUID());
+        Integer was = RUN.remove(p.getUUID());
+        if (was != null && was >= 6) ninjaPose(p, false);
         if (RAM.remove(p.getUUID())) ramPose(p, false);
         step(p, false);
     }
@@ -72,7 +78,12 @@ public final class Flight {
             if (a[2].equals("gear")) {
                 int g = parse(a[3]);
                 if (g <= 0) stopRun(p);
-                else { RUN.put(p.getUUID(), Math.min(5, g)); step(p, true); } // step assist: up whole blocks without a jump
+                else {
+                    Integer was = RUN.put(p.getUUID(), Math.min(6, g));
+                    step(p, true); // step assist: up whole blocks without a jump
+                    boolean ninja = g >= 6, wasNinja = was != null && was >= 6;
+                    if (ninja != wasNinja) ninjaPose(p, ninja);
+                }
             } else {
                 boolean on = a[3].equals("1") && RUN.getOrDefault(p.getUUID(), 0) >= 5;
                 if (on) RAM.add(p.getUUID()); else RAM.remove(p.getUUID());
@@ -182,8 +193,9 @@ public final class Flight {
         RUN.entrySet().removeIf(en -> {
             ServerPlayer p = srv.getPlayerList().getPlayer(en.getKey());
             if (p == null) { RAM.remove(en.getKey()); return true; }
-            if (p.getAbilities().flying || Dominion.level(p) < 2) { RAM.remove(en.getKey()); ramPose(p, false); step(p, false); return true; }
+            if (p.getAbilities().flying || Dominion.level(p) < 2) { RAM.remove(en.getKey()); ramPose(p, false); if (en.getValue() >= 6) ninjaPose(p, false); step(p, false); return true; }
             if (RAM.contains(p.getUUID())) ram(p);
+            if (en.getValue() >= 6) p.fallDistance = 0; // off the top of a wall and down again, unhurt
             if (en.getValue() >= 2) {
                 ServerLevel l = p.serverLevel();
                 for (ServerPlayer q : l.players())

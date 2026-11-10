@@ -96,6 +96,10 @@ public final class SuperFlight {
             Vec3 f = p.position().add(p.getLookAngle().multiply(0.6, 0, 0.6));
             mc.level.addParticle(ParticleTypes.CRIT, f.x, p.getY() + 0.05, f.z, (Math.random() - 0.5) * 0.3, 0.1, (Math.random() - 0.5) * 0.3);
         }
+        if (runLaunch >= 0 && ticks >= runLaunch) {
+            runLaunch = -1;
+            if (canLaunch(p)) launch(p);
+        }
         if (pendingLaunch >= 0 && ticks >= pendingLaunch) {
             pendingLaunch = -1;
             charging = false;
@@ -276,9 +280,12 @@ public final class SuperFlight {
     // ================================================================== running
 
     /** Blocks per tick on foot: each sprint gear. Gear 2 breaks the sound barrier; from there you run on water. */
-    private static final double[] RUN = {0, 0.6, 1.0, 1.5, 2.1, 2.8};
-    private static int runGear, runIdle, runLastTap = -100, shiftDownAt = -100;
-    private static boolean runSprintWas, shiftWas, ramming;
+    private static final double[] RUN = {0, 0.6, 1.0, 1.5, 2.1, 2.8, 3.6};
+    /** Gear five: the shoulder; gear six: the ninja run, up walls. */
+    private static final int RAM_GEAR = 5, NINJA_GEAR = 6;
+    private static final double WALL_UP = 0.85;
+    private static int runGear, runIdle, runLastTap = -100, shiftDownAt = -100, jumpTap = -100, runLaunch = -1, wallTicks;
+    private static boolean runSprintWas, shiftWas, ramming, jumpWas, wallRun;
 
     static boolean running() { return runGear > 0; }
 
@@ -295,12 +302,19 @@ public final class SuperFlight {
             runLastTap = ticks;
         }
         runSprintWas = sprintKey;
-        if (!ok || !fwd) { if (runGear > 0 && (!ok || ++runIdle > 8)) runShift(p, 0); return; }
+        // gear five and up: double-tap jump and you're in the air at full speed
+        boolean jumpKey = free && o.keyJump.isDown();
+        if (ok && runGear >= RAM_GEAR && jumpKey && !jumpWas) {
+            if (ticks - jumpTap <= 7 && runLaunch < 0) { runLaunch = ticks + 1; jumpTap = -100; p.playSound(SoundEvents.WARDEN_SONIC_CHARGE, 0.5F, 1.8F); }
+            else jumpTap = ticks;
+        }
+        jumpWas = jumpKey;
+        if (!ok || !fwd) { wallRun = false; if (runGear > 0 && (!ok || ++runIdle > 8)) runShift(p, 0); return; }
         runIdle = 0;
         // a quick tap of crouch at the top gear: shoulder down, and through whatever's in front
         boolean sh = free && o.keyShift.isDown();
         if (sh && !shiftWas) shiftDownAt = ticks;
-        if (!sh && shiftWas && ticks - shiftDownAt <= 6 && runGear >= RUN.length - 1) setRam(p, !ramming);
+        if (!sh && shiftWas && ticks - shiftDownAt <= 6 && runGear >= RAM_GEAR) setRam(p, !ramming);
         shiftWas = sh;
         if (runGear == 0) return;
         p.setSprinting(true);
@@ -319,6 +333,41 @@ public final class SuperFlight {
             else if (mc.level.getFluidState(below).is(net.minecraft.tags.FluidTags.WATER) && vy <= 0) { vy = 0; onWater = true; p.setOnGround(true); }
         }
         if (ramming) tearAhead(p, h);
+        else if (runGear >= NINJA_GEAR && mc.level != null && !onWater) {
+            // the ninja run: what you can't step up you hop, what you can't hop you run straight up
+            int tall = faceAhead(p, dir);
+            boolean blocked = !mc.level.noCollision(p, p.getBoundingBox().move(dir.x * 0.55, 0.0, dir.z * 0.55));
+            if (wallRun) {
+                boolean roof = !mc.level.noCollision(p, p.getBoundingBox().move(0, 0.6, 0));
+                if (roof) { wallRun = false; }
+                else if (tall == 0) {
+                    // over the top: a flip up and onto it, still running
+                    wallRun = false;
+                    vy = 0.62;
+                    h = dir.scale(Math.max(1.0, RUN[runGear] * 0.4));
+                    p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.6F, 1.5F);
+                    punch = 6; shake = Math.max(shake, 3);
+                    for (int i = 0; i < 12; i++) mc.level.addParticle(ParticleTypes.CLOUD, p.getX() + (Math.random() - 0.5), p.getY(), p.getZ() + (Math.random() - 0.5), 0, 0.05, 0);
+                } else {
+                    vy = Math.min(WALL_UP, 0.35 + wallTicks * 0.1);
+                    h = dir.scale(0.15);
+                    wallTicks++;
+                    wallDust(p, dir);
+                }
+            } else if (blocked && tall >= 3) {
+                wallRun = true;
+                wallTicks = 0;
+                vy = 0.45;
+                h = dir.scale(0.15);
+                p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.5F, 1.8F);
+                shake = Math.max(shake, 2);
+            } else if (blocked && tall == 2 && (p.onGround() || vy > -0.2)) {
+                // two high: a running hop, without losing the stride
+                vy = Math.max(vy, 0.64);
+                p.playSound(SoundEvents.WOOL_STEP, 0.4F, 0.6F);
+            }
+            p.fallDistance = 0;
+        } else wallRun = false;
         p.setDeltaMovement(h.x, vy, h.z);
         if (mc.level != null) {
             if (onWater) for (int i = 0; i < 3; i++) mc.level.addParticle(ParticleTypes.SPLASH, p.getX() + (Math.random() - 0.5), p.getY() + 0.1, p.getZ() + (Math.random() - 0.5), -h.x * 0.2, 0.2, -h.z * 0.2);
@@ -328,12 +377,48 @@ public final class SuperFlight {
         if (punch > 0) punch--;
     }
 
+    /** How tall the face in front of you is, in whole blocks from your feet up (0: nothing in the way at your feet). */
+    private static int faceAhead(LocalPlayer p, Vec3 dir) {
+        Minecraft mc = Minecraft.getInstance();
+        double reach = p.getBbWidth() / 2 + 0.45;
+        int x = Mth.floor(p.getX() + dir.x * reach), z = Mth.floor(p.getZ() + dir.z * reach), y0 = Mth.floor(p.getY() + 0.05);
+        int n = 0;
+        for (int y = y0; y < y0 + 96; y++) {
+            var q = new net.minecraft.core.BlockPos(x, y, z);
+            if (mc.level.getBlockState(q).getCollisionShape(mc.level, q).isEmpty()) {
+                // room to stand on top (two clear), or it's only a gap in the wall
+                var q2 = q.above();
+                if (mc.level.getBlockState(q2).getCollisionShape(mc.level, q2).isEmpty()) break;
+            }
+            n++;
+        }
+        return n;
+    }
+
+    /** Running up a wall: grit off it under every stride, and the sound of the strides. */
+    private static void wallDust(LocalPlayer p, Vec3 dir) {
+        Minecraft mc = Minecraft.getInstance();
+        var q = net.minecraft.core.BlockPos.containing(p.getX() + dir.x * 0.8, p.getY() + 0.3, p.getZ() + dir.z * 0.8);
+        var st = mc.level.getBlockState(q);
+        if (st.isAir()) return;
+        for (int i = 0; i < 3; i++)
+            mc.level.addParticle(new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, st), p.getX() + dir.x * 0.4 + (Math.random() - 0.5) * 0.4, p.getY() + Math.random() * 0.4, p.getZ() + dir.z * 0.4 + (Math.random() - 0.5) * 0.4, -dir.x * 0.3, -0.2, -dir.z * 0.3);
+        if (wallTicks % 3 == 0) p.playSound(st.getSoundType().getStepSound(), 0.5F, 1.4F);
+    }
+
+    static boolean wallRunning(Player p) {
+        if (p == Minecraft.getInstance().player) return wallRun;
+        double dy = p.getY() - p.yo, dh = new Vec3(p.getX() - p.xo, 0, p.getZ() - p.zo).length();
+        return FlightState.NINJA.contains(p.getId()) && !p.onGround() && dy > 0.3 && dh < 0.35;
+    }
+
     private static void runShift(LocalPlayer p, int g) {
         int was = runGear;
         runGear = g;
         if (g == was) return;
         send("pow:run:gear:" + g);
-        if (g < RUN.length - 1 && ramming) setRam(p, false);
+        if (g < NINJA_GEAR) wallRun = false;
+        if (g < RAM_GEAR && ramming) setRam(p, false);
         if (g > was && g >= 2) boom(p, g, "run");
         else if (g > was) { p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.8F, 0.7F); punch = 5; shake = 3; }
     }
@@ -410,10 +495,13 @@ public final class SuperFlight {
         if (!flying && runGear == 0 || mc.options.hideGui || mc.player == null) return;
         GuiGraphics g = event.getGuiGraphics();
         if (!flying) {
-            String s = "SPRINT GEAR " + runGear + (runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : "");
-            String gs = runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR UP" : ramming ? "TAP CROUCH: STOP RAMMING" : "TAP CROUCH: SHOULDER DOWN, THROUGH ANYTHING";
+            String s = "SPRINT GEAR " + runGear + (runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : wallRun ? "  ·  UP THE WALL" : "");
+            String gs = runGear < RAM_GEAR ? "DOUBLE-TAP SPRINT: GEAR UP"
+                    : ramming ? "TAP CROUCH: STOP RAMMING  ·  DOUBLE-TAP JUMP: TAKE OFF"
+                    : runGear < NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 6  ·  TAP CROUCH: SHOULDER  ·  DOUBLE-TAP JUMP: TAKE OFF"
+                    : "RUN AT A WALL: UP IT  ·  TAP CROUCH: SHOULDER  ·  DOUBLE-TAP JUMP: TAKE OFF";
             int x = g.guiWidth() / 2, y = g.guiHeight() - 62;
-            g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
+            g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= NINJA_GEAR ? 0xFFB8E8FF : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
             PowerKeys.small(g, mc.font, gs, x - (int) (mc.font.width(gs) * 0.375F), y + 10, 0xFFA898C0);
             return;
         }
@@ -430,6 +518,22 @@ public final class SuperFlight {
         Player p = event.getEntity();
         double hRun = new Vec3(p.getX() - p.xo, 0, p.getZ() - p.zo).length();
         boolean me = p == Minecraft.getInstance().player;
+        if (style(p) == 6) {
+            float yaw = Mth.rotLerp(event.getPartialTick(), p.yBodyRotO, p.yBodyRot) * Mth.DEG_TO_RAD;
+            var ps = event.getPoseStack();
+            ps.pushPose();
+            if (wallRunning(p)) {
+                // feet on the wall, body out from it, running straight up
+                ps.translate(-Mth.sin(yaw) * 0.25, 0.1, Mth.cos(yaw) * 0.25);
+                ps.mulPose(new Quaternionf().rotateAxis(-Mth.HALF_PI, Mth.cos(yaw), 0, Mth.sin(yaw)));
+            } else {
+                // flat out and low, the way a ninja runs
+                float t = (float) Mth.clamp((hRun - 0.35) * 0.45, 0, 0.42) + 0.22F;
+                ps.mulPose(new Quaternionf().rotateAxis(t, Mth.cos(yaw), 0, Mth.sin(yaw)));
+            }
+            LEANED.add(p.getId());
+            return;
+        }
         if (!p.getAbilities().flying && !FlightState.lying(p) && (me ? runGear >= 1 : p.onGround() && hRun > 0.6) || style(p) == 5) {
             // running flat out: the body leans into it (further still with a shoulder down)
             float yaw = Mth.rotLerp(event.getPartialTick(), p.yBodyRotO, p.yBodyRot) * Mth.DEG_TO_RAD;
@@ -491,6 +595,7 @@ public final class SuperFlight {
         boolean me = p == Minecraft.getInstance().player;
         if (me ? charging : FlightState.CHARGING.contains(p.getId())) return 3;
         if (me ? ramming && runGear > 0 : FlightState.RAMMING.contains(p.getId())) return 5;
+        if (me ? runGear >= NINJA_GEAR && !flying : FlightState.NINJA.contains(p.getId()) && !p.getAbilities().flying && !FlightState.lying(p)) return 6;
         if (FlightState.lying(p)) return 2;
         if (p == Minecraft.getInstance().player) return flying ? 1 : 0;
         return AIR.getOrDefault(p.getId(), 0) > 12 ? 1 : 0;
@@ -510,8 +615,8 @@ public final class SuperFlight {
             }
             // no walking in mid-air; on foot at speed (ramming included) a full, steady stride
             int st = style(p);
-            if (st > 0 && st != 5) p.walkAnimation.setSpeed(0F);
-            else if (st == 5 || p == mc.player && runGear > 0) p.walkAnimation.setSpeed(1F);
+            if (st > 0 && st != 5 && st != 6) p.walkAnimation.setSpeed(0F);
+            else if (st == 5 || st == 6 || p == mc.player && runGear > 0) p.walkAnimation.setSpeed(1F);
         }
         AIR.keySet().retainAll(seen);
     }
@@ -542,6 +647,22 @@ public final class SuperFlight {
             m.rightArm.zRot = 0.25F;
             m.hat.copyFrom(m.head);
             return; // the legs keep running
+        }
+        if (st == 6) {
+            // the ninja run: arms swept straight back and a little out, head up and forward, legs flat out
+            float flick = Mth.sin(age * 0.9F) * 0.04F;
+            m.rightArm.xRot = 1.35F + flick;
+            m.rightArm.yRot = -0.1F;
+            m.rightArm.zRot = 0.18F;
+            m.leftArm.xRot = 1.35F - flick;
+            m.leftArm.yRot = 0.1F;
+            m.leftArm.zRot = -0.18F;
+            m.head.xRot = wallRunning(p) ? 0.1F : -0.45F;
+            // a longer stride than walking allows
+            m.rightLeg.xRot *= 1.5F;
+            m.leftLeg.xRot *= 1.5F;
+            m.hat.copyFrom(m.head);
+            return;
         }
         if (st == 3) {
             // the take-off stance: down on one knee, a fist planted on the ground, the other arm thrown back, eyes up

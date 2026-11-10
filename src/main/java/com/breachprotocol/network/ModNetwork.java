@@ -35,6 +35,8 @@ public final class ModNetwork {
         registrar.playToClient(FlightPosePayload.TYPE, FlightPosePayload.STREAM_CODEC, (payload, ctx) ->
                 ctx.enqueueWork(() -> {
                     int id = payload.entity();
+                    if (payload.state() == 3) { com.breachprotocol.world.FlightState.NINJA.add(id); return; }
+                    if (payload.state() == 4) { com.breachprotocol.world.FlightState.NINJA.remove(id); return; }
                     if (payload.state() == 1) com.breachprotocol.world.FlightState.CHARGING.add(id); else com.breachprotocol.world.FlightState.CHARGING.remove(id);
                     if (payload.state() == 2) com.breachprotocol.world.FlightState.RAMMING.add(id); else com.breachprotocol.world.FlightState.RAMMING.remove(id);
                 }));
