@@ -57,7 +57,10 @@ public final class PhoneActions {
             case "contact_decline" -> com.breachprotocol.career.Contacts.decline(p, arg);
             case "contact_remove" -> com.breachprotocol.career.Contacts.remove(p, arg);
             default -> {
-                if (action.startsWith("wf:")) com.breachprotocol.entity.Workforce.action(p, action.substring(3));
+                if (action.startsWith("msg_reply:")) { try { Career.reply(p, arg, Integer.parseInt(action.substring(10))); } catch (NumberFormatException ignored) {} }
+                else if (action.startsWith("cont:")) com.breachprotocol.career.Containment.ordered(p, action.substring(5));
+                else if (action.startsWith("inf:stop:")) com.breachprotocol.entity.McaFoundation.dismissInformant(p, action.substring(9));
+                else if (action.startsWith("wf:")) com.breachprotocol.entity.Workforce.action(p, action.substring(3));
                 else if (action.startsWith("dom:")) com.breachprotocol.career.Dominion.action(p, action, arg);
                 else if (action.startsWith("pow:")) {
                     String[] pa = action.split(":");

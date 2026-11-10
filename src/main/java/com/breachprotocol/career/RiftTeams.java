@@ -201,7 +201,9 @@ public final class RiftTeams {
             j.crew.clear();
             WorldNews.record(l.getServer(), WorldNews.Kind.RIFT_LOST, "rift", "a D-Class crew was pulled into a rift near " + j.x + ", " + j.z, -4, "");
             if (p != null) {
-                Career.message(p, O5.O5_5, "We lost the D-Class team at the rift near " + j.x + ", " + j.z + ". It pulled them in. It's still open. Send another, or go yourself.");
+                Career.message(p, O5.O5_5, "We lost the D-Class team at the rift near " + j.x + ", " + j.z + ". It pulled them in. It's still open. Send another, or go yourself.",
+                        new Career.Reply("Send another D-Class team.", "rift_dclass#" + j.riftId, "Another crew is on its way."),
+                        new Career.Reply("Send the MTF this time.", "rift_mtf#" + j.riftId, "MTF extraction team dispatched. They know what they're walking into."));
                 Career.changeStability(p, -1);
             }
             return;

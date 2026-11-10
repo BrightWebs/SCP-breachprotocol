@@ -19,8 +19,20 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         public String sender, body;
         public long time;
         public boolean read;
-        /** Sent by this player (player-to-player texts). */
+        /** Sent by this player (player-to-player texts, and your answers to orders). */
         public boolean out;
+        /** Messages that ask for a decision: the orders you can give in reply ({label, action, answer}). */
+        public int id;
+        public final java.util.List<String[]> replies = new java.util.ArrayList<>();
+        /** Which order you gave (-1: not answered yet). */
+        public int answered = -1;
+    }
+
+    public int nextMessageId = 1;
+
+    public Message findMessage(int id) {
+        for (Message m : messages) if (m.id == id) return m;
+        return null;
     }
 
     /** Another player whose number you have, or who asked for yours. */
@@ -193,14 +205,16 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         dirty = true;
     }
 
-    public void addMessage(String sender, String body, long time) {
+    public Message addMessage(String sender, String body, long time) {
         Message m = new Message();
+        m.id = nextMessageId++;
         m.sender = sender;
         m.body = body;
         m.time = time;
         messages.add(0, m);
         while (messages.size() > MAX_MESSAGES) messages.remove(messages.size() - 1);
         dirty = true;
+        return m;
     }
 
     public int unread() {
@@ -245,9 +259,21 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             mt.putLong("t", m.time);
             mt.putBoolean("r", m.read);
             if (m.out) mt.putBoolean("o", true);
+            mt.putInt("id", m.id);
+            if (!m.replies.isEmpty()) {
+                ListTag rp = new ListTag();
+                for (String[] r : m.replies) {
+                    CompoundTag rt = new CompoundTag();
+                    rt.putString("l", r[0]); rt.putString("a", r[1]); rt.putString("k", r[2]);
+                    rp.add(rt);
+                }
+                mt.put("rp", rp);
+                mt.putInt("ans", m.answered);
+            }
             msgs.add(mt);
         }
         t.put("messages", msgs);
+        t.putInt("nextMsg", nextMessageId);
         ListTag cs = new ListTag();
         for (Contact c : contacts) cs.add(c.save());
         t.put("contacts", cs);
@@ -320,6 +346,7 @@ public class CareerData implements INBTSerializable<CompoundTag> {
         testCounter = t.getInt("tests");
         builtTower = t.getBoolean("tower");
         messages.clear();
+        nextMessageId = Math.max(1, t.getInt("nextMsg"));
         for (Tag e : t.getList("messages", Tag.TAG_COMPOUND)) {
             CompoundTag mt = (CompoundTag) e;
             Message m = new Message();
@@ -328,6 +355,13 @@ public class CareerData implements INBTSerializable<CompoundTag> {
             m.time = mt.getLong("t");
             m.read = mt.getBoolean("r");
             m.out = mt.getBoolean("o");
+            m.id = mt.getInt("id");
+            for (Tag r : mt.getList("rp", Tag.TAG_COMPOUND)) {
+                CompoundTag rt = (CompoundTag) r;
+                m.replies.add(new String[]{rt.getString("l"), rt.getString("a"), rt.getString("k")});
+            }
+            m.answered = mt.contains("ans") ? mt.getInt("ans") : -1;
+            if (m.id == 0) m.id = nextMessageId++;
             messages.add(m);
         }
         contacts.clear();

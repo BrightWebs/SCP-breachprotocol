@@ -93,8 +93,11 @@ public final class Calendar {
             d.dirty = true;
             String body = "Administrator, the Council has been seated since " + when(w.at).substring(when(w.at).lastIndexOf(' ') + 1)
                     + " and they're waiting for you. Shall I tell them you're on your way? Your calendar has the options: on my way, tomorrow, or skip this week.";
-            if (sec != null) Career.message(p, sec + " (Secretary)", body);
-            else Career.message(p, O5.O5_7, "We are seated and waiting for you, Administrator.");
+            Career.Reply[] r = {new Career.Reply("Tell them I'm on my way.", "week_otw", "I've told them. They'll hold the floor for you."),
+                    new Career.Reply("Move it to tomorrow.", "week_next", "Done. Tomorrow, same time. I'll remind you."),
+                    new Career.Reply("Skip this week.", "week_skip", "I've let them know. They won't like it.")};
+            if (sec != null) Career.message(p, sec + " (Secretary)", body, r);
+            else Career.message(p, O5.O5_7, "We are seated and waiting for you, Administrator.", r);
         }
         if (n >= w.at + 3L * HOUR) {
             d.appts.remove(w);

@@ -1250,9 +1250,15 @@ public final class SiteTower extends FacilityBuilder {
         counterX(24, 27, 13, Y, N, 1, 25);
         set(26, Y + 2, 13, "paper_stack[facing=south,variant=1]");
         set(27, Y + 2, 13, "desk_lamp[facing=south,lit=true]");
+        bell(Y);
         // visitors wait along the east wall, clear of the lift and of the office door
         for (int z = 11; z <= 13; z++) set(T - 1, Y + 1, z, "ez_waiting_chairs[facing=west]");
     }
+
+    /** The bell on the front corner of the secretary's counter: ring it and she comes (see DeskBell). */
+    public static BlockPos bellSpot() { return new BlockPos(24, y(9) + 2, 13); }
+
+    private void bell(int Y) { set(24, Y + 2, 13, "minecraft:bell[attachment=floor,facing=north,powered=false]"); }
 
     /** A residence room (x0..x0+6): a bedside table with a lamp between the beds, a writing desk and chair. */
     private void roomFurniture(int x0, int Y) {
@@ -1269,7 +1275,7 @@ public final class SiteTower extends FacilityBuilder {
     // ================================================================== touching up an existing tower
 
     /** Layout revision. A tower built (or touched up) at this revision has every furniture fix. */
-    public static final int LAYOUT = 3;
+    public static final int LAYOUT = 4;
 
     /**
      * Brings an existing tower's furnishings up to the current layout, in place: only the pieces that
@@ -1282,6 +1288,13 @@ public final class SiteTower extends FacilityBuilder {
         SiteTower b = new SiteTower(l, origin);
         if (from < 2) b.touchUp();
         if (from < 3) b.touchUp3();
+        if (from < 4) b.touchUp4();
+    }
+
+    /** Revision 4: the bell on the secretary's counter. */
+    private void touchUp4() {
+        int Y = y(9);
+        if (is(24, Y + 1, 13, "reception_desk") && l.getBlockState(at(24, Y + 2, 13)).isAir()) bell(Y);
     }
 
     /** Revision 3: the lounge couch in the Administrator's office turns round to face the coffee table. */

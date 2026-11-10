@@ -115,6 +115,45 @@ public final class Career {
         message(p, from.sender(), body);
     }
 
+    /** An order you can give in answer to a message: what you say, what it does (a phone action, "name#arg"), and what they say back. */
+    public record Reply(String label, String action, String answer) {}
+
+    /** A message that asks for your decision: the orders appear under it on the phone. */
+    public static void message(ServerPlayer p, String sender, String body, Reply... replies) {
+        CareerData d = data(p);
+        CareerData.Message m = d.addMessage(sender, body, p.level().getGameTime());
+        for (Reply r : replies) if (r != null) m.replies.add(new String[]{r.label(), r.action(), r.answer() == null ? "" : r.answer()});
+        p.displayClientMessage(Component.literal("✉ ").withStyle(ChatFormatting.AQUA)
+                .append(Component.literal(sender).withStyle(ChatFormatting.WHITE))
+                .append(Component.literal(m.replies.isEmpty() ? " · open your phone" : " needs your orders · open your phone").withStyle(ChatFormatting.GRAY)), true);
+        p.playNotifySound(ModSounds.PHONE_MESSAGE.get(), SoundSource.PLAYERS, 0.8F, 1.0F);
+        sync(p);
+    }
+
+    public static void message(ServerPlayer p, O5 from, String body, Reply... replies) { message(p, from.sender(), body, replies); }
+
+    /** You gave an order in reply: it's said, it's done, and they answer. */
+    public static void reply(ServerPlayer p, int id, int choice) {
+        CareerData d = data(p);
+        CareerData.Message m = d.findMessage(id);
+        if (m == null || m.answered >= 0 || choice < 0 || choice >= m.replies.size()) return;
+        String[] r = m.replies.get(choice);
+        m.answered = choice;
+        CareerData.Message mine = d.addMessage(m.sender, r[0], p.level().getGameTime());
+        mine.out = true;
+        mine.read = true;
+        String act = r[1];
+        int arg = 0, hash = act.indexOf('#');
+        if (hash >= 0) { try { arg = Integer.parseInt(act.substring(hash + 1)); } catch (NumberFormatException ignored) {} act = act.substring(0, hash); }
+        if (!act.isEmpty() && !act.startsWith("msg_reply")) com.breachprotocol.network.PhoneActions.handle(p, act, arg);
+        if (!r[2].isEmpty()) {
+            CareerData.Message back = d.addMessage(m.sender, r[2], p.level().getGameTime() + 1);
+            back.read = true;
+        }
+        d.dirty = true;
+        sync(p);
+    }
+
     // ------------------------------------------------------------------ xp + ranks
 
     /**

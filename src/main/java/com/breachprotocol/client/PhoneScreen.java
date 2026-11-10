@@ -798,13 +798,19 @@ public class PhoneScreen extends Screen {
             map.put(s, prev == null ? new ThreadInfo(s, m.getString("b"), m.getLong("t"), un) : new ThreadInfo(s, prev.last(), prev.time(), un));
         }
         if (map.isEmpty()) { empty(g, y, "No messages", "The Council will be in touch."); return y + 80; }
+        java.util.Set<String> waiting = new java.util.HashSet<>();
+        for (Tag e : t().getList("messages", Tag.TAG_COMPOUND)) {
+            CompoundTag m = (CompoundTag) e;
+            if (!m.getList("rp", Tag.TAG_COMPOUND).isEmpty() && m.getInt("ans") < 0) waiting.add(m.getString("s"));
+        }
         for (ThreadInfo th : map.values()) {
             int h = 32;
             if (over(SX, y, SW, h)) rect(g, SX, y, SW, h, 0xFF19202A);
             avatar(g, th.sender(), SX + 18, y + 16, 11);
             text(g, ellipsize(nick(th.sender()), SW - 80), SX + 34, y + 5, 0xFFFFFFFF);
             text(g, ago(th.time()), SX + SW - 8 - font.width(ago(th.time())), y + 5, 0xFF7A8794);
-            text(g, ellipsize(th.last(), SW - 56), SX + 34, y + 17, th.unread() > 0 ? 0xFFDDE7F0 : 0xFF8794A0);
+            if (waiting.contains(th.sender())) text(g, "\u25B6 Waiting for your orders", SX + 34, y + 17, AMBER);
+            else text(g, ellipsize(th.last(), SW - 56), SX + 34, y + 17, th.unread() > 0 ? 0xFFDDE7F0 : 0xFF8794A0);
             if (th.unread() > 0) circle(g, SX + SW - 12, y + 21, 3, 0xFF2F9BFF);
             rect(g, SX + 34, y + h - 1, SW - 34, 1, 0xFF1C232C);
             hit(SX, y, SW, h, () -> { thread = th.sender(); go(View.THREAD); });
@@ -861,6 +867,24 @@ public class PhoneScreen extends Screen {
             int mw = (int) (font.width(meta) * 0.75F);
             small(g, meta, out ? x + w - mw / 2 : x + mw / 2, y, Terminal.DIM);
             y += 10;
+            // a message that wants your orders: answer it here
+            ListTag rp = m.getList("rp", Tag.TAG_COMPOUND);
+            if (!out && !rp.isEmpty() && m.getInt("ans") < 0) {
+                small(g, "YOUR ORDERS", x + 22, y, Terminal.MID);
+                y += 9;
+                for (int i = 0; i < rp.size(); i++) {
+                    String label = rp.getCompound(i).getString("l");
+                    List<FormattedCharSequence> ls2 = font.split(Component.literal("\u21B3 " + label), w - 14);
+                    int bh = ls2.size() * 10 + 6;
+                    boolean hov = over(x + 4, y, w - 4, bh);
+                    rbox(g, x + 4, y, w - 4, bh, 6, hov ? 0xFF0F3A1C : 0xFF0A2412, hov ? Terminal.BRIGHT : Terminal.MID);
+                    for (int k = 0; k < ls2.size(); k++) g.drawString(font, ls2.get(k), x + 10, y + 4 + k * 10, hov ? Terminal.BRIGHT : Terminal.GREEN, false);
+                    final int id = m.getInt("id"), choice = i;
+                    hit(x + 4, y, w - 4, bh, () -> { send("msg_reply:" + choice, id); scrollToBottom = true; });
+                    y += bh + 3;
+                }
+                y += 4;
+            }
         }
         if (contactIndex(thread) >= 0) {
             y += 4;

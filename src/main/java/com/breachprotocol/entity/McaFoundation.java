@@ -40,6 +40,19 @@ import java.util.*;
 public final class McaFoundation {
     private McaFoundation() {}
 
+    /** From a reply: an informant you've told to stop watching for anomalies. */
+    public static void dismissInformant(net.minecraft.server.level.ServerPlayer p, String uuid) {
+        java.util.UUID id;
+        try { id = java.util.UUID.fromString(uuid); } catch (IllegalArgumentException e) { return; }
+        for (net.minecraft.server.level.ServerLevel l : p.server.getAllLevels()) {
+            net.minecraft.world.entity.Entity e = l.getEntity(id);
+            if (e != null && e.getPersistentData().hasUUID("bp_informant") && e.getPersistentData().getUUID("bp_informant").equals(p.getUUID())) {
+                e.getPersistentData().remove("bp_informant");
+                return;
+            }
+        }
+    }
+
     public static void install() { McaHooks.install(McaFoundation::condition, McaFoundation::action); }
 
     // ================================================================== employees (villagers on the payroll)
@@ -186,7 +199,10 @@ public final class McaFoundation {
                     pd.putInt("bp_saw_z", m.getBlockZ());
                     if (fresh && pd.hasUUID("bp_informant")) {
                         ServerPlayer p = s.getPlayerList().getPlayer(pd.getUUID("bp_informant"));
-                        if (p != null) Career.message(p, v.getName().getString() + " (informant)", "I saw it. The thing you told me to watch for. Near " + m.getBlockX() + ", " + m.getBlockZ() + ". I didn't go closer. You said not to.");
+                        if (p != null) Career.message(p, v.getName().getString() + " (informant)", "I saw it. The thing you told me to watch for. Near " + m.getBlockX() + ", " + m.getBlockZ() + ". I didn't go closer. You said not to.",
+                                com.breachprotocol.career.Clearance.effective(p) >= 5 && com.breachprotocol.career.Clearance.linked(p, "orbital")
+                                        ? new Career.Reply("Stay inside. I'm calling in a strike.", "orbital_at:" + m.getBlockX() + ":" + m.getBlockZ(), "I'm inside. I heard it. Is it over?") : null,
+                                new Career.Reply("Good. You've done enough: you can stop watching.", "inf:stop:" + v.getUUID(), "Thank you. I'll sleep tonight."));
                     }
                     break;
                 }
