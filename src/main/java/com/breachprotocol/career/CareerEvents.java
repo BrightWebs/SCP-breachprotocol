@@ -73,7 +73,7 @@ public final class CareerEvents {
             // SCP Unleashed's Gate Guardian spares anything invulnerable (Scp001GateStrike.immortal),
             // and only shoves away things that carry its avoid marker - which SCP-Omega must not have.
             if (p.getTags().contains(GATE_SPARED)) p.removeTag(GATE_SPARED);
-            if (!p.isInvulnerable()) p.setInvulnerable(true);
+            shield(p);
             p.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 400, 0, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.REGENERATION, 60, 1, true, false, false));
             p.addEffect(new MobEffectInstance(MobEffects.DAMAGE_RESISTANCE, 60, 1, true, false, false));
@@ -106,6 +106,18 @@ public final class CareerEvents {
 
     /** SCP Unleashed's gate-avoider tag: avoiders get pushed out of the Gate. Removed from SCP-Omega. */
     public static final String GATE_SPARED = "scp001gate_avoider";
+
+    /**
+     * SCP-Ω's invulnerability follows its Temperament. Minecraft creatures never go for an invulnerable
+     * player, so while either anomalies or other creatures are set to treat you "as anyone", you aren't
+     * invulnerable: they see you, come for you and hit you (and you still can't die: see onDeath). Only
+     * when both are set to leave you be, or fear you, are you untouchable again (which is also what SCP
+     * Unleashed's Gate Guardian looks for when it decides whom to spare).
+     */
+    public static void shield(ServerPlayer p) {
+        boolean on = Career.isAscended(p) && Dominion.auraAnomalies(p) != 0 && Dominion.auraCreatures(p) != 0;
+        if (p.isInvulnerable() != on && !p.isCreative() && !p.isSpectator()) p.setInvulnerable(on);
+    }
 
     public static void ascend(ServerPlayer p, CareerData d) {
         p.removeTag(GATE_SPARED);

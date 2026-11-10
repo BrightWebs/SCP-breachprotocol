@@ -97,6 +97,7 @@ public final class Dominion {
                 boolean anomalies = a[2].equals("a");
                 int n = Math.max(0, Math.min(2, Integer.parseInt(a[3])));
                 p.getPersistentData().putInt(anomalies ? "bp_aura_a" : "bp_aura_c", n);
+                CareerEvents.shield(p); // at once, not at the next second
                 String what = anomalies ? "The anomalies" : "Every other living thing";
                 String[] say = {what + " see you as one of them. Whatever wants to fight you, will.",
                         what + " remember what you are. None of them will raise a hand to you.",
