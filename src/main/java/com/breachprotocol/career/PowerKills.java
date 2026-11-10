@@ -218,6 +218,24 @@ public final class PowerKills {
         take(pd.killer(), pd.skills());
     }
 
+    /**
+     * A creature killed by a power gives its XP straight to whoever used it (it's usually far off, where the
+     * orbs would never be picked up), and twice over for the Administrator and SCP-Ω.
+     */
+    @SubscribeEvent(priority = EventPriority.LOW)
+    public static void xp(net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent event) {
+        LivingEntity v = event.getEntity();
+        if (v.level().isClientSide() || event.isCanceled()) return;
+        ServerPlayer p = powerKiller(v, null);
+        if (p == null || p.isRemoved()) return;
+        int xp = event.getDroppedExperience();
+        if (xp <= 0) return;
+        if (Vault.chief(p)) xp *= 2;
+        event.setDroppedExperience(0);
+        p.giveExperiencePoints(xp);
+        p.playNotifySound(net.minecraft.sounds.SoundEvents.EXPERIENCE_ORB_PICKUP, net.minecraft.sounds.SoundSource.PLAYERS, 0.3F, 0.9F + p.getRandom().nextFloat() * 0.3F);
+    }
+
     /** The player whose power (or Rage, or ram) brought this down, if one did in the last few seconds. */
     private static ServerPlayer powerKiller(LivingEntity v, DamageSource src) {
         CompoundTag t = v.getPersistentData();
