@@ -69,8 +69,9 @@ public final class ManasBridge {
     static void pressed(ServerPlayer p, int mode) {
         boolean crouch = p.isShiftKeyDown();
         BreachProtocol.LOGGER.info("Shapeshift used by {} (mode {}, {})", p.getGameProfile().getName(), mode, crouch ? "crouching" : "standing");
+        // Mimic: become what you're looking at; crouch to come back. Shapeshift: the menu of your forms (with the way back in it); crouch to come back at once
         if (mode == 0) { if (crouch) revert(p); else copy(p); }
-        else { if (crouch) menu(p); else revert(p); }
+        else { if (crouch && shifted(p)) revert(p); else menu(p); }
     }
 
     private static void menu(ServerPlayer p) {

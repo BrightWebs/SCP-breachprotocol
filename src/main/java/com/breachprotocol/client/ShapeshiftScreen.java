@@ -46,21 +46,6 @@ public class ShapeshiftScreen extends Screen {
 
     public ShapeshiftScreen() { super(Component.literal("Shapeshift")); }
 
-    /** The Shapeshift key (J by default): straight to the menu. */
-    public static final net.minecraft.client.KeyMapping KEY = new net.minecraft.client.KeyMapping("key.breachprotocol.shapeshift", com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_J, "key.categories.breachprotocol");
-
-    static void key() {
-        Minecraft mc = Minecraft.getInstance();
-        while (KEY.consumeClick()) {
-            if (mc.screen != null || mc.player == null) continue;
-            if (!ClientCareerState.tag.getBoolean("shapeHas")) {
-                mc.player.displayClientMessage(Component.literal("You don't have Shapeshift (the Administrator's, with Manas Reborn).").withStyle(net.minecraft.ChatFormatting.GRAY), true);
-                continue;
-            }
-            mc.setScreen(new ShapeshiftScreen());
-        }
-    }
-
     private static List<String> known(String key) {
         List<String> out = new ArrayList<>();
         for (net.minecraft.nbt.Tag t : ClientCareerState.tag.getList(key, net.minecraft.nbt.Tag.TAG_STRING)) out.add(t.getAsString());

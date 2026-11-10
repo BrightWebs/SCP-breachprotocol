@@ -68,7 +68,7 @@ public final class PowerKeys {
     @EventBusSubscriber(modid = BreachProtocol.MODID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
     public static final class Keys {
         @SubscribeEvent
-        public static void register(RegisterKeyMappingsEvent event) { for (KeyMapping k : SLOTS) event.register(k); event.register(CONSOLE); event.register(ShapeshiftScreen.KEY); }
+        public static void register(RegisterKeyMappingsEvent event) { for (KeyMapping k : SLOTS) event.register(k); event.register(CONSOLE); }
     }
 
     // ================================================================== the loadout (client-side, saved to config)
@@ -207,7 +207,7 @@ public final class PowerKeys {
         if (flash0 > 0) flash0--;
         if (flash1 > 0) flash1--;
         if (mc.level != null && mc.player != null && mc.player.tickCount % 40 == 0) look(mc);
-        if (mc.player != null) { VaultScreen.watch(); ShapeshiftScreen.watch(); ShapeshiftScreen.key(); }
+        if (mc.player != null) { VaultScreen.watch(); ShapeshiftScreen.watch(); }
         while (CONSOLE.consumeClick()) if (mc.screen == null) openConsole();
         for (int i = 0; i < 2; i++) {
             KeyMapping k = SLOTS[i];

@@ -18,8 +18,8 @@ import java.util.List;
  * <ul>
  * <li><b>Mimic</b>: use it and become, at once, whatever you're looking at, creature or block. Crouch
  *     and use it to come back.</li>
- * <li><b>Shapeshift</b>: crouch and use it for the menu of every creature and block there is; pick one.
- *     Use it (standing) to come back.</li>
+ * <li><b>Shapeshift</b>: use it for the menu: your forms (or everything), Polymorph for creatures,
+ *     Mimic for objects, searchable, with the way back in it. Crouch and use it to come back at once.</li>
  * </ul>
  * The forms are Manas Reborn's own (Polymorph's for creatures, Mimicry's for blocks).
  *
