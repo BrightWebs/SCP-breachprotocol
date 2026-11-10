@@ -130,7 +130,10 @@ public class VaultScreen extends Screen {
         bx = button(g, bx, fy, inside ? "Leave the Vault" : "Enter the Vault", AC, mx, my, () -> { send("vault:go"); onClose(); }) + 4;
         bx = button(g, bx, fy, v.getBoolean("seated") ? "On your throne" : "Take the throne", 0xFFE0B040, mx, my, () -> { send("vault:throne"); onClose(); }) + 4;
         bx = button(g, bx, fy, "Rebuild", 0xFF80C8FF, mx, my, () -> send("vault:rebuild")) + 4;
-        if (bx < x + pw - 10) small(g, "REBUILD: EVERY WALL AS BUILT, EVERY CAPTIVE BACK IN ITS CELL", bx + 4, fy + 6, DIM);
+        boolean trapMode = PowerKeys.vaultTrap();
+        bx = button(g, bx, fy, trapMode ? "Key: Trap" : "Key: Open", trapMode ? BAD : MUTED, mx, my, () -> PowerKeys.setVaultTrap(!trapMode)) + 4;
+        String note = trapMode ? "A TAP OF THE POWER KEY TRAPS WHAT YOU LOOK AT" : "SHIFT+TAP THE POWER KEY TO SWITCH TO TRAP";
+        if (bx + 4 + font.width(note) * 0.75F < x + pw - 10) small(g, note, bx + 4, fy + 6, DIM);
         int cx = x + 10, cy = y + 34, cw = pw - 20, ch = ph - 34 - 30;
         if (tab == 0) cells(g, v, cx, cy, cw, ch, mx, my);
         else storeroom(g, cx, cy, cw, ch, mx, my);
@@ -224,40 +227,39 @@ public class VaultScreen extends Screen {
     private void storeroom(GuiGraphics g, int x, int y, int w, int h, int mx, int my) {
         hover = ItemStack.EMPTY;
         // the index: twenty chests, how full each is; click to jump
-        int iw = 84;
+        int iw = 64;
         g.fill(x, y, x + iw, y + h, PANEL);
         frame(g, x, y, iw, h, LINE);
         int total = 0;
         for (var c : chests) total += c.size();
-        small(g, total + " / " + (chests.size() * 54) + " SLOTS", x + 5, y + 5, MUTED);
-        int cellW = (iw - 12) / 2, cellH = Math.max(12, Math.min(20, (h - 36) / 10));
+        small(g, total + "/" + (chests.size() * 54), x + 5, y + 5, MUTED);
+        int cellW = (iw - 12) / 2, cellH = Math.max(12, Math.min(22, (h - 20) / 10));
         int blockH = 16 + 6 * 18 + 8;
         for (int k = 0; k < chests.size(); k++) {
             int col = k / 10, row = k % 10, cxx = x + 4 + col * (cellW + 4), cyy = y + 16 + row * cellH;
             float fill = chests.get(k).size() / 54F;
-            boolean hov = in(mx, my, cxx, cyy, cellW, cellH - 2), cur = boardScroll / blockH == k;
+            boolean hov = in(mx, my, cxx, cyy, cellW, cellH - 2), cur = (boardScroll + blockH / 3) / blockH == k;
             g.fill(cxx, cyy, cxx + cellW, cyy + cellH - 2, cur ? 0x50402868 : hov ? 0x25FFFFFF : 0x10FFFFFF);
             g.fill(cxx, cyy + cellH - 4, cxx + (int) (cellW * fill), cyy + cellH - 2, fill >= 1 ? BAD : AC);
             small(g, String.format("%02d", k + 1), cxx + 3, cyy + (cellH - 8) / 2, cur ? TEXT : MUTED);
             final int n = k;
             hits.add(new Hit(cxx, cyy, cellW, cellH - 2, () -> boardScroll = n * blockH));
         }
-        button(g, x + 4, y + h - 18, "Store held", OK, mx, my, () -> send("vault:put"));
         // the board: every chest on one scrolling wall
-        boardX = x + iw + 8; boardY = y; boardW = w - iw - 8; boardH = h;
+        boardX = x + iw + 6; boardY = y; boardW = 9 * 18 + 16; boardH = h;
         g.fill(boardX, boardY, boardX + boardW, boardY + boardH, PANEL);
         frame(g, boardX, boardY, boardW, boardH, LINE);
         int max = Math.max(0, chests.size() * blockH - boardH + 4);
         boardScroll = Math.max(0, Math.min(boardScroll, max));
-        int gw = 9 * 18, gx = boardX + (boardW - 8 - gw) / 2;
+        int gw = 9 * 18, gx = boardX + 5;
         g.enableScissor(boardX + 1, boardY + 1, boardX + boardW - 1, boardY + boardH - 1);
         for (int k = 0; k < chests.size(); k++) {
             int top = boardY + 4 + k * blockH - boardScroll;
             if (top > boardY + boardH || top + blockH < boardY) continue;
             List<Map.Entry<Integer, ItemStack>> items = chests.get(k);
             g.drawString(font, "CHEST " + String.format("%02d", k + 1), gx, top + 2, AC, false);
-            String fill = items.size() + " / 54";
-            small(g, k < 10 ? "NORTH WALL  ·  " + fill : "SOUTH WALL  ·  " + fill, gx + gw - (int) (font.width((k < 10 ? "NORTH WALL  ·  " : "SOUTH WALL  ·  ") + fill) * 0.75F), top + 4, MUTED);
+            String fill = (k < 10 ? "N  ·  " : "S  ·  ") + items.size() + "/54";
+            small(g, fill, gx + gw - (int) (font.width(fill) * 0.75F), top + 4, MUTED);
             int sy = top + 14;
             ItemStack[] grid = new ItemStack[54];
             for (var en : items) if (en.getKey() >= 0 && en.getKey() < 54) grid[en.getKey()] = en.getValue();
@@ -279,13 +281,39 @@ public class VaultScreen extends Screen {
             }
         }
         g.disableScissor();
-        // the scrollbar
         if (max > 0) {
             int track = boardH - 8, knob = Math.max(16, track * boardH / (chests.size() * blockH));
             int ky = boardY + 4 + (int) ((track - knob) * (boardScroll / (float) max));
             g.fill(boardX + boardW - 5, boardY + 4, boardX + boardW - 3, boardY + 4 + track, 0x20FFFFFF);
             g.fill(boardX + boardW - 5, ky, boardX + boardW - 3, ky + knob, AC);
         }
+        // your own inventory: click a stack to store it, shift-click to store every stack of that kind
+        int ix = boardX + boardW + 6, iwid = x + w - ix;
+        g.fill(ix, y, ix + iwid, y + h, PANEL);
+        frame(g, ix, y, iwid, h, LINE);
+        g.drawString(font, "YOUR INVENTORY", ix + 6, y + 5, AC, false);
+        var inv = Minecraft.getInstance().player.getInventory();
+        int ggx = ix + (iwid - 9 * 18) / 2, ggy = y + 18;
+        for (int r = 0; r < 4; r++) for (int c = 0; c < 9; c++) {
+            int slot = r < 3 ? 9 + r * 9 + c : c;
+            int sx = ggx + c * 18, sy = ggy + r * 18 + (r == 3 ? 5 : 0);
+            g.fill(sx, sy, sx + 17, sy + 17, 0xFF0C0914);
+            frame(g, sx, sy, 17, 17, r == 3 ? 0x40B890FF : 0x22FFFFFF);
+            ItemStack st = inv.getItem(slot);
+            if (st.isEmpty()) continue;
+            g.renderItem(st, sx, sy);
+            g.renderItemDecorations(font, st, sx, sy);
+            if (in(mx, my, sx, sy, 17, 17)) { g.fill(sx, sy, sx + 17, sy + 17, 0x40FFFFFF); hover = st; }
+            final int sl = slot;
+            hits.add(new Hit(sx, sy, 17, 17, () -> send("vault:inv:" + sl + (Screen.hasShiftDown() ? ":all" : ""))));
+        }
+        int ty = ggy + 4 * 18 + 10;
+        small(g, "CLICK: STORE THAT STACK", ggx, ty, MUTED);
+        small(g, "SHIFT+CLICK: EVERY STACK OF IT", ggx, ty + 9, MUTED);
+        small(g, "CLICK A CHEST'S ITEM: TAKE IT", ggx, ty + 18, MUTED);
+        int by2 = y + h - 22;
+        int nb = button(g, ggx, by2, "Store all", OK, mx, my, () -> send("vault:rest"));
+        small(g, "HOTBAR STAYS", nb + 5, by2 + 6, DIM);
         if (!hover.isEmpty()) g.renderTooltip(font, hover, mx, my);
     }
 

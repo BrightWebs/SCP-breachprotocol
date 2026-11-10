@@ -126,6 +126,20 @@ public final class PowerKeys {
     /** A tap-on, tap-off power that's on right now (time stop, rage). */
     static boolean active(Powers.Power p) { return p != null && ClientCareerState.tag.getCompound("tog").getBoolean(p.id()); }
 
+    /** The Vault power's mode: a tap opens the Vault screen, or (trap mode) takes whatever you're looking at straight in. */
+    static boolean vaultTrap() { load(); return "trap".equals(CFG.getProperty("vault.mode", "open")); }
+
+    static void setVaultTrap(boolean trap) {
+        load();
+        CFG.setProperty("vault.mode", trap ? "trap" : "open");
+        save();
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null) {
+            mc.player.displayClientMessage(net.minecraft.network.chat.Component.literal(trap ? "The Vault: TRAP. A tap takes what you're looking at. Shift+tap to open it instead." : "The Vault: OPEN. A tap opens the Vault. Shift+tap to trap instead.").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), true);
+            mc.player.playSound(SoundEvents.AMETHYST_BLOCK_CHIME, 0.5F, trap ? 0.7F : 1.3F);
+        }
+    }
+
     static boolean auto(Powers.Power p) { return p != null && ClientCareerState.tag.getCompound("auto").contains(p.id()); }
 
     static void setAuto(Powers.Power p, boolean on) {
@@ -203,7 +217,8 @@ public final class PowerKeys {
             else if (held[i] > 0) {
                 if (!adjusted[i] && held[i] < HOLD + 4) {
                     Powers.Power p = slot(i);
-                    if (Screen.hasShiftDown() && p != null && Powers.automatic(p)) setAuto(p, !auto(p));
+                    if (Screen.hasShiftDown() && p != null && p.id().equals("vault")) setVaultTrap(!vaultTrap());
+                    else if (Screen.hasShiftDown() && p != null && Powers.automatic(p)) setAuto(p, !auto(p));
                     else use(i);
                 }
                 held[i] = 0;
@@ -216,7 +231,11 @@ public final class PowerKeys {
         Powers.Power p = slot(i);
         if (p == null) return;
         Minecraft mc = Minecraft.getInstance();
-        if (p.id().equals("vault")) { mc.setScreen(new VaultScreen()); return; }
+        if (p.id().equals("vault")) {
+            if (vaultTrap()) { PacketDistributor.sendToServer(new PhoneActionPayload("vault:trap", 0)); if (i == 0) flash0 = 8; else flash1 = 8; }
+            else mc.setScreen(new VaultScreen());
+            return;
+        }
         if (cooldownLeft(p) > 0) { mc.player.playSound(SoundEvents.NOTE_BLOCK_BASS.value(), 0.4F, 0.5F); return; }
         PacketDistributor.sendToServer(new PhoneActionPayload("pow:" + p.id() + ":" + range(p), 0));
         if (i == 0) flash0 = 8; else flash1 = 8;
@@ -309,6 +328,12 @@ public final class PowerKeys {
         if (key.length() > 3) key = key.substring(0, 3);
         g.drawString(f, key, x + s - 3 - f.width(key), y + 3, 0xFFD8D0E8, false);
         if (p.rMax() > 0) small(g, f, range(p) + "m", x + 3, y + s - 9, 0xFFB8B0C8);
+        if (p.id().equals("vault")) {
+            String badge = vaultTrap() ? "TRAP" : "OPEN";
+            int bw = (int) (f.width(badge) * 0.75F) + 4;
+            g.fill(x + s - 2 - bw, y + s - 10, x + s - 2, y + s - 2, vaultTrap() ? 0xFFE07070 : col);
+            small(g, f, badge, x + s - bw, y + s - 8, 0xFF0A0710);
+        }
         if (on) {
             String badge = active(p) ? "ON" : "AUTO";
             int bw = (int) (f.width(badge) * 0.75F) + 4;
@@ -347,7 +372,7 @@ public final class PowerKeys {
             g.fill(x + 6, y + 36, x + 6 + (int) (bw * (r - p.rMin()) / (float) Math.max(1, p.rMax() - p.rMin())), y + 39, 0xFF000000 | p.colour());
             small(g, f, "RANGE " + r + "M  (" + p.rMin() + "-" + p.rMax() + ")", x + 6, y + 42, 0xFFB8B0C8);
         }
-        small(g, f, "SCROLL: POWER  ·  SHIFT+SCROLL: RANGE" + (Powers.automatic(p) ? "  ·  SHIFT+TAP: AUTO" : ""), x + 6, y + 54, 0xFF6A6080);
+        small(g, f, "SCROLL: POWER  ·  SHIFT+SCROLL: RANGE" + (Powers.automatic(p) ? "  ·  SHIFT+TAP: AUTO" : p.id().equals("vault") ? "  ·  SHIFT+TAP: OPEN / TRAP" : ""), x + 6, y + 54, 0xFF6A6080);
     }
 
     static void small(GuiGraphics g, Font f, String s, int x, int y, int c) {

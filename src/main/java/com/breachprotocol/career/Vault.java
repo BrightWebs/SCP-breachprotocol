@@ -58,6 +58,8 @@ public final class Vault {
 
     public static final ResourceKey<Level> DIM = ResourceKey.create(Registries.DIMENSION, ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "vault"));
     private static final int Y = 64, SPACING = 4000, CHESTS = 20;
+    /** Placed quietly: no knock-on updates, so nothing pops off its wall or floor while the Vault is being built or patched. */
+    private static final int F = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS;
 
     // ================================================================== who owns which part of it
 
@@ -172,7 +174,7 @@ public final class Vault {
     }
 
     private static void box(ServerLevel v, int x0, int y0, int z0, int x1, int y1, int z1, BlockState s) {
-        for (BlockPos q : BlockPos.betweenClosed(x0, y0, z0, x1, y1, z1)) v.setBlock(q, s, 2);
+        for (BlockPos q : BlockPos.betweenClosed(x0, y0, z0, x1, y1, z1)) v.setBlock(q, s, F);
     }
 
     private static BlockState mc(String id) { return net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(ResourceLocation.parse(id)).defaultBlockState(); }
@@ -193,14 +195,14 @@ public final class Vault {
             else if (edge && !(q.getX() == o - 4 && Math.abs(q.getZ()) <= 3 && q.getY() <= Y + 6)) st = wall;
             else if (chests.contains(q.asLong())) continue;
             else st = air;
-            v.setBlock(q, st, 2);
+            v.setBlock(q, st, F);
         }
         // twenty double chests: ten along each long wall (a chest that's already there keeps its contents)
         for (int k = 0; k < CHESTS; k++) {
             boolean north = k < 10;
             BlockState c = Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, north ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH);
-            v.setBlock(chest(o, k, 0), c.setValue(ChestBlock.TYPE, north ? ChestType.RIGHT : ChestType.LEFT), 2);
-            v.setBlock(chest(o, k, 1), c.setValue(ChestBlock.TYPE, north ? ChestType.LEFT : ChestType.RIGHT), 2);
+            v.setBlock(chest(o, k, 0), c.setValue(ChestBlock.TYPE, north ? ChestType.RIGHT : ChestType.LEFT), F);
+            v.setBlock(chest(o, k, 1), c.setValue(ChestBlock.TYPE, north ? ChestType.LEFT : ChestType.RIGHT), F);
         }
         r.built = true;
     }
@@ -217,7 +219,7 @@ public final class Vault {
         BlockState floor = b("facility_precast_concrete", Blocks.SMOOTH_STONE), wall = b("facility_concrete", Blocks.LIGHT_GRAY_CONCRETE), light = Blocks.SEA_LANTERN.defaultBlockState(), air = Blocks.AIR.defaultBlockState();
         for (int x = xa; x <= xb; x++) for (int z = -4; z <= 4; z++) for (int y = 0; y <= 7; y++) {
             BlockState st = y == 0 ? floor : y == 7 ? ((x - o) % 6 == 0 && z == 0 ? light : wall) : Math.abs(z) == 4 ? wall : air;
-            v.setBlock(new BlockPos(x, Y + y, z), st, 2);
+            v.setBlock(new BlockPos(x, Y + y, z), st, F);
         }
     }
 
@@ -231,6 +233,7 @@ public final class Vault {
             AABB box = new AABB(oldT, Y, -12, oldT + 27, Y + 14, 13);
             inThrone.addAll(v.getEntities((Entity) null, box, e -> !(e instanceof net.minecraft.world.entity.Display)));
             for (Entity e : v.getEntities((Entity) null, box, e -> e instanceof net.minecraft.world.entity.Display)) { e.ejectPassengers(); e.discard(); }
+            inThrone.removeIf(e -> e instanceof net.minecraft.world.entity.item.ItemEntity);
             box(v, oldT, Y, -12, oldT + 26, Y + 13, 12, Blocks.AIR.defaultBlockState());
         }
         forceChunks(v, o - 4, -40, o + end + 40, 40);
@@ -267,7 +270,7 @@ public final class Vault {
             else if (y == 13) st = ceil;
             else if (edge) st = wall;
             else st = air;
-            v.setBlock(q, st, 2);
+            v.setBlock(q, st, F);
         }
         // the doorway from the corridor, framed in gold
         box(v, T, Y + 1, -3, T, Y + 6, 3, air);
@@ -277,42 +280,42 @@ public final class Vault {
         // quartz colonnade, banners between, lanterns hung from the ceiling
         for (int x = 4; x <= 19; x += 5) for (int sz = -1; sz <= 1; sz += 2) {
             box(v, T + x, Y + 1, 8 * sz, T + x, Y + 11, 8 * sz, quartz);
-            v.setBlock(new BlockPos(T + x, Y + 12, 8 * sz), cq, 2);
-            v.setBlock(new BlockPos(T + x, Y + 1, 8 * sz), cq, 2);
+            v.setBlock(new BlockPos(T + x, Y + 12, 8 * sz), cq, F);
+            v.setBlock(new BlockPos(T + x, Y + 1, 8 * sz), cq, F);
         }
         for (int x = 6; x <= 16; x += 5) for (int sz = -1; sz <= 1; sz += 2) {
-            v.setBlock(new BlockPos(T + x, Y + 7, 11 * sz), Blocks.RED_WALL_BANNER.defaultBlockState().setValue(net.minecraft.world.level.block.WallBannerBlock.FACING, sz < 0 ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH), 2);
-            v.setBlock(new BlockPos(T + x, Y + 12, 8 * sz), chain, 2);
-            v.setBlock(new BlockPos(T + x, Y + 11, 8 * sz), soul, 2);
+            v.setBlock(new BlockPos(T + x, Y + 7, 11 * sz), Blocks.RED_WALL_BANNER.defaultBlockState().setValue(net.minecraft.world.level.block.WallBannerBlock.FACING, sz < 0 ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH), F);
+            v.setBlock(new BlockPos(T + x, Y + 12, 8 * sz), chain, F);
+            v.setBlock(new BlockPos(T + x, Y + 11, 8 * sz), soul, F);
         }
         for (int x : new int[]{7, 14}) {
             box(v, T + x, Y + 10, 0, T + x, Y + 12, 0, chain);
-            v.setBlock(new BlockPos(T + x, Y + 9, 0), lantern, 2);
+            v.setBlock(new BlockPos(T + x, Y + 9, 0), lantern, F);
         }
-        for (int x = 3; x <= 23; x += 5) for (int z = -6; z <= 6; z += 6) v.setBlock(new BlockPos(T + x, Y + 12, z), glow, 2);
+        for (int x = 3; x <= 23; x += 5) for (int z = -6; z <= 6; z += 6) v.setBlock(new BlockPos(T + x, Y + 12, z), glow, F);
         // the dais: three steps up, wider at the bottom
         for (int lvl = 0; lvl < 3; lvl++) {
             int x0 = 20 + lvl, half = 5 - lvl, y = Y + 1 + lvl;
-            for (int x = x0; x <= 25; x++) for (int z = -half; z <= half; z++) v.setBlock(new BlockPos(T + x, y, z), x == x0 ? step : wall, 2);
+            for (int x = x0; x <= 25; x++) for (int z = -half; z <= half; z++) v.setBlock(new BlockPos(T + x, y, z), x == x0 ? step : wall, F);
         }
         for (int sz = -1; sz <= 1; sz += 2) {
-            v.setBlock(new BlockPos(T + 21, Y + 2, 5 * sz), Blocks.SOUL_CAMPFIRE.defaultBlockState(), 2);
-            v.setBlock(new BlockPos(T + 23, Y + 4, 3 * sz), Blocks.LANTERN.defaultBlockState(), 2);
+            v.setBlock(new BlockPos(T + 21, Y + 2, 5 * sz), Blocks.SOUL_CAMPFIRE.defaultBlockState(), F);
+            v.setBlock(new BlockPos(T + 23, Y + 4, 3 * sz), Blocks.LANTERN.defaultBlockState(), F);
         }
         // the throne
-        v.setBlock(new BlockPos(T + 24, Y + 4, 0), mc("minecraft:polished_blackstone_stairs").setValue(net.minecraft.world.level.block.StairBlock.FACING, EAST), 2);
+        v.setBlock(new BlockPos(T + 24, Y + 4, 0), mc("minecraft:polished_blackstone_stairs").setValue(net.minecraft.world.level.block.StairBlock.FACING, EAST), F);
         for (int sz = -1; sz <= 1; sz += 2) {
-            v.setBlock(new BlockPos(T + 24, Y + 4, sz), mc("minecraft:polished_blackstone_wall"), 2);
+            v.setBlock(new BlockPos(T + 24, Y + 4, sz), mc("minecraft:polished_blackstone_wall"), F);
             box(v, T + 25, Y + 4, sz, T + 25, Y + 5, sz, wall);
-            v.setBlock(new BlockPos(T + 25, Y + 6, sz), gilded, 2);
+            v.setBlock(new BlockPos(T + 25, Y + 6, sz), gilded, F);
         }
         box(v, T + 25, Y + 4, 0, T + 25, Y + 6, 0, wall);
-        v.setBlock(new BlockPos(T + 25, Y + 7, 0), border, 2);
-        v.setBlock(new BlockPos(T + 25, Y + 8, 0), gold, 2);
-        v.setBlock(new BlockPos(T + 25, Y + 9, 0), Blocks.END_ROD.defaultBlockState(), 2);
+        v.setBlock(new BlockPos(T + 25, Y + 7, 0), border, F);
+        v.setBlock(new BlockPos(T + 25, Y + 8, 0), gold, F);
+        v.setBlock(new BlockPos(T + 25, Y + 9, 0), Blocks.END_ROD.defaultBlockState(), F);
         // behind it, a wall of crying obsidian framed in gold
         for (int z = -5; z <= 5; z++) for (int y = 2; y <= 12; y++)
-            v.setBlock(new BlockPos(T + TL, Y + y, z), Math.abs(z) == 5 || y == 2 || y == 12 ? gold : mc("minecraft:crying_obsidian"), 2);
+            v.setBlock(new BlockPos(T + TL, Y + y, z), Math.abs(z) == 5 || y == 2 || y == 12 ? gold : mc("minecraft:crying_obsidian"), F);
     }
 
     /** A cell made to measure: walls of containment panel, a glass front on the corridor with an iron door, room to spare. */
@@ -342,12 +345,12 @@ public final class Vault {
             else if (!edge) s = Blocks.AIR.defaultBlockState();
             else if (q.getZ() == c.front && q.getX() != c.fx0 && q.getX() != c.fx1 && q.getY() <= Y + Math.min(c.h, 6)) s = glass;
             else s = wall;
-            v.setBlock(q, s, 2);
+            v.setBlock(q, s, F);
         }
-        v.setBlock(new BlockPos((c.fx0 + c.fx1) / 2, Y + c.h + 1, (c.fza + c.fzb) / 2), lamp, 2);
+        v.setBlock(new BlockPos((c.fx0 + c.fx1) / 2, Y + c.h + 1, (c.fza + c.fzb) / 2), lamp, F);
         // the door: a Foundation containment door, Level 5 scanner on the corridor side, exit button inside
         var out = c.front < 0 ? net.minecraft.core.Direction.SOUTH : net.minecraft.core.Direction.NORTH;
-        for (int y = 1; y <= 3; y++) { v.setBlock(new BlockPos(c.fx0 + 3, Y + y, c.front), wall, 2); v.setBlock(new BlockPos(c.fx0 + 1, Y + 3, c.front), wall, 2); v.setBlock(new BlockPos(c.fx0 + 2, Y + 3, c.front), wall, 2); }
+        for (int y = 1; y <= 3; y++) { v.setBlock(new BlockPos(c.fx0 + 3, Y + y, c.front), wall, F); v.setBlock(new BlockPos(c.fx0 + 1, Y + 3, c.front), wall, F); v.setBlock(new BlockPos(c.fx0 + 2, Y + 3, c.front), wall, F); }
         new Doors(v).gate(c.fx0 + 1, c.front, out);
     }
 
@@ -361,7 +364,17 @@ public final class Vault {
     public static void rebuild(ServerPlayer p) {
         ServerLevel v = level(p.server);
         if (v == null || !chief(p)) return;
-        Region r = region(p);
+        int back = repair(v, region(p));
+        v.playSound(null, p.blockPosition(), SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS, 1F, 0.8F);
+        say(p, "The Vault is as it was built" + (back > 0 ? ". " + back + (back == 1 ? " captive was" : " captives were") + " put back in " + (back == 1 ? "its cell." : "their cells.") : "."));
+        Career.sync(p);
+    }
+
+    private static final Set<String> DECOR = Set.of("minecraft:red_carpet", "minecraft:red_banner", "minecraft:chain", "minecraft:lantern", "minecraft:soul_lantern",
+            "minecraft:end_rod", "minecraft:soul_campfire", "minecraft:polished_blackstone_wall");
+
+    /** Puts back only what's missing or wrong (a block already right is left alone). Returns how many captives went back in their cells. */
+    private static int repair(ServerLevel v, Region r) {
         int o = r.ox();
         build(v, r, true);
         hall(v, r, o - 3, o + r.hallTo);
@@ -372,10 +385,11 @@ public final class Vault {
             Entity e = c.entity == null ? null : v.getEntity(c.entity);
             if (e != null && e.isAlive() && !c.holds(e)) { Vec3 at = c.centre(); e.teleportTo(at.x, at.y, at.z); e.setDeltaMovement(Vec3.ZERO); back++; }
         }
-        data(p.server).setDirty();
-        v.playSound(null, p.blockPosition(), SoundEvents.BEACON_POWER_SELECT, SoundSource.PLAYERS, 1F, 0.8F);
-        say(p, "The Vault is as it was built" + (back > 0 ? ". " + back + (back == 1 ? " captive was" : " captives were") + " put back in " + (back == 1 ? "its cell." : "their cells.") : "."));
-        Career.sync(p);
+        // decorations that were knocked loose before and are lying about
+        for (Entity e : v.getEntities((Entity) null, new AABB(o - 34, Y - 2, -60, o + r.hallTo + 40, Y + 30, 60),
+                x -> x instanceof net.minecraft.world.entity.item.ItemEntity it && DECOR.contains(net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(it.getItem().getItem()).toString()))) e.discard();
+        data(v.getServer()).setDirty();
+        return back;
     }
 
     // ================================================================== putting things in, taking them out
@@ -411,6 +425,7 @@ public final class Vault {
         if (moved instanceof Mob m) { m.setPersistenceRequired(); m.setTarget(null); }
         c.entity = moved.getUUID();
         r.cells.add(c);
+        repair(v, r);
         data(p.server).setDirty();
         v.sendParticles(ParticleTypes.PORTAL, at.x, at.y + 1, at.z, 60, 1, 1, 1, 0.4);
         say(p, c.name + " is in your vault, cell " + r.cells.size() + ".");
@@ -519,6 +534,45 @@ public final class Vault {
         if (s.isEmpty()) return;
         if (!p.getInventory().add(s)) p.drop(s, false);
         p.playNotifySound(SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, 0.5F, 1.2F);
+        Career.sync(p);
+    }
+
+    /** From your inventory: one stack (slot), every stack of that kind (all), or everything off your hotbar (rest). */
+    public static void putSlot(ServerPlayer p, int slot, boolean all) {
+        if (!chief(p) || !has(p.server, p.getUUID())) return;
+        var inv = p.getInventory();
+        if (slot < 0 || slot >= inv.getContainerSize()) return;
+        ItemStack want = inv.getItem(slot);
+        if (want.isEmpty()) return;
+        int moved = 0;
+        boolean full = false;
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            if (i != slot && (!all || i >= 36 && i < 40)) continue;
+            ItemStack st = inv.getItem(i);
+            if (st.isEmpty() || i != slot && !ItemStack.isSameItemSameComponents(st, want)) continue;
+            ItemStack left = deposit(p.server, p.getUUID(), st);
+            moved += st.getCount() - left.getCount();
+            inv.setItem(i, left);
+            if (!left.isEmpty()) { full = true; break; }
+        }
+        if (full) say(p, "The storeroom is full.");
+        if (moved > 0) p.playNotifySound(SoundEvents.BUNDLE_INSERT, SoundSource.PLAYERS, 0.6F, 1F);
+        Career.sync(p);
+    }
+
+    public static void putRest(ServerPlayer p) {
+        if (!chief(p) || !has(p.server, p.getUUID())) return;
+        var inv = p.getInventory();
+        int moved = 0;
+        for (int i = 9; i < 36; i++) {
+            ItemStack st = inv.getItem(i);
+            if (st.isEmpty()) continue;
+            ItemStack left = deposit(p.server, p.getUUID(), st);
+            moved += st.getCount() - left.getCount();
+            inv.setItem(i, left);
+            if (!left.isEmpty()) { say(p, "The storeroom is full."); break; }
+        }
+        if (moved > 0) { p.playNotifySound(SoundEvents.BUNDLE_INSERT, SoundSource.PLAYERS, 0.8F, 0.8F); say(p, moved + " items stored. Your hotbar's untouched."); }
         Career.sync(p);
     }
 
@@ -732,6 +786,8 @@ public final class Vault {
                 case "trap" -> trap(p);
                 case "go" -> go(p);
                 case "put" -> put(p);
+                case "inv" -> putSlot(p, Integer.parseInt(s[1]), s.length > 2 && s[2].equals("all"));
+                case "rest" -> putRest(p);
                 case "rebuild" -> rebuild(p);
                 case "throne" -> toThrone(p);
                 case "out" -> release(p, Integer.parseInt(s[1]));
