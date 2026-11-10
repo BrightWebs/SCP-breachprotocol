@@ -57,22 +57,9 @@ public final class Shapeshift {
     public static void commands(net.neoforged.neoforge.event.RegisterCommandsEvent event) {
         event.getDispatcher().register(net.minecraft.commands.Commands.literal("shapeshift").requires(src -> src.hasPermission(2))
                 .then(net.minecraft.commands.Commands.literal("all").executes(c -> {
-                    ServerPlayer p = c.getSource().getPlayerOrException();
-                    net.minecraft.nbt.ListTag mobs = new net.minecraft.nbt.ListTag(), blocks = new net.minecraft.nbt.ListTag();
-                    for (var t : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE) {
-                        if (t == net.minecraft.world.entity.EntityType.PLAYER) continue;
-                        @SuppressWarnings("unchecked") var lt = (net.minecraft.world.entity.EntityType<? extends net.minecraft.world.entity.LivingEntity>) t;
-                        boolean living;
-                        try { living = net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(lt); } catch (Throwable e) { living = false; }
-                        if (living) mobs.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(t).toString()));
-                    }
-                    for (var b : net.minecraft.core.registries.BuiltInRegistries.BLOCK)
-                        if (b.asItem() != net.minecraft.world.item.Items.AIR) blocks.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).toString()));
-                    p.getPersistentData().put("bp_shape_mobs", mobs);
-                    p.getPersistentData().put("bp_shape_blocks", blocks);
-                    Career.sync(p);
-                    c.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("Every form is yours: " + mobs.size() + " creatures, " + blocks.size() + " blocks.").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), false);
-                    return mobs.size() + blocks.size();
+                    int n = unlockAll(c.getSource().getPlayerOrException());
+                    c.getSource().sendSuccess(() -> net.minecraft.network.chat.Component.literal("Every form is yours (" + n + ").").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), false);
+                    return n;
                 }))
                 .then(net.minecraft.commands.Commands.literal("clear").executes(c -> {
                     ServerPlayer p = c.getSource().getPlayerOrException();
@@ -85,9 +72,33 @@ public final class Shapeshift {
     }
     }
 
+    /** Every living creature and every block, among your forms. Returns how many. */
+    public static int unlockAll(ServerPlayer p) {
+        net.minecraft.nbt.ListTag mobs = new net.minecraft.nbt.ListTag(), blocks = new net.minecraft.nbt.ListTag();
+        for (var t : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE) {
+            if (t == net.minecraft.world.entity.EntityType.PLAYER) continue;
+            @SuppressWarnings("unchecked") var lt = (net.minecraft.world.entity.EntityType<? extends net.minecraft.world.entity.LivingEntity>) t;
+            boolean living;
+            try { living = net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(lt); } catch (Throwable e) { living = false; }
+            if (living) mobs.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(t).toString()));
+        }
+        for (var b : net.minecraft.core.registries.BuiltInRegistries.BLOCK)
+            if (b.asItem() != net.minecraft.world.item.Items.AIR) blocks.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(b).toString()));
+        p.getPersistentData().put("bp_shape_mobs", mobs);
+        p.getPersistentData().put("bp_shape_blocks", blocks);
+        Career.sync(p);
+        return mobs.size() + blocks.size();
+    }
+
     /** "shape:mob:id" / "shape:block:id", from the menu. */
     public static void action(ServerPlayer p, String a) {
         if (!present()) return;
+        if (a.equals("all")) {
+            if (!p.hasPermissions(2)) return;
+            int n = unlockAll(p);
+            p.displayClientMessage(net.minecraft.network.chat.Component.literal("Every form is yours (" + n + ").").withStyle(net.minecraft.ChatFormatting.LIGHT_PURPLE), true);
+            return;
+        }
         try { com.breachprotocol.compat.manas.ManasBridge.action(p, a); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Shapeshift: {}", t.toString()); }
     }
 

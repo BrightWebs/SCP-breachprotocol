@@ -146,9 +146,20 @@ public class ShapeshiftScreen extends Screen {
             vx += w + 3;
         }
         int sw = x + pw - 10 - vx - 3;
+        // the cheat (operators): every form at once
+        if (Minecraft.getInstance().player != null && Minecraft.getInstance().player.hasPermissions(2)) {
+            String un = "Unlock every form";
+            int uw = font.width(un) + 12, ux = x + pw - 10 - uw;
+            boolean hov = in(mx, my, ux, sy, uw, 14);
+            g.fill(ux, sy, ux + uw, sy + 14, hov ? 0x6040C080 : 0x2040C080);
+            frame(g, ux, sy, uw, 14, 0xFF7FE0A0);
+            g.drawString(font, un, ux + 6, sy + 3, TEXT, false);
+            hits.add(new Hit(ux, sy, uw, 14, () -> { send("shape:all"); all = false; scroll = 0; }));
+            sw -= uw + 3;
+        }
         if (!form.isEmpty()) {
             String back = "Change back";
-            int bw = font.width(back) + 12, bx = x + pw - 10 - bw;
+            int bw = font.width(back) + 12, bx = vx + sw - bw;
             boolean hov = in(mx, my, bx, sy, bw, 14);
             g.fill(bx, sy, bx + bw, sy + 14, hov ? 0x60C04040 : 0x30C04040);
             frame(g, bx, sy, bw, 14, 0xFFE07070);
