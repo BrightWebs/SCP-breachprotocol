@@ -138,8 +138,9 @@ public final class ManasBridge {
             tr.putBoolean("fire", e.fireImmune());
             tr.putBoolean("water", e.canBreatheUnderwater());
             double dmg = 0;
-            if (net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(e.getType())) {
-                var sup = net.minecraft.world.entity.ai.attributes.DefaultAttributes.getSupplier(e.getType());
+            @SuppressWarnings("unchecked") EntityType<? extends LivingEntity> lt = (EntityType<? extends LivingEntity>) e.getType();
+            if (net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(lt)) {
+                var sup = net.minecraft.world.entity.ai.attributes.DefaultAttributes.getSupplier(lt);
                 if (sup.hasAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE)) dmg = sup.getBaseValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE);
             }
             if (e.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) != null) dmg = Math.max(dmg, e.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE));
