@@ -79,7 +79,7 @@ public final class Flight {
                 int g = parse(a[3]);
                 if (g <= 0) stopRun(p);
                 else {
-                    Integer was = RUN.put(p.getUUID(), Math.min(6, g));
+                    Integer was = RUN.put(p.getUUID(), Math.min(7, g));
                     step(p, true); // step assist: up whole blocks without a jump
                     boolean ninja = g >= 6, wasNinja = was != null && was >= 6;
                     if (ninja != wasNinja) ninjaPose(p, ninja);
@@ -169,6 +169,63 @@ public final class Flight {
         }
     }
 
+    // ---------------------------------------------------------------- gear seven: a trail of fire
+
+    private record Ember(UUID owner, net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dim, Vec3 at, long until) {}
+
+    private static final java.util.List<Ember> EMBERS = new java.util.ArrayList<>();
+    private static final Map<UUID, Vec3> TRAIL = new HashMap<>();
+
+    private static boolean spare(ServerPlayer p, net.minecraft.world.entity.LivingEntity e) {
+        return e == p || !e.isAlive() || e.isSpectator() || Targets.yours(p, e) || e instanceof ServerPlayer q && (q.isCreative() || !Targets.hostile(p, q));
+    }
+
+    /** Fire along the ground behind you, and anything you run into burns. */
+    private static void blaze(ServerPlayer p) {
+        ServerLevel l = p.serverLevel();
+        Vec3 now = p.position(), was = TRAIL.put(p.getUUID(), now);
+        if (was == null || was.distanceToSqr(now) > 400) return;
+        long t = l.getGameTime();
+        double len = was.distanceTo(now);
+        int n = Math.max(1, (int) Math.ceil(len));
+        for (int i = 0; i < n; i++) {
+            Vec3 q = was.lerp(now, (i + 0.5) / n);
+            EMBERS.add(new Ember(p.getUUID(), l.dimension(), q, t + 60));
+            l.sendParticles(ParticleTypes.FLAME, q.x, q.y + 0.1, q.z, 3, 0.25, 0.05, 0.25, 0.01);
+        }
+        if (EMBERS.size() > 3000) EMBERS.subList(0, EMBERS.size() - 3000).clear();
+        // what you run into
+        var box = new net.minecraft.world.phys.AABB(was, now).inflate(p.getBbWidth() / 2 + 0.6, 0, p.getBbWidth() / 2 + 0.6).expandTowards(0, p.getBbHeight(), 0);
+        for (var e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> !spare(p, e))) {
+            if (e.invulnerableTime > 10) continue;
+            e.igniteForSeconds(6);
+            PowerKills.hurt(p, e, l.damageSources().onFire(), 14F);
+            l.sendParticles(ParticleTypes.LAVA, e.getX(), e.getY() + e.getBbHeight() / 2, e.getZ(), 4, 0.3, 0.3, 0.3, 0);
+        }
+    }
+
+    private static void embers(MinecraftServer srv) {
+        if (EMBERS.isEmpty()) return;
+        long t = srv.overworld().getGameTime();
+        EMBERS.removeIf(e -> e.until() < t);
+        boolean burn = srv.getTickCount() % 5 == 0;
+        for (Ember e : EMBERS) {
+            ServerLevel l = srv.getLevel(e.dim());
+            if (l == null) continue;
+            long left = e.until() - t;
+            if ((t + e.at().hashCode()) % 3 == 0) l.sendParticles(left > 20 ? ParticleTypes.FLAME : ParticleTypes.SMALL_FLAME, e.at().x, e.at().y + 0.15, e.at().z, 1, 0.3, 0.1, 0.3, 0.01);
+            if (left < 15 && (t + e.at().hashCode()) % 4 == 0) l.sendParticles(ParticleTypes.SMOKE, e.at().x, e.at().y + 0.2, e.at().z, 1, 0.2, 0.1, 0.2, 0.01);
+            if (!burn) continue;
+            ServerPlayer owner = srv.getPlayerList().getPlayer(e.owner());
+            var box = new net.minecraft.world.phys.AABB(e.at().x - 0.6, e.at().y - 0.2, e.at().z - 0.6, e.at().x + 0.6, e.at().y + 1.0, e.at().z + 0.6);
+            for (var v : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, v -> owner == null ? v.isAlive() : !spare(owner, v))) {
+                v.igniteForSeconds(4);
+                if (owner != null) PowerKills.hurt(owner, v, l.damageSources().inFire(), 3F);
+                else v.hurt(l.damageSources().inFire(), 3F);
+            }
+        }
+    }
+
     private static int parse(String s) { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } }
 
     @SubscribeEvent
@@ -183,6 +240,7 @@ public final class Flight {
                     && was.distanceToSqr(now) < 400) // not a teleport
                 p.setDeltaMovement(now.subtract(was));
         }
+        embers(srv);
         if (srv.getTickCount() % 200 == 0) LAST.keySet().removeIf(id -> srv.getPlayerList().getPlayer(id) == null);
         // lying flat ends when the flight does
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
@@ -196,6 +254,7 @@ public final class Flight {
             if (p.getAbilities().flying || Dominion.level(p) < 2) { RAM.remove(en.getKey()); ramPose(p, false); if (en.getValue() >= 6) ninjaPose(p, false); step(p, false); return true; }
             if (RAM.contains(p.getUUID())) ram(p);
             if (en.getValue() >= 6) p.fallDistance = 0; // off the top of a wall and down again, unhurt
+            if (en.getValue() >= 7) blaze(p); else TRAIL.remove(p.getUUID());
             if (en.getValue() >= 2) {
                 ServerLevel l = p.serverLevel();
                 for (ServerPlayer q : l.players())

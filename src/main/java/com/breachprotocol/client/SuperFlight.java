@@ -280,7 +280,7 @@ public final class SuperFlight {
     // ================================================================== running
 
     /** Blocks per tick on foot: each sprint gear. Gear 2 breaks the sound barrier; from there you run on water. */
-    private static final double[] RUN = {0, 0.6, 1.0, 1.5, 2.1, 2.8, 3.6};
+    private static final double[] RUN = {0, 0.6, 1.0, 1.5, 2.1, 2.8, 3.6, 4.6};
     /** Gear five: the shoulder; gear six: the ninja run, up walls. */
     private static final int RAM_GEAR = 5, NINJA_GEAR = 6;
     private static final double WALL_UP = 0.85;
@@ -511,13 +511,14 @@ public final class SuperFlight {
         if (!flying && runGear == 0 || mc.options.hideGui || mc.player == null) return;
         GuiGraphics g = event.getGuiGraphics();
         if (!flying) {
-            String s = "SPRINT GEAR " + runGear + (runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : wallRun ? "  ·  UP THE WALL" : "");
+            String s = "SPRINT GEAR " + runGear + (runGear >= 7 ? "  ·  ABLAZE" : runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : wallRun ? "  ·  UP THE WALL" : "");
             String gs = runGear < RAM_GEAR ? "DOUBLE-TAP SPRINT: GEAR UP"
                     : ramming ? "TAP CROUCH: STOP RAMMING  ·  DOUBLE-TAP JUMP: TAKE OFF"
                     : runGear < NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 6  ·  TAP CROUCH: SHOULDER  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : "RUN AT A WALL: UP IT  ·  TAP CROUCH: SHOULDER  ·  DOUBLE-TAP JUMP: TAKE OFF";
+                    : runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR 7, FIRE  ·  RUN AT A WALL: UP IT  ·  DOUBLE-TAP JUMP: TAKE OFF"
+                    : "FIRE BEHIND YOU  ·  RUN AT A WALL: UP IT  ·  DOUBLE-TAP JUMP: TAKE OFF";
             int x = g.guiWidth() / 2, y = g.guiHeight() - 62;
-            g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= NINJA_GEAR ? 0xFFB8E8FF : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
+            g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= 7 ? 0xFFFF8A3A : runGear >= NINJA_GEAR ? 0xFFB8E8FF : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
             PowerKeys.small(g, mc.font, gs, x - (int) (mc.font.width(gs) * 0.375F), y + 10, 0xFFA898C0);
             return;
         }
