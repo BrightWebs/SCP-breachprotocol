@@ -276,6 +276,18 @@ public final class Response {
     /** Find it, close in, get hands on it. */
     private static void hunt(ServerLevel l, Team t, Containment.Entry e, Mob m, List<FoundationStaff> team) {
         long now = l.getGameTime();
+        // SCP-096 in a rage is not approached: everyone holds well back, eyes down, until it's calm again
+        if (UnleashedApi.isShyGuy(m) && Boolean.TRUE.equals(UnleashedApi.call(UnleashedApi.method("scp096.Scp096ShyGuy", "isRaging"), m))) {
+            for (FoundationStaff f : team) {
+                if (f.distanceToSqr(m) < 20 * 20) {
+                    Vec3 away = f.position().subtract(m.position()).multiply(1, 0, 1).normalize().scale(24).add(m.position());
+                    f.getNavigation().moveTo(away.x, away.y, away.z, 1.3);
+                } else f.getNavigation().stop();
+            }
+            BreachMissions.status(l.getServer(), e.id, t.unit.title + " is holding back, eyes down, until SCP-096 calms. Nobody looks at its face.");
+            t.huntStart = now; // the wait isn't their failure
+            return;
+        }
         if (t.huntStart == 0) t.huntStart = now;
         // three minutes and they still can't lay hands on it: they ask for you
         if (!t.begged && now - t.huntStart > 20 * 180) {
@@ -322,6 +334,12 @@ public final class Response {
             }
         }
         if (cell != null) {
+            // SCP-096 goes in hooded: the bag over its head, and it stays on in the cell
+            if (UnleashedApi.isShyGuy(m)) {
+                UnleashedApi.call(UnleashedApi.method("scp096.Scp096ShyGuy", "setBagged", boolean.class), m, true);
+                l.playSound(null, m.blockPosition(), SoundEvents.WOOL_PLACE, SoundSource.NEUTRAL, 1F, 0.8F);
+                report(srv, t, e, t.unit.title + " got the bag over SCP-096's head. Nobody saw its face. Walking it back.");
+            }
             hold(m);
             t.plan = cell.name;
             t.dest = new BlockPos((cell.x0 + cell.x1) / 2, cell.y0 + 1, (cell.z0 + cell.z1) / 2);
@@ -330,6 +348,12 @@ public final class Response {
             t.best = Double.MAX_VALUE;
             report(srv, t, e, t.unit.title + " has " + e.designation + " secured. Bringing it to " + cell.name + ".");
             BreachMissions.status(srv, e.id, "Secured by " + t.unit.title + ". Being taken to " + cell.name + ".");
+            return;
+        }
+        if (UnleashedApi.isShyGuy(m)) {
+            // no cell for it: hooded, it's contained wherever it is, so the team bags it and builds round it
+            UnleashedApi.call(UnleashedApi.method("scp096.Scp096ShyGuy", "setBagged", boolean.class), m, true);
+            improvise(l, t, e, m);
             return;
         }
         // nowhere to hold it, and it's Keter: the Council's authority is to end it, if it can be ended
