@@ -95,6 +95,24 @@ public final class Guide {
         active = false;
     }
 
+    /** The server asking for the arrow (a team that needs you, "I'm on my way"): it comes up by itself. */
+    private static int lastReq = -1;
+
+    @SubscribeEvent
+    public static void requests(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) { lastReq = -1; return; }
+        net.minecraft.nbt.CompoundTag r = com.breachprotocol.network.ClientCareerState.tag.getCompound("guideReq");
+        int n = r.getInt("n");
+        if (lastReq < 0) { lastReq = n; return; } // what was asked before you logged in stays asked
+        if (n == lastReq || n == 0) return;
+        lastReq = n;
+        int eid = r.getInt("eid");
+        if (eid >= 0 && mc.level != null && mc.level.getEntity(eid) != null) startEntity(eid, r.getInt("x"), r.getInt("y"), r.getInt("z"), r.getString("label"));
+        else start(r.getInt("x"), r.getInt("y"), r.getInt("z"), r.getString("label"));
+        mc.getSoundManager().play(net.minecraft.client.resources.sounds.SimpleSoundInstance.forUI(SoundEvents.NOTE_BLOCK_BELL.value(), 0.8F, 0.9F));
+    }
+
     @SubscribeEvent
     public static void draw(RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();

@@ -62,6 +62,8 @@ public final class Response {
         String site = "", plan = "";
         BlockPos dest;
         int close, stuck, lost, size;
+        long huntStart;
+        boolean begged;
         double best = Double.MAX_VALUE;
         long since;
 
@@ -105,7 +107,24 @@ public final class Response {
         try { id = UUID.fromString(spec.substring(c + 1)); } catch (IllegalArgumentException ex) { return; }
         PENDING.remove(id);
         String u = spec.substring(0, c);
-        if (u.equals("SELF")) { Team t = TEAMS.remove(id); if (t != null) standDown(p.server, t); return; }
+        if (u.equals("SELF")) {
+            Team t = TEAMS.remove(id);
+            if (t != null) standDown(p.server, t);
+            BreachMissions.status(p.server, id, "You're handling it yourself.");
+            return;
+        }
+        if (u.equals("GUIDE")) {
+            Mission m = BreachMissions.find(Career.data(p), id);
+            if (m != null) BreachMissions.guide(p, m, Containment.loaded(p.server, id));
+            BreachMissions.status(p.server, id, "!The Administrator is on the way. The team is holding it where it is.");
+            return;
+        }
+        if (u.equals("RETRY")) {
+            Team t = TEAMS.get(id);
+            if (t != null) { t.huntStart = p.server.overworld().getGameTime(); t.begged = false; }
+            BreachMissions.status(p.server, id, (t != null ? t.unit.title : "The team") + " is trying again.");
+            return;
+        }
         Forces.Unit unit = Forces.Unit.of(u);
         if (unit == null) return;
         Containment.Entry e = entry(p.server, id);
@@ -126,6 +145,7 @@ public final class Response {
         t.site = e.site;
         t.since = srv.overworld().getGameTime();
         TEAMS.put(e.id, t);
+        BreachMissions.status(srv, e.id, unit.title + " is on it" + (by.equals("your order") ? "." : ", sent by " + (by.startsWith("The ") ? "the" + by.substring(3) : by) + "."));
     }
 
     // ================================================================== the team at work
@@ -193,10 +213,12 @@ public final class Response {
             if (tier >= 0 && tier < TIERS.length - 1) {
                 Forces.Unit next = TIERS[tier + 1];
                 report(srv, t, e, t.unit.title + " was lost trying to bring in " + e.designation + ". " + next.title + " is going in.");
+                BreachMissions.status(srv, e.id, t.unit.title + " was lost. " + next.title + " is going in.");
                 t.escalate = next;
                 return false;
             }
-            report(srv, t, e, "We lost Nu-7 to " + e.designation + ". It's still loose. Nothing we have can bring it in.");
+            BreachMissions.beg(srv, e.id, "O5-6", "We lost Nu-7 to " + e.designation + ". It's still loose. Nothing we have can bring it in. Administrator, it's you or nobody.",
+                    new Career.Reply("I'm going.", "resp:GUIDE:" + e.id, "Follow the arrow. We'll keep everyone clear of it."));
             return false;
         }
         switch (t.phase) {
@@ -249,6 +271,18 @@ public final class Response {
 
     /** Find it, close in, get hands on it. */
     private static void hunt(ServerLevel l, Team t, Containment.Entry e, Mob m, List<FoundationStaff> team) {
+        long now = l.getGameTime();
+        if (t.huntStart == 0) t.huntStart = now;
+        // three minutes and they still can't lay hands on it: they ask for you
+        if (!t.begged && now - t.huntStart > 20 * 180) {
+            t.begged = true;
+            String id = e.id.toString();
+            BreachMissions.beg(l.getServer(), e.id, t.unit == Forces.Unit.SECURITY ? "Site Security" : t.unit.prefix + ", " + t.unit.title.replaceAll(" \".*", ""),
+                    "We can't get near " + e.designation + ". We've been on it three minutes and it's beyond us. Administrator, we need you here. Please.",
+                    new Career.Reply("Hold it there. I'm coming.", "resp:GUIDE:" + id, "Yes, sir. Follow the arrow. We'll keep it pinned."),
+                    new Career.Reply("Keep at it.", "resp:RETRY:" + id, "...Understood. Going back in."),
+                    new Career.Reply("Pull out. I'll handle it.", "resp:SELF:" + id, "Pulling back. It's yours."));
+        }
         boolean near = false;
         for (FoundationStaff f : team) {
             double d = f.distanceToSqr(m);
@@ -291,6 +325,7 @@ public final class Response {
             t.stuck = 0;
             t.best = Double.MAX_VALUE;
             report(srv, t, e, t.unit.title + " has " + e.designation + " secured. Bringing it to " + cell.name + ".");
+            BreachMissions.status(srv, e.id, "Secured by " + t.unit.title + ". Being taken to " + cell.name + ".");
             return;
         }
         // nowhere to hold it, and it's Keter: the Council's authority is to end it, if it can be ended
@@ -298,6 +333,7 @@ public final class Response {
             t.phase = Phase.TERMINATING;
             t.since = l.getGameTime();
             report(srv, t, e, "There's no cell for " + e.designation + ". Termination authorised. " + t.unit.title + " is opening fire.");
+            BreachMissions.status(srv, e.id, t.unit.title + " is terminating it.");
             return;
         }
         // Site-01's reserved cells

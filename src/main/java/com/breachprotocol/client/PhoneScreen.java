@@ -1084,8 +1084,12 @@ public class PhoneScreen extends Screen {
             String type = m.getString("type");
             int chip = switch (type) {
                 case "RECOVER" -> RED; case "TERMINATE" -> 0xFF8E3BC4; case "CARE" -> 0xFFE58A2A; case "SUPPLY" -> 0xFF2F8FD8;
-                case "EXPOSURE" -> 0xFFE5484D; case "DOCUMENT" -> 0xFF3FB8FF; case "FILES" -> 0xFFC8A030; default -> 0xFFB04FE0;
+                case "EXPOSURE" -> 0xFFE5484D; case "DOCUMENT" -> 0xFF3FB8FF; case "FILES" -> 0xFFC8A030; case "BREACH" -> 0xFFFF3B3B; default -> 0xFFB04FE0;
             };
+            boolean breach = type.equals("BREACH");
+            String status = m.getString("status");
+            boolean needed = breach && status.startsWith("!");
+            if (needed) status = status.substring(1);
             String desc = m.getString("desc");
             boolean trial = type.equals("FOUNDERS_TRIAL");
             int x = SX + 6, w = SW - 12, pad = 7, iw = w - pad * 2;
@@ -1095,7 +1099,8 @@ public class PhoneScreen extends Screen {
             if (m.getBoolean("hasPos")) meta.add("\u2316 " + m.getInt("x") + ", " + m.getInt("z"));
             long exp = m.getLong("expires");
             if (exp < Long.MAX_VALUE / 2) { long sec = Math.max(0, (exp - now) / 20); meta.add("\u23F1 " + clock((int) Math.min(Integer.MAX_VALUE, sec))); }
-            int h = pad + 16 + descH + 6 + 10 + (meta.isEmpty() ? 0 : 12) + (trial ? 0 : 18) + pad - 2;
+            int statusH = breach ? wrapHeight("\u25B6 " + status, iw) + 4 : 0;
+            int h = pad + 16 + descH + 6 + (breach ? statusH : 10) + (meta.isEmpty() ? 0 : 12) + (trial ? 0 : 18) + pad - 2;
             card(g, x, y, w, h);
             rect(g, x, y + 6, 2, h - 12, chip);
             int cy = y + pad;
@@ -1106,13 +1111,18 @@ public class PhoneScreen extends Screen {
             small(g, giver, x + w - pad - (int) (font.width(giver) * 0.375F), cy + 3, 0xFF7A8794);
             cy += 16;
             cy += wrap(g, desc, x + pad, cy, iw, 0xFFE2E8EE) + 6;
-            float pct = Mth.clamp(m.getInt("progress") / (float) Math.max(1, m.getInt("target")), 0, 1);
-            String prog = m.getInt("progress") + "/" + m.getInt("target");
-            int bw = iw - font.width(prog) - 6;
-            rrect(g, x + pad, cy + 1, bw, 4, 2, 0xFF2A323D);
-            rrect(g, x + pad, cy + 1, Math.max(4, (int) (bw * pct)), 4, 2, chip);
-            text(g, prog, x + pad + iw - font.width(prog), cy - 1, 0xFFC8D2DC);
-            cy += 10;
+            if (breach) {
+                // what's being done about it (amber while it's in hand, red when they need you)
+                cy += wrap(g, "\u25B6 " + status, x + pad, cy, iw, needed ? 0xFFFF5A5A : AMBER) + 4;
+            } else {
+                float pct = Mth.clamp(m.getInt("progress") / (float) Math.max(1, m.getInt("target")), 0, 1);
+                String prog = m.getInt("progress") + "/" + m.getInt("target");
+                int bw = iw - font.width(prog) - 6;
+                rrect(g, x + pad, cy + 1, bw, 4, 2, 0xFF2A323D);
+                rrect(g, x + pad, cy + 1, Math.max(4, (int) (bw * pct)), 4, 2, chip);
+                text(g, prog, x + pad + iw - font.width(prog), cy - 1, 0xFFC8D2DC);
+                cy += 10;
+            }
             if (!meta.isEmpty()) {
                 text(g, ellipsize(String.join("   ", meta), iw), x + pad, cy, 0xFF94A3B0);
                 cy += 12;
@@ -1123,12 +1133,16 @@ public class PhoneScreen extends Screen {
                 pill(g, x + pad, cy, half, 14, "Submit", 0xFF2E9E57, true, () -> send("submit", idx));
                 pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
             } else if (!trial && m.getBoolean("hasPos")) {
-                int half = (iw - 4) / 2, mx = m.getInt("x"), my2 = m.getInt("y"), mz = m.getInt("z");
-                boolean on = Guide.guiding(mx, mz);
-                String gl = type.replace('_', ' ') + " " + mx + ", " + mz;
+                int half = (iw - 4) / 2, mx = m.getInt("x"), my2 = m.getInt("y"), mz = m.getInt("z"), eid = breach ? m.getInt("eid") : -1;
+                boolean on = eid >= 0 ? Guide.guidingEntity(eid) : Guide.guiding(mx, mz);
+                String gl = breach ? m.getString("designation") : type.replace('_', ' ') + " " + mx + ", " + mz;
                 boolean deliver = type.equals("RECOVER") && m.getInt("stage") == 1;
-                pill(g, x + pad, cy, half, 14, on ? "Stop guide" : deliver ? "Guide to site" : "Guide me", on ? RED : 0xFF2E9E57, true, () -> { if (on) Guide.stop(); else Guide.start(mx, my2, mz, deliver ? "Deliver to site" : gl); });
-                pill(g, x + pad + half + 4, cy, half, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
+                pill(g, x + pad, cy, half, 14, on ? "Stop guide" : deliver ? "Guide to site" : breach ? "Guide me to it" : "Guide me", on ? RED : 0xFF2E9E57, true, () -> {
+                    if (on) Guide.stop();
+                    else if (eid >= 0) Guide.startEntity(eid, mx, my2, mz, gl);
+                    else Guide.start(mx, my2, mz, deliver ? "Deliver to site" : gl);
+                });
+                pill(g, x + pad + half + 4, cy, half, 14, breach ? "Dismiss" : "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
             } else if (!trial) {
                 pill(g, x + pad, cy, iw, 14, "Abandon", 0xFF4A2A30, true, () -> send("abandon", idx));
             }

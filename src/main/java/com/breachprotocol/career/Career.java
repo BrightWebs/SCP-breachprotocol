@@ -807,6 +807,7 @@ public final class Career {
                 case EXPOSURE -> "Test logged. You came back. That puts you ahead of the last three.";
                 case DOCUMENT -> "Photograph received. The " + m.designation + " file is better for it.";
                 case FILES -> "Dossiers received and filed. Thank you for not reading them.";
+                case BREACH -> m.designation + (m.status.startsWith("Neutralised") ? " is dead. The breach is over." : " is back in containment. The breach is over.");
                 default -> "Mission complete.";
             });
             commend(p);
@@ -1053,6 +1054,7 @@ public final class Career {
         Sites.addToSync(p, t);
         Containment.addToSync(p, t);
         Dominion.addToSync(p, t);
+        BreachMissions.addToSync(p, t);
         t.putInt("trial", data(p).trial);
         t.putInt("trialKills", data(p).trialKills);
         if (rank(p) == Rank.ADMINISTRATOR || isAscended(p)) Forces.addToSync(p, t);

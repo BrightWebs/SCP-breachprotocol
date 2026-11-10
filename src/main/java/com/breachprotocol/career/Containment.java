@@ -256,6 +256,7 @@ public final class Containment extends SavedData {
         BreachAlerts.announce(l, m.blockPosition(), List.of(e.designation));
         Career.Reply[] orders = breachOrders(l.getServer(), e);
         Response.breached(l.getServer(), e); // no answer in thirty seconds, and the chain of command sends someone
+        BreachMissions.open(l.getServer(), e); // and it's a mission on everyone's phone who's told
         if (site != null) {
             notifyOwner(l.getServer(), site, O5.O5_6, "BREACH. " + e.designation + " is out of " + from + " at " + site.name + (e.breaches > 1 ? ". That's breach number " + e.breaches + " for it." : ".") + " Get it back in a cell. Your orders?", orders);
             ServerPlayer owner = player(l.getServer(), site.owner);

@@ -8,7 +8,7 @@ public class Mission {
      * EXPOSURE: Class-D testing, stay near a live anomaly and survive. DOCUMENT: photograph it for
      * its file. FILES: recover Anomaly Dossiers from an Archive Terminal and hand them in.
      */
-    public enum Type { RECOVER, TERMINATE, CARE, SUPPLY, FOUNDERS_TRIAL, EXPOSURE, DOCUMENT, FILES }
+    public enum Type { RECOVER, TERMINATE, CARE, SUPPLY, FOUNDERS_TRIAL, EXPOSURE, DOCUMENT, FILES, BREACH }
 
     public Type type;
     public String description = "";
@@ -23,6 +23,9 @@ public class Mission {
     public String item = "";        // SUPPLY: item id
     /** RECOVER: 0 = catch it, 1 = sealed in a stasis pod, deliver it to a site. */
     public int stage;
+    /** BREACH: what's being done about it (who's on it, how it's going), and the anomaly's entity id while it's loaded. */
+    public String status = "";
+    public int eid = -1;
 
     public boolean done() {
         return progress >= target;
@@ -44,6 +47,8 @@ public class Mission {
         t.putString("designation", designation);
         t.putString("item", item);
         t.putInt("stage", stage);
+        t.putString("status", status);
+        t.putInt("eid", eid);
         return t;
     }
 
@@ -67,6 +72,8 @@ public class Mission {
         m.designation = t.getString("designation");
         m.item = t.getString("item");
             m.stage = t.getInt("stage");
+        m.status = t.getString("status");
+        m.eid = t.contains("eid") ? t.getInt("eid") : -1;
         return m;
     }
 }
