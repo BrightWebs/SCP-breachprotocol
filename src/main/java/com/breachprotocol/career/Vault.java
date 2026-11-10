@@ -88,11 +88,20 @@ public final class Vault {
             if (t.hasUUID("e")) c.entity = t.getUUID("e");
             c.type = t.getString("ty"); c.name = t.getString("n");
             int[] b = t.getIntArray("b");
-            if (b.length == 10) { c.x0 = b[0]; c.z0 = b[1]; c.x1 = b[2]; c.z1 = b[3]; c.h = b[4]; c.fx0 = b[5]; c.fx1 = b[6]; c.fza = b[7]; c.fzb = b[8]; c.front = b[9]; }
+            if (b.length >= 5) { c.x0 = b[0]; c.z0 = b[1]; c.x1 = b[2]; c.z1 = b[3]; c.h = b[4]; }
+            if (b.length == 10 && b[6] > b[5]) { c.fx0 = b[5]; c.fx1 = b[6]; c.fza = b[7]; c.fzb = b[8]; c.front = b[9]; }
+            else if (c.x1 > c.x0) {
+                // saved before the walls were recorded: they're one block outside the inside, and the front is the side nearest the hall
+                c.fx0 = c.x0 - 1; c.fx1 = c.x1 + 1; c.fza = c.z0 - 1; c.fzb = c.z1 + 1;
+                c.front = c.z1 < 0 ? c.fzb : c.fza;
+            }
             c.look = t.getCompound("look");
             c.water = t.getBoolean("w");
             return c;
         }
+
+        /** A cell with real walls (not one lost to an old save). */
+        boolean real() { return fx1 > fx0 + 2 && fzb > fza + 2 && h > 0 && (front == fza || front == fzb) && Math.abs(front) == 4; }
 
         Vec3 centre() { return new Vec3((x0 + x1) / 2.0 + 0.5, Y + 1, (z0 + z1) / 2.0 + 0.5); }
 
@@ -405,6 +414,7 @@ public final class Vault {
 
     /** Does this cell suit what's in it? If not, a new one that does, and the old one taken down. */
     private static boolean fit(ServerLevel v, Region r, Cell c, LivingEntity e) {
+        if (!c.real()) return false;
         int[] n = needs(e);
         if ((n[0] == 1) == c.water && c.x1 - c.x0 + 1 >= n[1] && c.z1 - c.z0 + 1 >= n[1] && c.h >= n[2]) return false;
         rebuildFor(v, r, c, e);
@@ -430,6 +440,7 @@ public final class Vault {
 
     /** A cell taken down: gone back to the void, its stretch of hall made whole, its neighbours across the hall redrawn. */
     private static void demolish(ServerLevel v, Region r, Cell c) {
+        if (!c.real()) return;
         for (BlockPos q : BlockPos.betweenClosed(c.fx0, 0, c.fza, c.fx1, Y + c.h + 1, c.fzb))
             if (Math.abs(q.getZ()) > 4 || q.getY() < Y) v.setBlock(q, Blocks.AIR.defaultBlockState(), F);
         hall(v, r, c.fx0, c.fx1);
@@ -437,6 +448,7 @@ public final class Vault {
     }
 
     private static void drawCell(ServerLevel v, Cell c) {
+        if (!c.real()) return;
         forceChunks(v, c.fx0, c.fza, c.fx1, c.fzb);
         BlockState wall = b("containment_room_wall_middle", Blocks.IRON_BLOCK), floor = b("containment_room_floor", Blocks.SMOOTH_STONE),
                 ceil = b("containment_room_ceiling", Blocks.SMOOTH_STONE), glass = Blocks.TINTED_GLASS.defaultBlockState(), lamp = b("containment_room_lamp", Blocks.SEA_LANTERN);
@@ -539,6 +551,22 @@ public final class Vault {
         hall(v, r, o - 3, o + r.hallTo);
         throne(v, r, r.throneX == 0 ? o + r.hallTo + 1 : r.throneX);
         int back = 0;
+        // cells lost to an old save: one with something alive in it gets a proper cell; an empty one is let go
+        for (int i = 0; i < r.cells.size(); i++) {
+            Cell c = r.cells.get(i);
+            if (c.real()) continue;
+            Entity e = c.entity == null ? null : v.getEntity(c.entity);
+            if (e instanceof LivingEntity le && le.isAlive()) {
+                Cell nc = makeCell(v, r, le);
+                c.fx0 = nc.fx0; c.fx1 = nc.fx1; c.fza = nc.fza; c.fzb = nc.fzb; c.front = nc.front;
+                c.x0 = nc.x0; c.x1 = nc.x1; c.z0 = nc.z0; c.z1 = nc.z1; c.h = nc.h; c.water = nc.water;
+                Vec3 at = c.centre();
+                le.teleportTo(at.x, at.y, at.z);
+                back++;
+            } else r.cells.remove(i--);
+        }
+        // the hall again, now that nothing false is drawn in it
+        hall(v, r, o - 3, o + r.hallTo);
         for (int i = 0; i < r.cells.size(); i++) {
             Cell c = r.cells.get(i);
             drawCell(v, c);
@@ -576,6 +604,7 @@ public final class Vault {
         Cell c = null, empty = null;
         boolean reused = false, rebuilt = false;
         for (Cell x : r.cells) {
+            if (!x.real()) continue;
             Entity in = x.entity == null ? null : v.getEntity(x.entity);
             if (in != null && in.isAlive()) continue;
             if (empty == null) empty = x;
@@ -643,7 +672,8 @@ public final class Vault {
         Entity moved = e.changeDimension(new DimensionTransition(v, at, Vec3.ZERO, e.getYRot(), 0, DimensionTransition.DO_NOTHING));
         if (moved == null) return;
         c.entity = moved.getUUID();
-        if (moved instanceof LivingEntity ml) fit(v, r, c, ml);
+        if (!c.real()) repair(v, r);
+        else if (moved instanceof LivingEntity ml) fit(v, r, c, ml);
         c.name = Unleashed.isAnomaly(e) ? Unleashed.designation(e) : e.getName().getString();
         CompoundTag look = new CompoundTag();
         moved.saveAsPassenger(look);
@@ -891,7 +921,7 @@ public final class Vault {
         for (Map.Entry<UUID, Region> en : data(s).regions.entrySet())
             for (Cell c : en.getValue().cells) {
                 Entity e = c.entity == null ? null : v.getEntity(c.entity);
-                if (e != null && e.getY() < Y - 6) { Vec3 at = c.centre(); e.teleportTo(at.x, at.y, at.z); e.setDeltaMovement(Vec3.ZERO); e.fallDistance = 0; }
+                if (e != null && c.real() && e.getY() < Y - 6) { Vec3 at = c.centre(); e.teleportTo(at.x, at.y, at.z); e.setDeltaMovement(Vec3.ZERO); e.fallDistance = 0; }
             }
         // every twenty seconds: anything in a cell that doesn't suit it (too small, or dry for a sea creature) is moved to one that does
         if (now % 400 == 3) for (Region r : data(s).regions.values())
