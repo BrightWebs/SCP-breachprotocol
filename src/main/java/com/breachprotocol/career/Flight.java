@@ -139,7 +139,8 @@ public final class Flight {
                 }
                 l.sendParticles(ParticleTypes.EXPLOSION_EMITTER, feet.x, feet.y + 0.2, feet.z, 1, 0, 0, 0, 0);
                 for (net.minecraft.world.entity.LivingEntity e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, p.getBoundingBox().inflate(7), e -> e != p && e.isAlive() && !e.isSpectator())) {
-                    if (Targets.yours(p, e) || e instanceof ServerPlayer q && q.isCreative()) continue;
+                    if (e instanceof ServerPlayer q && q.isCreative()) continue;
+                    if (!Targets.hostile(p, e)) { nudge(p, e, p.getLookAngle()); continue; }
                     double d = Math.max(1, e.distanceTo(p));
                     Vec3 away = e.position().subtract(feet).multiply(1, 0, 1).normalize().scale(2.6 / Math.sqrt(d));
                     e.push(away.x, 0.5, away.z);
@@ -160,7 +161,7 @@ public final class Flight {
         Vec3 dir = p.getLookAngle();
         var box = p.getBoundingBox().expandTowards(dir.scale(3)).inflate(1.0);
         for (net.minecraft.world.entity.LivingEntity e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> e != p && e.isAlive() && !e.isSpectator())) {
-            if (Targets.yours(p, e) || e instanceof ServerPlayer q && (q.isCreative() || !Targets.hostile(p, q))) continue;
+            if (!Targets.hostile(p, e)) { nudge(p, e, dir); continue; }
             PowerKills.hurt(p, e, l.damageSources().playerAttack(p), 40F);
             Vec3 side = e.position().subtract(p.position()).normalize();
             e.push(dir.x * 2.5 + side.x, 0.8, dir.z * 2.5 + side.z);
@@ -176,8 +177,18 @@ public final class Flight {
     private static final java.util.List<Ember> EMBERS = new java.util.ArrayList<>();
     private static final Map<UUID, Vec3> TRAIL = new HashMap<>();
 
+    /** A friend in the way: a gentle shove aside, nothing more. */
+    private static void nudge(ServerPlayer p, net.minecraft.world.entity.LivingEntity e, Vec3 dir) {
+        if (e instanceof ServerPlayer q && q.isCreative()) return;
+        Vec3 away = e.position().subtract(p.position()).multiply(1, 0, 1);
+        if (away.lengthSqr() < 1.0E-4) away = new Vec3(-dir.z, 0, dir.x);
+        away = away.normalize().scale(0.35);
+        e.push(away.x, 0.12, away.z);
+        e.hurtMarked = true;
+    }
+
     private static boolean spare(ServerPlayer p, net.minecraft.world.entity.LivingEntity e) {
-        return e == p || !e.isAlive() || e.isSpectator() || Targets.yours(p, e) || e instanceof ServerPlayer q && (q.isCreative() || !Targets.hostile(p, q));
+        return e == p || !e.isAlive() || e.isSpectator() || !Targets.hostile(p, e);
     }
 
     /** Fire along the ground behind you, and anything you run into burns. */
@@ -196,7 +207,8 @@ public final class Flight {
         if (EMBERS.size() > 3000) EMBERS.subList(0, EMBERS.size() - 3000).clear();
         // what you run into
         var box = new net.minecraft.world.phys.AABB(was, now).inflate(p.getBbWidth() / 2 + 0.6, 0, p.getBbWidth() / 2 + 0.6).expandTowards(0, p.getBbHeight(), 0);
-        for (var e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> !spare(p, e))) {
+        for (var e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> e != p && e.isAlive() && !e.isSpectator())) {
+            if (spare(p, e)) { nudge(p, e, now.subtract(was)); continue; }
             if (e.invulnerableTime > 10) continue;
             e.igniteForSeconds(6);
             PowerKills.hurt(p, e, l.damageSources().onFire(), 14F);
@@ -218,10 +230,9 @@ public final class Flight {
             if (!burn) continue;
             ServerPlayer owner = srv.getPlayerList().getPlayer(e.owner());
             var box = new net.minecraft.world.phys.AABB(e.at().x - 0.6, e.at().y - 0.2, e.at().z - 0.6, e.at().x + 0.6, e.at().y + 1.0, e.at().z + 0.6);
-            for (var v : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, v -> owner == null ? v.isAlive() : !spare(owner, v))) {
+            for (var v : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, v -> owner != null && !spare(owner, v))) {
                 v.igniteForSeconds(4);
-                if (owner != null) PowerKills.hurt(owner, v, l.damageSources().inFire(), 3F);
-                else v.hurt(l.damageSources().inFire(), 3F);
+                PowerKills.hurt(owner, v, l.damageSources().inFire(), 3F);
             }
         }
     }

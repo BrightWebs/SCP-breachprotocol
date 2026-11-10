@@ -540,9 +540,9 @@ public final class SuperFlight {
             var ps = event.getPoseStack();
             ps.pushPose();
             if (wallRunning(p)) {
-                // feet on the wall, body out from it, running straight up
-                ps.translate(-Mth.sin(yaw) * 0.25, 0.1, Mth.cos(yaw) * 0.25);
-                ps.mulPose(new Quaternionf().rotateAxis(-Mth.HALF_PI, Mth.cos(yaw), 0, Mth.sin(yaw)));
+                // sprinting up it: upright, leaning in, a little off the face so the head clears it
+                ps.translate(Mth.sin(yaw) * 0.3, 0, -Mth.cos(yaw) * 0.3);
+                ps.mulPose(new Quaternionf().rotateAxis(0.3F, Mth.cos(yaw), 0, Mth.sin(yaw)));
             } else {
                 // flat out and low, the way a ninja runs
                 float t = (float) Mth.clamp((hRun - 0.35) * 0.45, 0, 0.42) + 0.22F;
@@ -674,10 +674,21 @@ public final class SuperFlight {
             m.leftArm.xRot = 1.35F - flick;
             m.leftArm.yRot = 0.1F;
             m.leftArm.zRot = -0.18F;
-            m.head.xRot = wallRunning(p) ? 0.1F : -0.45F;
-            // a longer stride than walking allows
-            m.rightLeg.xRot *= 1.5F;
-            m.leftLeg.xRot *= 1.5F;
+            if (wallRunning(p)) {
+                // high knees, driving up the face, eyes on the top
+                float c = Mth.sin(age * 1.5F);
+                m.head.xRot = -0.7F;
+                m.rightLeg.xRot = -0.75F + c * 0.85F;
+                m.leftLeg.xRot = -0.75F - c * 0.85F;
+                m.rightLeg.yRot = m.leftLeg.yRot = 0F;
+                m.rightLeg.zRot = 0.04F;
+                m.leftLeg.zRot = -0.04F;
+            } else {
+                m.head.xRot = -0.45F;
+                // a longer stride than walking allows
+                m.rightLeg.xRot *= 1.5F;
+                m.leftLeg.xRot *= 1.5F;
+            }
             m.hat.copyFrom(m.head);
             return;
         }
