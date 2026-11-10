@@ -97,6 +97,17 @@ public final class Powers {
 
     private static final String AUTO = "bp_auto";
 
+    /** A creature's own power, used in its form (Shapeshift): whoever wears the form has it, at its usual reach. */
+    public static void castAs(ServerPlayer p, String id) {
+        Power pw = get(id);
+        if (pw == null) return;
+        ServerLevel l = p.serverLevel();
+        int r = pw.rDef();
+        if (pw.aim() == Aim.TOGGLE) { Toggles.toggle(p, id, r); return; }
+        List<LivingEntity> tg = pw.aim() == Aim.AROUND ? Targets.around(p, r, looked(p, Math.max(r, 8))) : List.of();
+        fire(p, l, pw, r, tg, false);
+    }
+
     public static void cast(ServerPlayer p, String id, int range) {
         Power pw = get(id);
         if (pw == null || Dominion.level(p) < pw.minLevel()) return;

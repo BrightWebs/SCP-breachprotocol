@@ -73,6 +73,15 @@ public class ShapeshiftScreen extends Screen {
 
     // ---------------------------------------------------------------- what can be chosen
 
+    /** Things that are entities but not creatures (skulls, eggs, seats, statues, projectiles...): not forms. */
+    public static boolean creature(String path) {
+        for (String k : new String[]{"skull", "egg", "seat", "statue", "part", "projectile", "image", "trophy", "corpse", "head"}) if (path.contains(k)) return false;
+        return true;
+    }
+
+    /** Creatures whose model wouldn't draw: not tried again. */
+    private static final Set<EntityType<?>> BROKEN = new HashSet<>();
+
     private static void gather() {
         if (mobs != null) return;
         Minecraft mc = Minecraft.getInstance();
@@ -81,7 +90,7 @@ public class ShapeshiftScreen extends Screen {
             if (t == EntityType.PLAYER) continue;
             Entity e = null;
             try { e = t.create(mc.level); } catch (Throwable ignored) {}
-            if (!(e instanceof LivingEntity le) || e instanceof Player) continue;
+            if (!(e instanceof net.minecraft.world.entity.Mob le) || e instanceof Player || !creature(BuiltInRegistries.ENTITY_TYPE.getKey(t).getPath())) { if (e != null) e.discard(); continue; }
             MODELS.put(t, le);
             mobs.add(new Mob(t, BuiltInRegistries.ENTITY_TYPE.getKey(t).toString(), t.getDescription().getString()));
         }
@@ -223,11 +232,19 @@ public class ShapeshiftScreen extends Screen {
         Mob show = hover != null ? hover : list.isEmpty() ? null : list.get(Math.min(scroll, list.size() - 1));
         if (show != null) {
             LivingEntity e = MODELS.get(show.type());
-            if (e != null) {
+            if (e != null && !BROKEN.contains(show.type())) {
                 float bh = Math.max(0.3F, e.getBbHeight()), bw = Math.max(0.3F, e.getBbWidth());
                 int scale = (int) Math.max(4, Math.min(60, (h - 40) * 0.8F / Math.max(bh, bw * 0.9F)));
-                try { InventoryScreen.renderEntityInInventoryFollowsMouse(g, px + 2, y + 2, px + pw - 2, y + h - 24, scale, 0.0625F, mx, my, e); } catch (Throwable ignored) {}
+                try { InventoryScreen.renderEntityInInventoryFollowsMouse(g, px + 2, y + 2, px + pw - 2, y + h - 24, scale, 0.0625F, mx, my, e); }
+                catch (Throwable t) {
+                    // a model that broke halfway: put the screen back as it was (clipping, offsets, lighting) and don't try it again
+                    BROKEN.add(show.type());
+                    try { g.disableScissor(); } catch (Throwable ignored) {}
+                    try { while (!g.pose().clear()) g.pose().popPose(); } catch (Throwable ignored) {}
+                    try { com.mojang.blaze3d.platform.Lighting.setupFor3DItems(); } catch (Throwable ignored) {}
+                }
             }
+            if (BROKEN.contains(show.type())) PowerKeys.small(g, font, "(NO PREVIEW)", px + 4, y + 6, DIM);
             String n = show.name();
             g.drawString(font, font.plainSubstrByWidth(n, pw - 8), px + 4, y + h - 20, TEXT, false);
             PowerKeys.small(g, font, "CLICK TO BECOME IT", px + 4, y + h - 9, AC);

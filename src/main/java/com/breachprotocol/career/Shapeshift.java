@@ -68,6 +68,7 @@ public final class Shapeshift {
             @SuppressWarnings("unchecked") var lt = (net.minecraft.world.entity.EntityType<? extends net.minecraft.world.entity.LivingEntity>) t;
             boolean living;
             try { living = net.minecraft.world.entity.ai.attributes.DefaultAttributes.hasSupplier(lt); } catch (Throwable e) { living = false; }
+            if (living && !com.breachprotocol.career.CreatureMoves.creature(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(t).getPath())) living = false;
             if (living) mobs.add(net.minecraft.nbt.StringTag.valueOf(net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(t).toString()));
         }
         for (var b : net.minecraft.core.registries.BuiltInRegistries.BLOCK)
