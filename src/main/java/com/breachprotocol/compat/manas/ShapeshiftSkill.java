@@ -10,7 +10,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 
-import java.util.List;
 
 /**
  * Shapeshift: the Administrator's Unique skill, in Manas Reborn's own list. Two modes, switched the way
@@ -32,7 +31,8 @@ public class ShapeshiftSkill extends Skill {
 
     public int getModes(ManasSkillInstance instance) { return 2; }
 
-    public List<Integer> getModeLearningList(ManasSkillInstance instance) { return List.of(0, 1); }
+    /** Switching modes: Mimic and Archive, one to the other, either way (Manas's default keeps every skill on its first mode). */
+    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return mode == 0 ? 1 : 0; }
 
     public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "mimic" : "archive"; }
 
