@@ -33,6 +33,8 @@ public class StaffNavigation extends GroundPathNavigation {
         @Override
         public PathType getPathType(PathfindingContext ctx, int x, int y, int z) {
             BlockPos p = new BlockPos(x, y, z);
+            // never a way through a containment cell, unless they've been sent in
+            if (mob != null && !Doors.cellAllowed(mob) && Doors.inCell(mob, p, 0)) return PathType.BLOCKED;
             BlockState st = ctx.getBlockState(p);
             if (Doors.isDoor(st) && !Doors.isOpen(st) && mob != null && Doors.may(mob, ctx.level(), p)) {
                 BlockState below = ctx.getBlockState(p.below());

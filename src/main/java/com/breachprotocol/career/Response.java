@@ -266,6 +266,8 @@ public final class Response {
             }
             t.members.add(g.getUUID());
         }
+        // a response team may go where it has to, cells included
+        for (UUID id : t.members) if (l.getEntity(id) instanceof FoundationStaff f) f.getPersistentData().putBoolean("bp_cell_ok", true);
         return !t.members.isEmpty();
     }
 
@@ -442,7 +444,7 @@ public final class Response {
     /** Back to their posts. */
     private static void standDown(MinecraftServer srv, Team t) {
         for (ServerLevel l : srv.getAllLevels())
-            for (UUID id : t.members) if (l.getEntity(id) instanceof FoundationStaff f && f.isAlive()) { f.setTarget(null); f.order("post", null); }
+            for (UUID id : t.members) if (l.getEntity(id) instanceof FoundationStaff f && f.isAlive()) { f.setTarget(null); f.getPersistentData().remove("bp_cell_ok"); f.order("post", null); }
         Mob m = Containment.loaded(srv, t.target);
         if (m != null && m.getPersistentData().getBoolean(SECURED)) release(m);
     }

@@ -70,7 +70,23 @@ public final class Doors {
 
     /** May this person go through this door? */
     public static boolean may(Mob m, BlockGetter l, BlockPos pos) {
+        // a containment cell's door is nobody's business without an order to go in (that's how breaches start)
+        if (!cellAllowed(m) && inCell(m, pos, 1)) return false;
         return clearance(m) >= level(l, pos, m.level().getGameTime());
+    }
+
+    /** Staff with business inside a cell (a response team, a cleaning crew): allowed through its door. */
+    public static boolean cellAllowed(Mob m) { return m.getPersistentData().getBoolean("bp_cell_ok"); }
+
+    /** Inside a registered containment cell (or within {@code margin} blocks of one: its door, its walls). */
+    public static boolean inCell(Mob m, BlockPos p, int margin) {
+        var srv = m.level().getServer();
+        if (srv == null) return false;
+        String dim = m.level().dimension().location().toString();
+        for (com.breachprotocol.career.Sites.Cell c : com.breachprotocol.career.Sites.get(srv).cells)
+            if (c.dim.equals(dim) && p.getX() >= c.x0 - margin && p.getX() <= c.x1 + margin && p.getY() >= c.y0 - margin && p.getY() <= c.y1 + margin
+                    && p.getZ() >= c.z0 - margin && p.getZ() <= c.z1 + margin) return true;
+        return false;
     }
 
     /** A person's clearance (staff by role and standing; MCA villagers on the payroll by their job). */

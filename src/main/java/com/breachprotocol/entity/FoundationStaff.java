@@ -288,6 +288,13 @@ public class FoundationStaff extends PathfinderMob implements Person {
         double d = distanceToSqr(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
         if (target == goal && d < (sleepAtGoal ? 4 : 6)) { arrive(); return; }
         if (d < bestD - 1.5) { bestD = d; stuck = 0; } else stuck++;
+        if (stuck >= 10 && !Doors.cellAllowed(this) && Doors.inCell(this, target, 0)) {
+            // it's inside a containment cell: they don't go in there unless sent; they wait outside
+            goal = null;
+            stuck = 0;
+            getNavigation().stop();
+            return;
+        }
         if (stuck >= 10 && !watched()) {
             // hopelessly stuck (a blocked corridor, furniture someone moved) and nobody's looking: they find their way
             teleportTo(target.getX() + 0.5, target.getY(), target.getZ() + 0.5);
