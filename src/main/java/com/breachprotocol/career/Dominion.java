@@ -84,6 +84,15 @@ public final class Dominion {
     /** SCP-Ω's anomaly immunity (see CareerEvents) applies only when anomalies are told to leave them be. */
     public static boolean sovereign(Player p) { return auraAnomalies(p) != UNMASKED; }
 
+    /**
+     * The anomalies leave this one be: the Administrator or SCP-Ω, with anomalies told to leave them be (the
+     * default; "as anyone" in the console's Temperament lets them come). SCP Unleashed's own targeting (every
+     * anomaly that picks its prey itself: SCP-049's surgery, the statues, the hunters) is told too.
+     */
+    public static boolean spared(Player p) {
+        return p != null && !p.isSpectator() && (Career.isAscended(p) || Career.rank(p) == Rank.ADMINISTRATOR) && sovereign(p);
+    }
+
     // ================================================================== the console
 
     public static void action(ServerPlayer p, String action, int arg) {
@@ -94,8 +103,9 @@ public final class Dominion {
         switch (a[1]) {
             case "aura" -> {
                 // dom:aura:a|c:n  (anomalies / everything else)
-                if (lv < 2 || a.length < 4) return;
+                if (a.length < 4) return;
                 boolean anomalies = a[2].equals("a");
+                if (!anomalies && lv < 2) return; // the Administrator chooses for the anomalies; the rest of the living is SCP-Ω's
                 int n = Math.max(0, Math.min(2, Integer.parseInt(a[3])));
                 p.getPersistentData().putInt(anomalies ? "bp_aura_a" : "bp_aura_c", n);
                 CareerEvents.shield(p); // at once, not at the next second

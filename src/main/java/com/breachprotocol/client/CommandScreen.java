@@ -92,8 +92,8 @@ public class CommandScreen extends Screen {
     // ---------------------------------------------------------------- temperament
 
     private void temperament(GuiGraphics g, int x, int y, int w, int h, int mx, int my, int dom) {
-        if (dom < 2) {
-            locked(g, x, y, w, "Temperament belongs to SCP-Ω.", "The Administrator is still a person. Anything can fight a person. Ascend, and choose what may.");
+        if (dom < 1) {
+            locked(g, x, y, w, "Temperament belongs to the Administrator.", "Anything can fight a person.");
             return;
         }
         String[] names = {"As anyone", "Leave me be", "Fear me"};
@@ -106,6 +106,14 @@ public class CommandScreen extends Screen {
         int[] cur = {t().getInt("auraA"), t().getInt("auraC")};
         int yy = y + 2;
         for (int r = 0; r < 2; r++) {
+            if (r == 1 && dom < 2) {
+                // the rest of the living answers only to SCP-Ω
+                small(g, rows[r], x, yy, MUTED);
+                yy += 9;
+                wrap(g, "Every other creature sees a person, and anything can fight a person. Ascend, and choose what may.", x, yy, w, 0xFF8A8098);
+                yy += 26;
+                continue;
+            }
             small(g, rows[r], x, yy, MUTED);
             yy += 9;
             int bw = (w - 8) / 3;
@@ -128,7 +136,7 @@ public class CommandScreen extends Screen {
             wrap(g, about[r][Math.max(0, Math.min(2, cur[r]))], x, yy, w, 0xFFB8A8D8);
             yy += 26;
         }
-        small(g, "WHATEVER YOU CHOOSE, YOU CANNOT DIE. RIGHT-CLICKING AN SCP STILL TALKS TO IT.", x, y + h - 10, DIM);
+        small(g, dom >= 2 ? "WHATEVER YOU CHOOSE, YOU CANNOT DIE. RIGHT-CLICKING AN SCP STILL TALKS TO IT." : "LEFT BE, NO ANOMALY CAN END YOU. RIGHT-CLICKING AN SCP STILL TALKS TO IT.", x, y + h - 10, DIM);
     }
 
     // ---------------------------------------------------------------- powers

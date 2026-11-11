@@ -180,17 +180,17 @@ public final class CareerEvents {
                 && Unleashed.isAnomaly(target) && !(target instanceof O5MemberEntity)) {
             event.setAmount(event.getAmount() * 8F); // nothing in the Foundation can survive its master
         }
-        if (target instanceof Player p && Career.isAscended(p) && Dominion.sovereign(p)) {
+        if (target instanceof Player p && Dominion.spared(p)) {
             // Nothing in the Foundation's care may harm its master (unless they've chosen to go unmasked).
             net.minecraft.world.entity.Entity any = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
             if (any != null && (Unleashed.isAnomaly(any) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(any) || com.breachprotocol.compat.UnleashedApi.isRift(any)))
                 p.getPersistentData().putLong("bp_anomaly_hit", p.level().getGameTime());
             net.minecraft.world.entity.Entity src = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
-            if (src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src))) {
+            if (src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src)) || anomalousHarm(event.getSource())) {
                 event.setCanceled(true);
                 return;
             }
-            event.setAmount(event.getAmount() * 0.4F);
+            if (Career.isAscended(p)) event.setAmount(event.getAmount() * 0.4F);
         }
     }
 
@@ -200,20 +200,40 @@ public final class CareerEvents {
      */
     @SubscribeEvent
     public static void onAscendedDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer p) || !Career.isAscended(p)) return;
+        if (!(event.getEntity() instanceof ServerPlayer p) || !Dominion.spared(p)) return;
         net.minecraft.world.entity.Entity src = event.getSource().getEntity() != null ? event.getSource().getEntity() : event.getSource().getDirectEntity();
-        boolean anomalous = src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src) || com.breachprotocol.compat.UnleashedApi.isRift(src));
+        boolean anomalous = src != null && (Unleashed.isAnomaly(src) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(src) || com.breachprotocol.compat.UnleashedApi.isRift(src)) || anomalousHarm(event.getSource());
         long last = p.getPersistentData().getLong("bp_anomaly_hit");
         if (anomalous || p.level().getGameTime() - last <= 5) {
             event.setCanceled(true);
             p.setHealth(p.getMaxHealth());
-            p.displayClientMessage(Component.literal("It cannot end you. You are SCP-\u03A9.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+            p.displayClientMessage(Component.literal(Career.isAscended(p) ? "It cannot end you. You are SCP-\u03A9." : "It cannot end you. You are the Administrator.").withStyle(ChatFormatting.LIGHT_PURPLE), true);
         }
+    }
+
+    /** Harm of SCP Unleashed's own kinds (an infection's toll, a curse, a field), whoever or whatever dealt it; not the warheads. */
+    static boolean anomalousHarm(net.minecraft.world.damagesource.DamageSource src) {
+        if (src.getEntity() instanceof Player || src.getEntity() instanceof com.breachprotocol.entity.FoundationStaff) return false; // a gun is a gun
+        var key = src.typeHolder().unwrapKey();
+        return key.isPresent() && key.get().location().getNamespace().equals(Unleashed.MODID) && !key.get().location().getPath().startsWith("warhead");
+    }
+
+    /** Nor can an anomaly lay its sicknesses and curses on them. */
+    @SubscribeEvent
+    public static void onAnomalyEffect(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Applicable event) {
+        if (!(event.getEntity() instanceof ServerPlayer p) || !Dominion.spared(p)) return;
+        var inst = event.getEffectInstance();
+        if (inst == null || inst.getEffect().value().isBeneficial()) return;
+        net.minecraft.world.entity.Entity from = event.getEffectSource();
+        boolean theirs = from != null && (Unleashed.isAnomaly(from) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(from));
+        var id = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getKey(inst.getEffect().value());
+        if (theirs || id != null && id.getNamespace().equals(Unleashed.MODID))
+            event.setResult(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
     }
 
     @SubscribeEvent
     public static void onTarget(LivingChangeTargetEvent event) {
-        if (Unleashed.isAnomaly(event.getEntity()) && event.getNewAboutToBeSetTarget() instanceof Player p && Career.isAscended(p) && Dominion.sovereign(p)) {
+        if (Unleashed.isAnomaly(event.getEntity()) && event.getNewAboutToBeSetTarget() instanceof Player p && Dominion.spared(p)) {
             event.setCanceled(true);
         }
     }
