@@ -286,7 +286,7 @@ public final class SuperFlight {
     private static final int RAM_GEAR = 5, NINJA_GEAR = 6;
     private static final double WALL_UP = 0.85;
     private static int runGear, runIdle, runLastTap = -100, shiftDownAt = -100, jumpTap = -100, runLaunch = -1, wallTicks;
-    private static boolean runSprintWas, shiftWas, ramming, jumpWas, wallRun;
+    private static boolean runSprintWas, shiftWas, crouchWas, ramming, jumpWas, wallRun;
 
     static boolean running() { return runGear > 0; }
 
@@ -310,12 +310,20 @@ public final class SuperFlight {
             else jumpTap = ticks;
         }
         jumpWas = jumpKey;
+        // hands back (gear six and up) and crouch: a dead stop, and the speed goes on ahead as a sonic wave
+        boolean crouch = free && o.keyShift.isDown(), crouchEdge = crouch && !crouchWas;
+        crouchWas = crouch;
+        if (ok && runGear >= NINJA_GEAR && !wallRun && crouchEdge) {
+            sonicStop(p);
+            shiftWas = true;
+            return;
+        }
         if (!ok || !fwd) { wallRun = false; if (runGear > 0 && (!ok || ++runIdle > 8)) runShift(p, 0); return; }
         runIdle = 0;
         // a quick tap of crouch at the top gear: shoulder down, and through whatever's in front
         boolean sh = free && o.keyShift.isDown();
         if (sh && !shiftWas) shiftDownAt = ticks;
-        if (!sh && shiftWas && ticks - shiftDownAt <= 6 && runGear >= RAM_GEAR) setRam(p, !ramming);
+        if (!sh && shiftWas && ticks - shiftDownAt <= 6 && runGear == RAM_GEAR) setRam(p, !ramming);
         shiftWas = sh;
         if (runGear == 0) return;
         p.setSprinting(true);
@@ -431,6 +439,18 @@ public final class SuperFlight {
         else if (g > was) { p.playSound(SoundEvents.WIND_CHARGE_BURST.value(), 0.8F, 0.7F); punch = 5; shake = 3; }
     }
 
+    /** Stop dead from the ninja run: the server sends the wave on at the speed you were going. */
+    private static void sonicStop(LocalPlayer p) {
+        double speed = RUN[runGear];
+        send("pow:run:wave:" + Math.round(speed * 100));
+        wallRun = false;
+        runShift(p, 0);
+        Vec3 dm = p.getDeltaMovement();
+        p.setDeltaMovement(0, Math.min(0, dm.y), 0);
+        shake = Math.max(shake, 14);
+        punch = 8;
+    }
+
     private static void setRam(LocalPlayer p, boolean on) {
         if (ramming == on) return;
         ramming = on;
@@ -523,9 +543,9 @@ public final class SuperFlight {
             String gs = runGear < RAM_GEAR ? "DOUBLE-TAP SPRINT: GEAR UP"
                     : ramming ? "TAP CROUCH: STOP RAMMING  ·  DOUBLE-TAP JUMP: TAKE OFF"
                     : runGear < NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 6  ·  TAP CROUCH: SHOULDER  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : runGear < 7 ? "DOUBLE-TAP SPRINT: GEAR 7, FIRE  ·  RUN AT A WALL: UP IT  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR 8  ·  FIRE BEHIND YOU  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : "FIRE BEHIND YOU  ·  RUN AT A WALL: UP IT  ·  DOUBLE-TAP JUMP: TAKE OFF";
+                    : runGear == NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 7, FIRE  ·  CROUCH: SONIC STOP  ·  DOUBLE-TAP JUMP: TAKE OFF"
+                    : runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR 8  ·  CROUCH: SONIC STOP  ·  DOUBLE-TAP JUMP: TAKE OFF"
+                    : "CROUCH: SONIC STOP  ·  RUN AT A WALL: UP IT  ·  DOUBLE-TAP JUMP: TAKE OFF";
             int x = g.guiWidth() / 2, y = g.guiHeight() - 62;
             g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= 7 ? 0xFFFF8A3A : runGear >= NINJA_GEAR ? 0xFFB8E8FF : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
             PowerKeys.small(g, mc.font, gs, x - (int) (mc.font.width(gs) * 0.375F), y + 10, 0xFFA898C0);

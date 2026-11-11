@@ -73,6 +73,11 @@ public final class Flight {
             }
             return;
         }
+        if (a[1].equals("run") && a.length >= 4 && a[2].equals("wave")) {
+            // a dead stop from the ninja run: everything that speed was carrying keeps going, ahead of you
+            if (Dominion.level(p) >= 2 && RUN.getOrDefault(p.getUUID(), 0) >= 6) wave(p, Math.max(0.6, Math.min(8.0, parse(a[3]) / 100.0)));
+            return;
+        }
         if (a[1].equals("run") && a.length >= 4 && (a[2].equals("gear") || a[2].equals("ram"))) {
             if (Dominion.level(p) < 2) { stopRun(p); return; }
             if (a[2].equals("gear")) {
@@ -241,6 +246,117 @@ public final class Flight {
         }
     }
 
+    // ================================================================== the sonic stop
+
+    /** A wall of air going on at the speed you stopped from, through whatever's ahead. */
+    private static final class Wave {
+        final UUID owner;
+        final ServerLevel l;
+        final Vec3 from, dir;
+        final double speed, reach;
+        double gone;
+        final java.util.Set<Integer> hit = new java.util.HashSet<>();
+        Wave(UUID owner, ServerLevel l, Vec3 from, Vec3 dir, double speed) {
+            this.owner = owner; this.l = l; this.from = from; this.dir = dir; this.speed = speed;
+            this.reach = 20 + speed * 9; // gear 8: about 70 blocks
+        }
+    }
+
+    private static final java.util.List<Wave> WAVES = new java.util.ArrayList<>();
+
+    private static void wave(ServerPlayer p, double speed) {
+        ServerLevel l = p.serverLevel();
+        float yaw = p.getYRot() * net.minecraft.util.Mth.DEG_TO_RAD;
+        Vec3 dir = new Vec3(-net.minecraft.util.Mth.sin(yaw), 0, net.minecraft.util.Mth.cos(yaw));
+        Vec3 at = p.position().add(0, 1.0, 0);
+        // you stop dead; the boom goes on without you
+        p.setDeltaMovement(0, Math.min(0, p.getDeltaMovement().y), 0);
+        p.hurtMarked = true;
+        l.playSound(null, at.x, at.y, at.z, SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 3.0F, 0.75F);
+        l.playSound(null, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0F, 0.6F);
+        l.playSound(null, at.x, at.y, at.z, SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 2.0F, 0.5F);
+        Vec3 front = at.add(dir.scale(1.5));
+        l.sendParticles(ParticleTypes.EXPLOSION_EMITTER, front.x, front.y, front.z, 1, 0, 0, 0, 0);
+        l.sendParticles(ParticleTypes.GUST_EMITTER_LARGE, front.x, front.y, front.z, 1, 0, 0, 0, 0);
+        // the shock ring thrown off where you stood
+        for (int i = 0; i < 36; i++) {
+            double a = i * Math.PI * 2 / 36;
+            l.sendParticles(ParticleTypes.CLOUD, at.x, p.getY() + 0.1, at.z, 0, Math.cos(a), 0.02, Math.sin(a), 0.9);
+        }
+        // dust kicked up off the ground under you
+        net.minecraft.world.level.block.state.BlockState under = l.getBlockState(p.blockPosition().below());
+        if (!under.isAir()) l.sendParticles(new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, under), p.getX(), p.getY() + 0.1, p.getZ(), 40, 1.2, 0.1, 1.2, 0.3);
+        WAVES.add(new Wave(p.getUUID(), l, at, dir, speed));
+    }
+
+    private static void waves(MinecraftServer srv) {
+        if (WAVES.isEmpty()) return;
+        WAVES.removeIf(w -> {
+            ServerPlayer owner = srv.getPlayerList().getPlayer(w.owner);
+            if (owner == null) return true;
+            double to = Math.min(w.reach, w.gone + w.speed);
+            for (double d = w.gone; d < to; d += 1.0) {
+                Vec3 q = w.from.add(w.dir.scale(d));
+                double r = 1.6 + d * 0.07;            // it spreads as it goes
+                double fall = 1 - 0.55 * d / w.reach; // and weakens a little
+                if ((int) d % 3 == 0) {
+                    w.l.sendParticles(ParticleTypes.SONIC_BOOM, q.x, q.y, q.z, 1, 0, 0, 0, 0);
+                    for (int i = 0; i < 6; i++) {
+                        double a = i * Math.PI / 3 + d;
+                        Vec3 side = new Vec3(-w.dir.z, 0, w.dir.x).scale(Math.cos(a) * r);
+                        w.l.sendParticles(ParticleTypes.CLOUD, q.x + side.x, q.y + Math.sin(a) * r * 0.6, q.z + side.z, 0, w.dir.x, 0.02, w.dir.z, w.speed * 0.25);
+                    }
+                }
+                // a wall stops it, with a bang (nothing is broken)
+                net.minecraft.core.BlockPos bp = net.minecraft.core.BlockPos.containing(q);
+                if (w.l.getBlockState(bp).isCollisionShapeFullBlock(w.l, bp) && w.l.getBlockState(bp.above()).isCollisionShapeFullBlock(w.l, bp.above())) {
+                    Vec3 b = q.subtract(w.dir.scale(0.6));
+                    w.l.sendParticles(ParticleTypes.EXPLOSION_EMITTER, b.x, b.y, b.z, 1, 0, 0, 0, 0);
+                    w.l.playSound(null, b.x, b.y, b.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.5F, 0.7F);
+                    var st = w.l.getBlockState(bp);
+                    w.l.sendParticles(new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, st), b.x, b.y, b.z, 30, 0.8, 0.8, 0.8, 0.4);
+                    hitAround(owner, w, q, r, fall);
+                    return true;
+                }
+                hitAround(owner, w, q, r, fall);
+            }
+            w.gone = to;
+            if (w.gone >= w.reach) {
+                Vec3 e = w.from.add(w.dir.scale(w.reach));
+                w.l.sendParticles(ParticleTypes.GUST_EMITTER_SMALL, e.x, e.y, e.z, 1, 0, 0, 0, 0);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    /** What the wave catches: the hostile are struck and thrown on ahead of it; friends only rocked; loose things blown along. */
+    private static void hitAround(ServerPlayer owner, Wave w, Vec3 q, double r, double fall) {
+        var box = new net.minecraft.world.phys.AABB(q, q).inflate(r, r * 0.8, r);
+        for (net.minecraft.world.entity.Entity e : w.l.getEntities(owner, box, e -> e.isAlive() && !e.isSpectator())) {
+            if (!w.hit.add(e.getId())) continue;
+            Vec3 throwAt = w.dir.scale(w.speed * 0.55 * fall + 0.6).add(0, 0.45 + w.speed * 0.06, 0);
+            if (e instanceof net.minecraft.world.entity.LivingEntity v) {
+                if (spare(owner, v)) {
+                    if (!(v instanceof ServerPlayer sp && sp.isCreative())) { v.push(w.dir.x * 0.5, 0.25, w.dir.z * 0.5); v.hurtMarked = true; }
+                    continue;
+                }
+                float dmg = (float) ((10 + w.speed * 7) * fall); // gear 8, point-blank: about 50
+                v.invulnerableTime = 0;
+                Toggles.strike(v);
+                PowerKills.hurt(owner, v, w.l.damageSources().sonicBoom(owner), dmg);
+                v.push(throwAt.x, throwAt.y, throwAt.z);
+                v.hurtMarked = true;
+                double cy = v.getY() + v.getBbHeight() / 2;
+                w.l.sendParticles(ParticleTypes.EXPLOSION, v.getX(), cy, v.getZ(), 1, 0.2, 0.2, 0.2, 0);
+            } else if (e instanceof net.minecraft.world.entity.item.ItemEntity || e instanceof net.minecraft.world.entity.projectile.Projectile
+                    || e instanceof net.minecraft.world.entity.item.FallingBlockEntity || e instanceof net.minecraft.world.entity.vehicle.AbstractMinecart || e instanceof net.minecraft.world.entity.vehicle.Boat) {
+                e.push(throwAt.x, throwAt.y * 0.6, throwAt.z);
+                e.hurtMarked = true;
+            }
+        }
+    }
+
     private static int parse(String s) { try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; } }
 
     @SubscribeEvent
@@ -256,6 +372,7 @@ public final class Flight {
                 p.setDeltaMovement(now.subtract(was));
         }
         embers(srv);
+        waves(srv);
         if (srv.getTickCount() % 200 == 0) LAST.keySet().removeIf(id -> srv.getPlayerList().getPlayer(id) == null);
         // lying flat ends when the flight does
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
