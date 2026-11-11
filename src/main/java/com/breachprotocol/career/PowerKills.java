@@ -193,7 +193,7 @@ public final class PowerKills {
         } catch (Throwable t) { BreachProtocol.LOGGER.debug("Couldn't take back skills: {}", t.toString()); }
     }
 
-    private record Pending(ServerPlayer killer, double victimEP, double before, List<CompoundTag> skills) {}
+    private record Pending(ServerPlayer killer, double victimEP, double before, List<CompoundTag> skills, int souls) {}
 
     private static final Map<UUID, Pending> PENDING = new HashMap<>();
 
@@ -203,8 +203,14 @@ public final class PowerKills {
         LivingEntity v = event.getEntity();
         if (v.level().isClientSide() || !manas()) return;
         ServerPlayer killer = powerKiller(v, event.getSource());
-        if (killer == null) return;
-        PENDING.put(v.getUUID(), new Pending(killer, ep(v), ep(killer), Vault.chief(killer) ? skillsOf(v) : List.of()));
+        int souls = 0;
+        if (killer == null) {
+            // a kill by the Foundation's own people is the Administrator's: EP, skills, and its soul
+            killer = staffOwner(v, event.getSource());
+            if (killer == null) return;
+            souls = 1 + soulsOf(v);
+        }
+        PENDING.put(v.getUUID(), new Pending(killer, ep(v), ep(killer), Vault.chief(killer) ? skillsOf(v) : List.of(), souls));
     }
 
     /** After everyone (Manas Reborn included) has had their say: make it up to 100% of the creature's EP. */
@@ -216,6 +222,7 @@ public final class PowerKills {
         double owed = pd.victimEP() - Math.max(0, gained);
         if (owed > 0.5) try { increaseEP.invoke(null, pd.killer(), owed); } catch (Throwable ignored) {}
         take(pd.killer(), pd.skills());
+        if (pd.souls() > 0) addSouls(pd.killer(), pd.souls());
     }
 
     /**
@@ -227,6 +234,7 @@ public final class PowerKills {
         LivingEntity v = event.getEntity();
         if (v.level().isClientSide() || event.isCanceled() || !(v.level() instanceof ServerLevel sl) || v instanceof net.minecraft.world.entity.player.Player) return;
         ServerPlayer p = powerKiller(v, event.getSource());
+        if (p == null) p = staffOwner(v, event.getSource());
         if (p == null || p.isRemoved()) return;
         int xp;
         try { xp = v.getExperienceReward(sl, p); } catch (Throwable t) { xp = 0; }
@@ -244,6 +252,58 @@ public final class PowerKills {
     }
 
     /** The player whose power (or Rage, or ram) brought this down, if one did in the last few seconds. */
+    /** Is this one of the Foundation's own (staff, guards, teams, villagers on the payroll)? */
+    private static boolean foundation(net.minecraft.world.entity.Entity e) {
+        return e instanceof com.breachprotocol.entity.FoundationStaff || e != null && e.getPersistentData().contains("bp_emp_role");
+    }
+
+    /** A kill by the Foundation's people: whose it is (the owner of their site, online; else the nearest Administrator). */
+    static ServerPlayer staffOwner(LivingEntity v, DamageSource src) {
+        if (v.level().isClientSide() || v instanceof net.minecraft.world.entity.player.Player) return null;
+        net.minecraft.world.entity.Entity k = src == null ? null : src.getEntity();
+        if (!foundation(k)) k = v.getKillCredit();
+        if (!foundation(k) || !(v.level() instanceof ServerLevel sl)) return null;
+        net.minecraft.core.BlockPos post = k instanceof com.breachprotocol.entity.FoundationStaff f && f.post() != null ? f.post()
+                : k.getPersistentData().contains("bp_emp_post") ? net.minecraft.core.BlockPos.of(k.getPersistentData().getLong("bp_emp_post")) : k.blockPosition();
+        Sites.Site site = Sites.at(sl, post);
+        if (site != null && !site.owner.isEmpty()) {
+            try {
+                ServerPlayer o = sl.getServer().getPlayerList().getPlayer(UUID.fromString(site.owner));
+                if (o != null && Vault.chief(o)) return o;
+            } catch (IllegalArgumentException ignored) {}
+        }
+        ServerPlayer best = null;
+        double bd = Double.MAX_VALUE;
+        for (ServerPlayer q : sl.getServer().getPlayerList().getPlayers()) {
+            if (!Vault.chief(q)) continue;
+            double d = q.level() == sl ? q.distanceToSqr(v) : 1e12;
+            if (d < bd) { bd = d; best = q; }
+        }
+        return best;
+    }
+
+    // ---------------------------------------------------------------- souls (Manas Reborn's soul points)
+
+    private static Object existence(LivingEntity e) {
+        try { return Class.forName("io.github.manasmods.manas_reborn.storage.ManasStorages").getMethod("getExistenceFrom", LivingEntity.class).invoke(null, e); }
+        catch (Throwable t) { return null; }
+    }
+
+    private static int soulsOf(LivingEntity e) {
+        Object x = existence(e);
+        try { return x == null ? 0 : Math.max(0, (int) x.getClass().getMethod("getSoulPoints").invoke(x)); } catch (Throwable t) { return 0; }
+    }
+
+    private static void addSouls(ServerPlayer p, int n) {
+        Object x = existence(p);
+        if (x == null) return;
+        try {
+            int now = (int) x.getClass().getMethod("getSoulPoints").invoke(x);
+            x.getClass().getMethod("setSoulPoints", int.class).invoke(x, now + n);
+            try { x.getClass().getMethod("markDirty").invoke(x); } catch (Throwable ignored) {}
+        } catch (Throwable t) { BreachProtocol.LOGGER.debug("Couldn't add souls: {}", t.toString()); }
+    }
+
     private static ServerPlayer powerKiller(LivingEntity v, DamageSource src) {
         CompoundTag t = v.getPersistentData();
         if (!t.contains(BY) || v.level().getGameTime() - t.getLong(WHEN) > 200) return null;
