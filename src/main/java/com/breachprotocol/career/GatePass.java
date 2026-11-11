@@ -213,15 +213,83 @@ public final class GatePass {
         return best;
     }
 
+    /** Where each Guardian stands, by dimension (looked for around the masters once a second). */
+    private static final Map<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, List<net.minecraft.world.phys.Vec3>> SEEN = new HashMap<>();
+
+    /** Is this master near a Guardian we know of? */
+    private static boolean nearKnown(ServerPlayer g) {
+        List<net.minecraft.world.phys.Vec3> at = SEEN.get(g.level().dimension());
+        if (at == null) return false;
+        for (net.minecraft.world.phys.Vec3 v : at) {
+            double dx = v.x - g.getX(), dz = v.z - g.getZ();
+            if (dx * dx + dz * dz <= MASTER_REACH * MASTER_REACH) return true;
+        }
+        return false;
+    }
+
+    /** A full look around one master: remembers any Guardian found, and spares or releases them now. */
+    private static void look(ServerPlayer g) {
+        if (!master(g)) return;
+        boolean near = false;
+        for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(MASTER_REACH), UnleashedApi::isGateGuardian)) {
+            List<net.minecraft.world.phys.Vec3> at = SEEN.computeIfAbsent(g.level().dimension(), k -> new ArrayList<>());
+            if (at.stream().noneMatch(v -> v.distanceToSqr(e.position()) < 4)) at.add(e.position());
+            near = true;
+        }
+        if (near || nearKnown(g)) protect(g);
+        else if (!data(g.server).full.contains(g.getUUID().toString())) release(g);
+    }
+
+    // the moment a master arrives somewhere (out of the Garden, through a portal, a teleport, a login), before the
+    // Guardian has had a tick to see them as a stranger
+    @SubscribeEvent
+    public static void changedDimension(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (event.getEntity() instanceof ServerPlayer g) look(g);
+    }
+
+    @SubscribeEvent
+    public static void loggedIn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer g) look(g);
+    }
+
+    @SubscribeEvent
+    public static void respawned(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer g) look(g);
+    }
+
+    @SubscribeEvent
+    public static void teleported(net.neoforged.neoforge.event.entity.EntityTeleportEvent event) {
+        if (event.getEntity() instanceof ServerPlayer g && master(g) && !event.isCanceled()) {
+            // where they're going: spared there already if a Guardian stands near it
+            List<net.minecraft.world.phys.Vec3> at = SEEN.get(g.level().dimension());
+            if (at != null) for (net.minecraft.world.phys.Vec3 v : at) {
+                double dx = v.x - event.getTargetX(), dz = v.z - event.getTargetZ();
+                if (dx * dx + dz * dz <= MASTER_REACH * MASTER_REACH) { protect(g); return; }
+            }
+        }
+    }
+
+    /** Before anything else ticks (the Guardian included): its masters are spared every tick they're near it. */
+    @SubscribeEvent
+    public static void early(ServerTickEvent.Pre event) {
+        MinecraftServer s = event.getServer();
+        boolean full = s.getTickCount() % 20 == 0;
+        if (full) SEEN.clear();
+        for (ServerPlayer g : s.getPlayerList().getPlayers()) {
+            if (!master(g)) continue;
+            net.minecraft.world.phys.Vec3 was = LAST.put(g.getUUID(), g.position());
+            boolean jumped = was == null || was.distanceToSqr(g.position()) > 48 * 48; // moved by something other than their feet
+            if (full || jumped) look(g);
+            else if (nearKnown(g)) protect(g);
+        }
+        if (full) LAST.keySet().removeIf(id -> s.getPlayerList().getPlayer(id) == null);
+    }
+
+    private static final Map<UUID, net.minecraft.world.phys.Vec3> LAST = new HashMap<>();
+
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
         MinecraftServer s = event.getServer();
-        // its masters, checked often and from far off (they can come in at a hundred blocks a second)
-        if (s.getTickCount() % 4 == 0) for (ServerPlayer g : s.getPlayerList().getPlayers()) {
-            if (!master(g)) continue;
-            if (guardianDistance(g, MASTER_REACH) <= MASTER_REACH) protect(g);
-            else if (!data(s).full.contains(g.getUUID().toString())) release(g);
-        }
         if (s.getTickCount() % 10 != 0) return;
         Data d = data(s);
         Set<UUID> covered = new HashSet<>();
