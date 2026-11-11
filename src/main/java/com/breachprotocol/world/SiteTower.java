@@ -171,6 +171,42 @@ public final class SiteTower extends FacilityBuilder {
         return o;
     }
 
+    /**
+     * Puts back whatever's missing from a tower and its residence, by the same plan it was built from: only
+     * empty spots that should hold something are filled; nothing there is moved or doubled; nobody is spawned.
+     * Returns how many blocks went back.
+     */
+    public static int patch(ServerLevel l, BlockPos o) {
+        for (int cx = (o.getX() + BX0 - 4) >> 4; cx <= (o.getX() + RX1 + 4) >> 4; cx++)
+            for (int cz = (o.getZ() - NZ - 6) >> 4; cz <= (o.getZ() + T + 6) >> 4; cz++)
+                l.getChunk(cx, cz);
+        SiteTower b = new SiteTower(l, o);
+        b.patch = true;
+        b.groundworks();
+        b.dclassBlock();
+        b.containmentLevel(-4, HCZP, "DEEP", B4_S, B4_N);
+        b.containmentLevel(-3, HCZP, "KETER", B3_S, B3_N);
+        b.containmentLevel(-2, HCZP, "HEAVY", B2_S, B2_N);
+        b.containmentLevel(-1, LCZP, "LIGHT", B1_S, B1_N);
+        b.ground();
+        b.research();
+        b.medical();
+        b.security();
+        b.archive();
+        b.offices();
+        b.servers();
+        b.launchControl();
+        b.council();
+        b.administrator();
+        for (int s = 0; s <= TOP; s++) b.facade(s);
+        b.roof();
+        b.reception();
+        b.stairwell();
+        b.residence();
+        b.seal();
+        return b.patched;
+    }
+
     private String register(String uuid, String owner) {
         Sites all = Sites.get(l.getServer());
         Sites.Site s = new Sites.Site();
@@ -873,7 +909,7 @@ public final class SiteTower extends FacilityBuilder {
                 for (var prop : st.getProperties()) {
                     if (prop.getName().equals("facing") && prop instanceof net.minecraft.world.level.block.state.properties.DirectionProperty dp) st = st.setValue(dp, zf[1] == 0 ? Direction.NORTH : Direction.SOUTH);
                 }
-                l.setBlock(p, st, 3);
+                place(p, st);
             }
     }
 
@@ -938,8 +974,8 @@ public final class SiteTower extends FacilityBuilder {
         for (int x = 13; x <= 19; x++) set(x, Y + 1, 25, "office_desk[facing=south," + joins(S, W, x > 13, x < 19) + "]");
         put(15, Y + 2, 25, "computer", Blocks.AIR, S);
         set(14, Y + 2, 25, "crt_monitor[facing=south,lit=true,screen=0]");
-        l.setBlock(at(16, Y + 2, 25), com.breachprotocol.registry.ModBlocks.ADMIN_TERMINAL.get().defaultBlockState()
-                .setValue(net.minecraft.world.level.block.HorizontalDirectionalBlock.FACING, net.minecraft.core.Direction.SOUTH), 3);
+        place(at(16, Y + 2, 25), com.breachprotocol.registry.ModBlocks.ADMIN_TERMINAL.get().defaultBlockState()
+                .setValue(net.minecraft.world.level.block.HorizontalDirectionalBlock.FACING, net.minecraft.core.Direction.SOUTH));
         set(17, Y + 2, 25, "paper_stack[facing=south,variant=2]");
         set(18, Y + 2, 25, "desk_lamp[facing=south,lit=true]");
         set(16, Y + 1, 26, "office_chair[facing=north]");
@@ -964,7 +1000,7 @@ public final class SiteTower extends FacilityBuilder {
 
         // private quarters
         ezDoor(6, 8, Y, S);
-        Placer.place(l, at(3, Y + 1, 2), Blocks.WHITE_BED, S);
+        placeLikePlayer(at(3, Y + 1, 2), Blocks.WHITE_BED, S);
         set(1, Y + 1, 1, "potted_plant[facing=east]");
         tall(5, Y + 1, 1, "coat_rack", S);
         couch("couch_grey", 8, 1, Y, 4, true, S);
@@ -996,9 +1032,9 @@ public final class SiteTower extends FacilityBuilder {
             door("ez_door", 2, 3, 17, T, Y, S);
             fill(13, Y + 4, T, 19, Y + 5, T, "facility_precast_concrete");
             BlockPos p = at(15, Y + 4, T + 1);
-            l.setBlock(p, st("facility_sign_gate_a_header[facing=south,mount=wall,part=left]"), FLAGS);
-            l.setBlock(p.relative(E), st("facility_sign_gate_a_header[facing=south,mount=wall,part=centre]"), FLAGS);
-            l.setBlock(p.relative(E, 2), st("facility_sign_gate_a_header[facing=south,mount=wall,part=right]"), FLAGS);
+            place(p, st("facility_sign_gate_a_header[facing=south,mount=wall,part=left]"));
+            place(p.relative(E), st("facility_sign_gate_a_header[facing=south,mount=wall,part=centre]"));
+            place(p.relative(E, 2), st("facility_sign_gate_a_header[facing=south,mount=wall,part=right]"));
             // canopy over the entrance
             fill(12, Y + 5, T + 1, 20, Y + 5, T + 3, "facility_precast_concrete");
             for (int x = 13; x <= 19; x += 3) light(x, Y + 4, T + 2, true);
@@ -1028,12 +1064,15 @@ public final class SiteTower extends FacilityBuilder {
         set(16, Y + 1, 12, "facility_precast_concrete");
         set(16, Y + 2, 12, "facility_precast_concrete");
         plate(16, Y + 2, 13, S, "LAUNCH DECK", "Satellite: west", "Rocket: east", "Fuelled.");
-        boolean sat = UnleashedApi.placeLaunchPlatform(l, at(8, Y + 1, 21), "satellite_platform", S);
-        boolean rocket = UnleashedApi.placeLaunchPlatform(l, at(23, Y + 1, 21), "rocket_platform", S);
+        // the launch platforms and their wiring: built once (a patch leaves them as they are)
+        boolean sat = !patch && UnleashedApi.placeLaunchPlatform(l, at(8, Y + 1, 21), "satellite_platform", S);
+        boolean rocket = !patch && UnleashedApi.placeLaunchPlatform(l, at(23, Y + 1, 21), "rocket_platform", S);
         set(8, Y + 1, 30, "creative_outlet");
         set(23, Y + 1, 30, "creative_outlet");
-        UnleashedApi.wire(l, at(8, Y + 1, 30), at(8, Y + 1, 21));
-        UnleashedApi.wire(l, at(23, Y + 1, 30), at(23, Y + 1, 21));
+        if (!patch) {
+            UnleashedApi.wire(l, at(8, Y + 1, 30), at(8, Y + 1, 21));
+            UnleashedApi.wire(l, at(23, Y + 1, 30), at(23, Y + 1, 21));
+        }
         chest(16, Y + 1, 30, N,
                 ui("rocket", Items.FIREWORK_ROCKET, 1), ui("satellite", Items.ENDER_EYE, 2), ui("heavy_fuel_bucket", Items.LAVA_BUCKET, 8),
                 ui("rocket_platform", Items.IRON_BLOCK, rocket ? 0 : 1), ui("satellite_platform", Items.IRON_BLOCK, sat ? 0 : 1),
@@ -1231,8 +1270,8 @@ public final class SiteTower extends FacilityBuilder {
         for (int[] b : bedSpots()) {
             BlockPos head = at(b[0], b[1], b[2]);
             Direction foot = b[3] == 0 ? S : N;
-            l.setBlock(head, Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD), FLAGS);
-            l.setBlock(head.relative(foot), Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), FLAGS);
+            place(head, Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD));
+            place(head.relative(foot), Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, foot.getOpposite()).setValue(BedBlock.PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT));
         }
         // the entrance from the path
         ezDoor(RX0, 15, 0, W);
@@ -1273,7 +1312,7 @@ public final class SiteTower extends FacilityBuilder {
      */
     private void stairGate(int s, int Y, int lvl) {
         BlockPos jamb = door(s >= 8 ? "glass_room_door" : "ez_room_door", 2, 2, 27, 8, Y, S).above();
-        l.setBlock(jamb.relative(S), st("keycard_scanner[facing=south,level=" + Math.max(1, Math.min(5, lvl)) + ",status=idle]"), FLAGS);
+        place(jamb.relative(S), st("keycard_scanner[facing=south,level=" + Math.max(1, Math.min(5, lvl)) + ",status=idle]"));
         set(27, Y + 3, 7, "door_button[facing=north,powered=false]");
     }
 
@@ -1367,7 +1406,7 @@ public final class SiteTower extends FacilityBuilder {
         Y = y(6);
         if (is(15, Y + 1, 2, "lodestone")) { l.setBlock(at(15, Y + 1, 2), Blocks.AIR.defaultBlockState(), FLAGS); put(15, Y + 1, 2, "network_router", Blocks.OBSERVER, S); UnleashedApi.wire(l, at(19, Y + 1, 5), at(15, Y + 1, 2)); }
         if (is(15, Y + 1, 6, "computer") || is(15, Y + 1, 6, "lectern")) {
-            l.setBlock(at(15, Y + 1, 6), Blocks.AIR.defaultBlockState(), FLAGS);
+            place(at(15, Y + 1, 6), Blocks.AIR.defaultBlockState());
             set(15, Y + 1, 6, "metal_desk[facing=north,left=false,right=false]");
             put(15, Y + 2, 6, "computer", Blocks.LECTERN, N);
             if (l.getBlockState(at(15, Y + 1, 5)).isAir()) set(15, Y + 1, 5, "office_chair[facing=south]");
@@ -1385,7 +1424,7 @@ public final class SiteTower extends FacilityBuilder {
         }
         if (is(24, Y + 3, 16, "wall_clock")) { set(24, Y + 3, 16, OFFICE.middle()); set(24, Y + 3, 15, "wall_clock[facing=north]"); }
         // what the reception's build cleared: the stair door's scanner and the two door signs
-        if (l.getBlockState(at(29, Y + 2, 9)).isAir()) l.setBlock(at(29, Y + 2, 9), st("keycard_scanner[facing=south,level=" + floorClearance(9) + ",status=idle]"), FLAGS);
+        if (l.getBlockState(at(29, Y + 2, 9)).isAir()) place(at(29, Y + 2, 9), st("keycard_scanner[facing=south,level=" + floorClearance(9) + ",status=idle]"));
         if (l.getBlockState(at(27, Y + 3, 9)).isAir()) set(27, Y + 3, 9, "facility_sign_stairs_small[facing=south]");
         if (l.getBlockState(at(31, Y + 3, 9)).isAir()) set(31, Y + 3, 9, "facility_sign_elevator_small[facing=south]");
         // the stair doors' exit buttons come out of the lift-shaft wall

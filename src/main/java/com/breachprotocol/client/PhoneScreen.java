@@ -975,6 +975,19 @@ public class PhoneScreen extends Screen {
                 } + "  " + pin[0] + ", " + pin[1];
             }
         }
+        // your waypoints in this world: a coloured diamond each
+        ListTag wps = t().getList("waypoints", Tag.TAG_COMPOUND);
+        String dimHere = t().getString("dimHere");
+        for (int i = 0; i < wps.size(); i++) {
+            CompoundTag wp = wps.getCompound(i);
+            if (!wp.getString("d").equals(dimHere)) continue;
+            int mx = Mth.clamp(toX.applyAsInt(wp.getInt("x")), x + 4, x + w - 5), my = Mth.clamp(toY.applyAsInt(wp.getInt("z")), y + 4, y + w - 5);
+            int c = 0xFF000000 | wp.getInt("c");
+            if (Guide.guiding(wp.getInt("x"), wp.getInt("z")) && pulse) Terminal.box(g, mx - 6, my - 6, 13, 13, Terminal.BRIGHT);
+            for (int d = 0; d < 5; d++) { g.fill(mx - (4 - d), my - d, mx + (5 - d), my - d + 1, 0xFF000000); g.fill(mx - (4 - d), my + d, mx + (5 - d), my + d + 1, 0xFF000000); }
+            for (int d = 0; d < 4; d++) { g.fill(mx - (3 - d), my - d, mx + (4 - d), my - d + 1, c); g.fill(mx - (3 - d), my + d, mx + (4 - d), my + d + 1, c); }
+            if (over(mx - 5, my - 5, 11, 11)) tip = "\u25C6 " + wp.getString("n") + "  " + wp.getInt("x") + ", " + wp.getInt("z");
+        }
         // picked target
         if (mapTarget) {
             int tx = toX.applyAsInt(mapTX), ty = toY.applyAsInt(mapTZ);
@@ -1019,8 +1032,9 @@ public class PhoneScreen extends Screen {
         // target panel
         if (mapTarget) {
             int d = (int) Math.sqrt(Math.pow(mapTX - mc.player.getX(), 2) + Math.pow(mapTZ - mc.player.getZ(), 2));
-            card(g, x, y, w, 46);
+            card(g, x, y, w, 64);
             text(g, "Target  " + mapTX + ", " + mapTZ, x + 7, y + 5, 0xFFFFFFFF);
+            pill(g, x + 6, y + 43, w - 12, 15, "\u25C6 Save as a waypoint", 0xFF156E8F, wpMode == 0, () -> { wpMode = 2; wpText = ""; });
             small(g, d + "M AWAY", x + w - 8 - (int) (font.width(d + "M AWAY") * 0.375F), y + 6, MUTED);
             int hw = (w - 18) / 2;
             final int gx = mapTX, gz = mapTZ;
@@ -1031,17 +1045,81 @@ public class PhoneScreen extends Screen {
             pill(g, x + 12 + hw, y + 24, hw, 16, sl, 0xFFA8323A, canStrike, () -> send("orbital_at:" + gx + ":" + gz, 0));
             hit(x + w - 14, y + 2, 12, 12, () -> mapTarget = false);
             text(g, "\u00D7", x + w - 11, y + 4, MUTED);
-            y += 50;
+            y += 68;
         } else {
             small(g, "TAP THE MAP TO PICK A TARGET", SX + SW / 2, y, Terminal.DIM);
             y += 10;
         }
+        y = waypoints(g, x, y, w, wps, dimHere);
         // mission list
         for (int i = 0; i < ms.size(); i++) {
             CompoundTag m = ms.getCompound(i);
             if (m.getBoolean("hasPos")) y = guideRow(g, m, x, y, w);
         }
         return y + 6;
+    }
+
+    // ---------------------------------------------------------------- waypoints
+
+    /** 0 none, 1 naming one here, 2 naming one at the map target, 3 renaming wpEdit. */
+    private static int wpMode, wpEdit;
+    private static String wpText = "";
+
+    private void wpCommit() {
+        String n = wpText.trim();
+        switch (wpMode) {
+            case 1 -> send("wp:here:" + n, 0);
+            case 2 -> send("wp:at:" + mapTX + ":" + mapTZ + ":" + n, 0);
+            case 3 -> { if (!n.isEmpty()) send("wp:name:" + wpEdit + ":" + n, 0); }
+            default -> {}
+        }
+        wpMode = 0;
+        wpText = "";
+    }
+
+    private int waypoints(GuiGraphics g, int x, int y, int w, ListTag wps, String dimHere) {
+        Minecraft mc = Minecraft.getInstance();
+        small(g, "WAYPOINTS  \u00B7  " + wps.size(), x + 4 + (int) (font.width("WAYPOINTS  \u00B7  " + wps.size()) * 0.375F), y + 4, Terminal.BRIGHT);
+        pill(g, x + w - 70, y, 70, 13, "+ Save here", 0xFF2E9E57, wpMode == 0, () -> { wpMode = 1; wpText = ""; });
+        y += 17;
+        // naming
+        if (wpMode > 0) {
+            card(g, x, y, w, 40);
+            small(g, wpMode == 3 ? "RENAME WAYPOINT" : wpMode == 1 ? "NAME THIS SPOT" : "NAME THE TARGET", x + 6 + (int) (font.width(wpMode == 3 ? "RENAME WAYPOINT" : wpMode == 1 ? "NAME THIS SPOT" : "NAME THE TARGET") * 0.375F), y + 5, MUTED);
+            rbox(g, x + 6, y + 12, w - 12, 14, 6, 0xFF0B2414, Terminal.GREEN);
+            boolean caret = (System.currentTimeMillis() / 500) % 2 == 0;
+            g.drawString(font, ellipsize(wpText, w - 24) + (caret ? "_" : ""), x + 10, y + 15, wpText.isEmpty() ? Terminal.DIM : Terminal.BRIGHT, false);
+            int hw = (w - 18) / 2;
+            pill(g, x + 6, y + 28, hw, 10, "Save  (Enter)", 0xFF2E9E57, true, this::wpCommit);
+            pill(g, x + 12 + hw, y + 28, hw, 10, "Cancel", RED, true, () -> { wpMode = 0; wpText = ""; });
+            y += 44;
+        }
+        if (wps.isEmpty() && wpMode == 0) { small(g, "SAVE A SPOT HERE, OR TAP THE MAP AND SAVE THE TARGET", SX + SW / 2, y, Terminal.DIM); return y + 12; }
+        boolean travel = t().getBoolean("wpTravel");
+        for (int i = 0; i < wps.size(); i++) {
+            CompoundTag wp = wps.getCompound(i);
+            int wx = wp.getInt("x"), wy = wp.getInt("y"), wz = wp.getInt("z");
+            boolean here = wp.getString("d").equals(dimHere);
+            int c = 0xFF000000 | wp.getInt("c");
+            card(g, x, y, w, 40);
+            RAW = true; rrect(g, x + 1, y + 5, 3, 30, 1, c); RAW = false;
+            text(g, ellipsize(wp.getString("n"), w - 44), x + 9, y + 4, 0xFFFFFFFF);
+            String where = wx + ", " + wy + ", " + wz;
+            if (!here) { String dn = wp.getString("d"); where += "  \u00B7  " + dn.substring(dn.indexOf(':') + 1).replace('_', ' ').toUpperCase(Locale.ROOT); }
+            else if (mc.player != null) where += "  \u00B7  " + (int) Math.sqrt(mc.player.distanceToSqr(wx + 0.5, mc.player.getY(), wz + 0.5)) + "M";
+            small(g, where, x + 9 + (int) (font.width(where) * 0.375F), y + 15, here ? Terminal.DIM : AMBER);
+            final int idx = i;
+            hit(x + w - 28, y + 2, 12, 12, () -> { wpMode = 3; wpEdit = idx; wpText = wp.getString("n"); });
+            text(g, "\u270E", x + w - 26, y + 4, MUTED);
+            hit(x + w - 14, y + 2, 12, 12, () -> send("wp:del:" + idx, 0));
+            text(g, "\u00D7", x + w - 11, y + 4, MUTED);
+            int bw = travel ? (w - 18) / 2 : w - 12;
+            boolean guided = Guide.guiding(wx, wz);
+            pill(g, x + 6, y + 23, bw, 13, guided ? "Stop guiding" : "Guide", guided ? RED : 0xFF2E9E57, here || guided, () -> { if (guided) Guide.stop(); else Guide.start(wx, wy, wz, wp.getString("n")); });
+            if (travel) pill(g, x + 12 + bw, y + 23, bw, 13, "Go there", 0xFF7A3FB0, true, () -> send("wp:tp:" + idx, 0));
+            y += 44;
+        }
+        return y + 2;
     }
 
     /** A mission with a location: name, distance, height, and a Guide toggle. */
@@ -2158,6 +2236,7 @@ public class PhoneScreen extends Screen {
             compose += c;
             return true;
         }
+        if (view == View.MAP && wpMode > 0 && c >= ' ' && wpText.length() < 32) { wpText += c; return true; }
         if (view == View.STAFF && staffSearch && c >= ' ' && staffQuery.length() < 24) { staffQuery += c; scroll = 0; return true; }
         if (view == View.ARCHIVE && searchFocused && c >= ' ' && query.length() < 32) {
             query += c;
@@ -2173,6 +2252,12 @@ public class PhoneScreen extends Screen {
             if (key == 259) { if (!compose.isEmpty()) compose = compose.substring(0, compose.length() - 1); return true; }
             if (key == 257 || key == 335) { sendText(); return true; }        // Enter sends
             if (key == 256) { composeFocused = false; return true; }          // Esc leaves the box
+            if (minecraft != null && (minecraft.options.keyInventory.matches(key, scan) || minecraft.options.keyChat.matches(key, scan))) return true;
+        }
+        if (view == View.MAP && wpMode > 0) {
+            if (key == 259) { if (!wpText.isEmpty()) wpText = wpText.substring(0, wpText.length() - 1); return true; }
+            if (key == 257 || key == 335) { wpCommit(); return true; }
+            if (key == 256) { wpMode = 0; wpText = ""; return true; }
             if (minecraft != null && (minecraft.options.keyInventory.matches(key, scan) || minecraft.options.keyChat.matches(key, scan))) return true;
         }
         if (view == View.STAFF && staffSearch) {

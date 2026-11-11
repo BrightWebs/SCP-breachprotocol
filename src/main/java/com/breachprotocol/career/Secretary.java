@@ -41,6 +41,8 @@ public final class Secretary {
 
     /** Towers with the new core (lift) and the reception, where her desk is. */
     static final Set<String> RECEPTION = new HashSet<>();
+    /** When each tower was last patched (this session). */
+    private static final Map<String, Long> PATCHED = new HashMap<>();
 
     public static BlockPos post(Sites.Site s) {
         return RECEPTION.contains(s.name) ? origin(s).offset(SiteTower.secretaryChair()) : origin(s).offset(20, SiteTower.y(SiteTower.TOP) + 1, 21);
@@ -175,6 +177,17 @@ public final class Secretary {
                     // she moves to her new desk
                     FoundationStaff sec = find(ow, s);
                     if (sec != null) sec.hireAs(FoundationStaff.Role.SECRETARY, post(s));
+                }
+            }
+            // once a day, while someone's near: whatever's missing from the tower goes back, by its own plan (nothing doubled)
+            if (RECEPTION.contains(s.name) && ow.isLoaded(o.offset(SiteTower.liftPanel(0))) && isTower(ow, s)
+                    && ow.getNearestPlayer(o.getX() + 16, o.getY(), o.getZ() + 16, 96, false) != null) {
+                long now = ow.getGameTime();
+                Long last = PATCHED.get(s.name);
+                if (last == null || now - last > 24000L) {
+                    PATCHED.put(s.name, now);
+                    int n = SiteTower.patch(ow, o);
+                    if (n > 0) BreachProtocol.LOGGER.info("Patched {}: {} missing blocks put back", s.name, n);
                 }
             }
             // furniture fixes for towers built before them: once, the first time someone is near

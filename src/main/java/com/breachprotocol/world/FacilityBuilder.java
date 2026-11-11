@@ -107,16 +107,44 @@ public abstract class FacilityBuilder {
 
     protected BlockPos at(int x, int y, int z) { return o.offset(x, y, z); }
 
-    protected void set(int x, int y, int z, String spec) { l.setBlock(at(x, y, z), st(spec), FLAGS); }
+    protected void set(int x, int y, int z, String spec) { place(at(x, y, z), st(spec)); }
 
-    protected void set(int x, int y, int z, BlockState s) { l.setBlock(at(x, y, z), s, FLAGS); }
+    protected void set(int x, int y, int z, BlockState s) { place(at(x, y, z), s); }
+
+    /**
+     * Patch mode: the whole plan is walked, but only what's missing is put back. A spot that should hold a
+     * block and is empty gets it; anything that's there (the plan's or someone else's) is left alone; nothing
+     * is cleared; and it's placed quietly, so nothing beside it pops off.
+     */
+    protected boolean patch;
+    protected int patched;
+
+    /** True if it was placed (always, except when patching around something already there). */
+    protected boolean place(BlockPos p, BlockState s) {
+        if (patch) {
+            if (s.isAir() || !l.getBlockState(p).isAir()) return false;
+            l.setBlock(p, s, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS);
+            patched++;
+            return true;
+        }
+        l.setBlock(p, s, FLAGS);
+        return true;
+    }
+
+    /** Placed the way a player would (multi-part furniture), unless patching and something's already there. */
+    protected boolean placeLikePlayer(BlockPos p, Block blk, Direction facing) {
+        if (patch && !l.getBlockState(p).isAir()) return true;
+        boolean ok = Placer.place(l, p, blk, facing);
+        if (ok && patch) patched++;
+        return ok;
+    }
 
     protected void fill(int x1, int y1, int z1, int x2, int y2, int z2, String spec) {
         BlockState s = st(spec);
         for (int x = Math.min(x1, x2); x <= Math.max(x1, x2); x++)
             for (int y = Math.min(y1, y2); y <= Math.max(y1, y2); y++)
                 for (int z = Math.min(z1, z2); z <= Math.max(z1, z2); z++)
-                    l.setBlock(at(x, y, z), s, FLAGS);
+                    place(at(x, y, z), s);
     }
 
     protected void setIfAir(int x, int y, int z, String spec) { if (l.getBlockState(at(x, y, z)).isAir()) set(x, y, z, spec); }
@@ -126,7 +154,7 @@ public abstract class FacilityBuilder {
     /** Machines and two-part props: placed like a player places them so every part is built. */
     protected void put(int x, int y, int z, String id, Block fallback, Direction facing) {
         Block blk = Unleashed.block(id, fallback);
-        if (!Placer.place(l, at(x, y, z), blk, facing) && fallback != Blocks.AIR) Placer.place(l, at(x, y, z), fallback, facing);
+        if (!placeLikePlayer(at(x, y, z), blk, facing) && fallback != Blocks.AIR) placeLikePlayer(at(x, y, z), fallback, facing);
     }
 
     /** Two-tall props (server racks, lockers, screens, coat racks): half=lower / upper. */
@@ -160,21 +188,21 @@ public abstract class FacilityBuilder {
     protected void sign2(String id, int x, int y, int z, Direction facing, String arrow, boolean hung) {
         BlockPos p = at(x, y, z), q = p.relative(facing.getCounterClockWise());
         String props = "facing=" + f(facing) + ",mount=" + (hung ? "ceiling" : "wall") + ",arrow=" + arrow;
-        l.setBlock(p, st(id + "[" + props + ",part=left]"), FLAGS);
-        l.setBlock(q, st(id + "[" + props + ",part=right]"), FLAGS);
+        place(p, st(id + "[" + props + ",part=left]"));
+        place(q, st(id + "[" + props + ",part=right]"));
     }
 
     /** SCP Unleashed's 2-wide SCP Foundation wall sign. */
     protected void scpSign(int x, int y, int z, Direction facing) {
         BlockPos p = at(x, y, z);
-        l.setBlock(p, st("scp_sign[facing=" + f(facing) + ",part=left]"), FLAGS);
-        l.setBlock(p.relative(facing.getCounterClockWise()), st("scp_sign[facing=" + f(facing) + ",part=right]"), FLAGS);
+        place(p, st("scp_sign[facing=" + f(facing) + ",part=left]"));
+        place(p.relative(facing.getCounterClockWise()), st("scp_sign[facing=" + f(facing) + ",part=right]"));
     }
 
     /** A plain name plate on a wall (white glowing text on dark wood). */
     protected void plate(int x, int y, int z, Direction facing, String... lines) {
         BlockPos p = at(x, y, z);
-        l.setBlock(p, Blocks.DARK_OAK_WALL_SIGN.defaultBlockState().setValue(WallSignBlock.FACING, facing), FLAGS);
+        if (!place(p, Blocks.DARK_OAK_WALL_SIGN.defaultBlockState().setValue(WallSignBlock.FACING, facing))) return; // there already: its words stay
         if (l.getBlockEntity(p) instanceof SignBlockEntity sb) {
             SignText t = new SignText();
             for (int i = 0; i < lines.length && i < 4; i++) t = t.setMessage(i, Component.literal(lines[i]));
@@ -187,13 +215,13 @@ public abstract class FacilityBuilder {
 
     protected void chest(int x, int y, int z, Direction facing, ItemStack... items) {
         BlockPos p = at(x, y, z);
-        l.setBlock(p, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, facing), FLAGS);
+        if (!place(p, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, facing))) return; // there already: never restocked
         if (l.getBlockEntity(p) instanceof ChestBlockEntity c) for (int i = 0; i < items.length && i < 27; i++) c.setItem(i, items[i]);
     }
 
     /** A Creative Outlet wired to machines with SCP Unleashed's creative-tier wire. */
     protected void power(int x, int y, int z, int[]... machines) {
-        set(x, y, z, "creative_outlet");
+        if (!place(at(x, y, z), st("creative_outlet")) && patch) return; // wired already
         for (int[] m : machines) UnleashedApi.wire(l, at(x, y, z), at(m[0], m[1], m[2]));
     }
 
@@ -311,14 +339,15 @@ public abstract class FacilityBuilder {
             // no such door: leave an open doorway
             for (int c = 0; c < w; c++) for (int r = 0; r < h; r++) {
                 BlockPos q = origin.relative(right, c).above(r);
-                l.setBlock(q, Blocks.AIR.defaultBlockState(), FLAGS);
+                place(q, Blocks.AIR.defaultBlockState());
                 openings.add(q);
             }
             return origin.relative(right, w);
         }
+        if (patch && !l.getBlockState(origin).isAir()) return origin.relative(right, w); // the door's there: left as it is (open or shut)
         for (int c = 0; c < w; c++)
             for (int r = 0; r < h; r++)
-                l.setBlock(origin.relative(right, c).above(r), st(kind + "[facing=" + f(out) + ",open=false,part=" + (c + r * w) + "]"), FLAGS);
+                place(origin.relative(right, c).above(r), st(kind + "[facing=" + f(out) + ",open=false,part=" + (c + r * w) + "]"));
         try {
             BlockState s = l.getBlockState(origin);
             blk.setPlacedBy(l, origin, s, null, new ItemStack(blk.asItem()));
@@ -334,15 +363,15 @@ public abstract class FacilityBuilder {
     /** A secured door: keycard scanner outside, exit button inside, both on the jamb (which powers the door). */
     protected void gate(String kind, int w, int h, int x, int z, int Y, Direction out, int level) {
         BlockPos jamb = door(kind, w, h, x, z, Y, out).above();
-        l.setBlock(jamb.relative(out), st("keycard_scanner[facing=" + f(out) + ",level=" + Math.max(1, Math.min(5, level)) + ",status=idle]"), FLAGS);
-        l.setBlock(jamb.relative(out.getOpposite()), st("door_button[facing=" + f(out.getOpposite()) + ",powered=false]"), FLAGS);
+        place(jamb.relative(out), st("keycard_scanner[facing=" + f(out) + ",level=" + Math.max(1, Math.min(5, level)) + ",status=idle]"));
+        place(jamb.relative(out.getOpposite()), st("door_button[facing=" + f(out.getOpposite()) + ",powered=false]"));
     }
 
     /** A powered door with a door button on each side (no keycard). */
     protected void buttoned(String kind, int w, int h, int x, int z, int Y, Direction out) {
         BlockPos jamb = door(kind, w, h, x, z, Y, out).above();
-        l.setBlock(jamb.relative(out), st("door_button[facing=" + f(out) + ",powered=false]"), FLAGS);
-        l.setBlock(jamb.relative(out.getOpposite()), st("door_button[facing=" + f(out.getOpposite()) + ",powered=false]"), FLAGS);
+        place(jamb.relative(out), st("door_button[facing=" + f(out) + ",powered=false]"));
+        place(jamb.relative(out.getOpposite()), st("door_button[facing=" + f(out.getOpposite()) + ",powered=false]"));
     }
 
     // ------------------------------------------------------------------ furniture
@@ -460,8 +489,8 @@ public abstract class FacilityBuilder {
         }
         // hazard sign over the door; name plate and alarm light on the other side from the scanner
         int hz = out == N ? cx + 1 : cx;
-        l.setBlock(at(hz, Y + 4, outZ), st("containment_room_hazard_sign[facing=" + f(out) + ",half=left,variant=0]"), FLAGS);
-        l.setBlock(at(hz, Y + 4, outZ).relative(out.getCounterClockWise()), st("containment_room_hazard_sign[facing=" + f(out) + ",half=right,variant=0]"), FLAGS);
+        place(at(hz, Y + 4, outZ), st("containment_room_hazard_sign[facing=" + f(out) + ",half=left,variant=0]"));
+        place(at(hz, Y + 4, outZ).relative(out.getCounterClockWise()), st("containment_room_hazard_sign[facing=" + f(out) + ",half=right,variant=0]"));
         plate(side, Y + 2, outZ, out, c.name(), c.objectClass().toUpperCase(), c.line1(), c.line2());
         set(side, Y + 3, outZ, "containment_room_alarm_light[facing=" + f(out) + ",powered=false]");
         if (c.extra().equals("fire")) set(x0 + 1, Y + 1, outZ, "fire_extinguisher[facing=" + f(out) + ",wall=true]");

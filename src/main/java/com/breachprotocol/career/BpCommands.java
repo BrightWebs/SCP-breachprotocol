@@ -130,6 +130,13 @@ public final class BpCommands {
                     CareerEvents.ascend(p, data);
                     return done(p, c, "You are SCP-Ω.");
                 }))
+                .then(Commands.literal("patch").executes(c -> {
+                    ServerPlayer p = c.getSource().getPlayerOrException();
+                    Sites.Site t = com.breachprotocol.entity.Lift.towerAt(p.serverLevel(), p.blockPosition());
+                    if (t == null) return fail(c, "Stand in or by a tower first.");
+                    int n = com.breachprotocol.world.SiteTower.patch(p.serverLevel(), Secretary.origin(t));
+                    return ok(c, n == 0 ? t.name + " is whole: nothing missing." : n + " missing blocks put back at " + t.name + ".");
+                }))
                 .then(Commands.literal("forms")
                         .then(Commands.literal("all").executes(c -> {
                             ServerPlayer p = c.getSource().getPlayerOrException();
