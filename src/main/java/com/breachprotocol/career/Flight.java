@@ -512,18 +512,32 @@ public final class Flight {
 
     /** Whatever it catches: the hostile are dragged round and up and battered (and burnt, once it's burning); friends only pushed clear; loose things taken up. */
     private static void catchIn(ServerPlayer owner, Twister t) {
-        var box = new net.minecraft.world.phys.AABB(t.centre.x - t.r(1) - 3, t.centre.y - 2, t.centre.z - t.r(1) - 3, t.centre.x + t.r(1) + 3, t.centre.y + t.height, t.centre.z + t.r(1) + 3);
+        // it draws in from well beyond its own wall, the further and harder the faster you ran it up
+        double suck = 6 + t.speed * 5;            // gear 4: about 16 blocks out; gear 8: about 34
+        double pull = 0.05 + t.speed * 0.045;     // and how hard
+        double out = t.r(1) + suck;
+        var box = new net.minecraft.world.phys.AABB(t.centre.x - out, t.centre.y - 3, t.centre.z - out, t.centre.x + out, t.centre.y + t.height, t.centre.z + out);
         for (net.minecraft.world.entity.Entity e : t.l.getEntities(owner, box, e -> e.isAlive() && !e.isSpectator())) {
             double f = net.minecraft.util.Mth.clamp((e.getY() - t.centre.y) / t.height, 0, 1);
             double dx = e.getX() - t.centre.x, dz = e.getZ() - t.centre.z, d = Math.max(0.5, Math.hypot(dx, dz));
             double reach = t.r(f) + 3;
-            if (d > reach) continue;
+            boolean loose = e instanceof net.minecraft.world.entity.item.ItemEntity || e instanceof net.minecraft.world.entity.ExperienceOrb
+                    || e instanceof net.minecraft.world.entity.projectile.Projectile || e instanceof net.minecraft.world.entity.item.FallingBlockEntity
+                    || e instanceof net.minecraft.world.entity.vehicle.AbstractMinecart || e instanceof net.minecraft.world.entity.vehicle.Boat
+                    || e instanceof net.minecraft.world.entity.item.PrimedTnt;
+            if (!(e instanceof net.minecraft.world.entity.LivingEntity) && !loose) continue;
             if (e instanceof net.minecraft.world.entity.LivingEntity v && spare(owner, v)) {
-                if (!(v instanceof ServerPlayer sp && sp.isCreative()) && t.age % 5 == 0) { v.push(dx / d * 0.4, 0.1, dz / d * 0.4); v.hurtMarked = true; }
+                if (d <= reach && !(v instanceof ServerPlayer sp && sp.isCreative()) && t.age % 5 == 0) { v.push(dx / d * 0.4, 0.1, dz / d * 0.4); v.hurtMarked = true; }
                 continue;
             }
-            if (!(e instanceof net.minecraft.world.entity.LivingEntity) && !(e instanceof net.minecraft.world.entity.item.ItemEntity)
-                    && !(e instanceof net.minecraft.world.entity.projectile.Projectile) && !(e instanceof net.minecraft.world.entity.item.FallingBlockEntity)) continue;
+            if (d > reach) {
+                // outside the wall: dragged across the ground toward it, harder the closer they get, swinging round as they come
+                double k = pull * (1 - (d - reach) / Math.max(1, out - reach)) + pull * 0.25;
+                Vec3 v0 = e.getDeltaMovement();
+                e.setDeltaMovement(v0.x - dx / d * k - dz / d * k * 0.35, Math.max(v0.y, 0.04 + k * 0.4), v0.z - dz / d * k + dx / d * k * 0.35);
+                e.hurtMarked = true;
+                continue;
+            }
             // round (with the laps), in toward the wall of wind, and up; flung out at the top
             double tx = -dz / d, tz = dx / d, want = t.r(f) * 0.8;
             double in = (want - d) * 0.06;

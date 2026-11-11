@@ -197,6 +197,16 @@ public final class GatePass {
         if (!g.isInvulnerable()) g.setInvulnerable(true);
     }
 
+    public static boolean isMaster(ServerPlayer g) { return g != null && Vault.chief(g); }
+
+    /** Is this a master, or close beside one (where a blade coming down would come down on them too)? */
+    public static boolean besideMaster(Entity e) {
+        if (e instanceof ServerPlayer sp && isMaster(sp)) return true;
+        for (net.minecraft.world.entity.player.Player q : e.level().players())
+            if (q instanceof ServerPlayer sp && isMaster(sp) && sp.distanceToSqr(e) < 9 * 9) return true;
+        return false;
+    }
+
     /** The Administrator and the Ascendant: the Guardian knows them, always. */
     private static boolean master(ServerPlayer g) { return Vault.chief(g); }
 
