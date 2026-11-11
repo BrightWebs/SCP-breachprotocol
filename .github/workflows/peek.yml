@@ -8,6 +8,12 @@ on:
       grep:
         description: Path pattern of files to print
         required: true
+      file:
+        description: One file to print line ranges of
+        required: false
+      ranges:
+        description: sed ranges, e.g. 295,470p;1470,1540p
+        required: false
 jobs:
   peek:
     runs-on: ubuntu-latest
@@ -26,6 +32,7 @@ jobs:
           PY
           curl -sL "$(cat url)" -o mod.jar
           mkdir x && cd x && unzip -q ../mod.jar
+          if [ -n "${{ inputs.file }}" ]; then echo "== ${{ inputs.file }} =="; sed -n "${{ inputs.ranges }}" "${{ inputs.file }}" | cat -n; exit 0; fi
           echo "== matching files =="
           find . -type f | grep -iE "${{ inputs.grep }}" | head -200
           echo "== contents =="
