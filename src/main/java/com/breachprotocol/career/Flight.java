@@ -465,7 +465,7 @@ public final class Flight {
             if (owner != null) catchIn(owner, t);
             if (t.age % 30 == 0) {
                 t.l.playSound(null, t.centre.x, t.centre.y + 4, t.centre.z, SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, (float) Math.min(6, 2 + t.height / 40), 0.5F);
-                if (t.fire >= 2) t.l.playSound(null, t.centre.x, t.centre.y + 2, t.centre.z, SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 2F, 0.6F);
+                if (t.fire >= 1) t.l.playSound(null, t.centre.x, t.centre.y + 2, t.centre.z, SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 2F, 0.6F);
             }
             return false;
         });
@@ -476,7 +476,7 @@ public final class Flight {
         ServerLevel l = t.l;
         var rnd = l.random;
         int n = (int) Math.min(170, 30 + t.height * 0.7 + t.radius);
-        boolean burning = t.fire >= 2;
+        boolean burning = t.fire >= 1;
         java.util.List<ServerPlayer> see = new java.util.ArrayList<>();
         for (ServerPlayer q : l.players()) if (q.distanceToSqr(t.centre) < 480 * 480) see.add(q);
         if (see.isEmpty()) return;
@@ -500,6 +500,18 @@ public final class Flight {
             double a = rnd.nextDouble() * Math.PI * 2, r = t.r(0) * 1.2;
             for (ServerPlayer q : see)
                 l.sendParticles(q, new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, under), true, t.centre.x + Math.cos(a) * r, t.centre.y + 0.3, t.centre.z + Math.sin(a) * r, 8, 1, 0.3, 1, 0.3);
+        }
+        // a burning one sets the ground round its foot alight (never on Foundation ground)
+        if (burning && t.age % 4 == 0) {
+            double a = rnd.nextDouble() * Math.PI * 2, r = t.r(0) * (0.6 + rnd.nextDouble() * 0.9);
+            net.minecraft.core.BlockPos at = net.minecraft.core.BlockPos.containing(t.centre.x + Math.cos(a) * r, t.centre.y + 2, t.centre.z + Math.sin(a) * r);
+            for (int k = 0; k < 5 && at.getY() > l.getMinBuildHeight(); k++, at = at.below()) {
+                if (!l.getBlockState(at).isAir()) break;
+                if (l.getBlockState(at.below()).isFaceSturdy(l, at.below(), net.minecraft.core.Direction.UP) && Sites.at(l, at) == null) {
+                    l.setBlockAndUpdate(at, net.minecraft.world.level.block.BaseFireBlock.getState(l, at));
+                    break;
+                }
+            }
         }
         if (burning && t.age % 3 == 0) for (ServerPlayer q : see) {
             double f = rnd.nextDouble() * 0.6;
@@ -548,10 +560,17 @@ public final class Flight {
             e.setDeltaMovement(v0.scale(0.3).add(v1.scale(0.7)));
             e.hurtMarked = true;
             e.fallDistance = 0;
-            if (e instanceof net.minecraft.world.entity.LivingEntity v && t.age % 10 == 0) {
-                v.invulnerableTime = 0;
-                PowerKills.hurt(owner, v, t.l.damageSources().flyIntoWall(), (float) (2 + t.speed * 1.5));
-                if (t.fire >= 2) { v.igniteForSeconds(5); v.invulnerableTime = 0; PowerKills.hurt(owner, v, t.l.damageSources().inFire(), 2F + t.fire); }
+            if (e instanceof net.minecraft.world.entity.LivingEntity v) {
+                if (t.fire >= 1) v.igniteForSeconds(8); // in a burning funnel, alight the whole time
+                if (t.age % 10 == 0) {
+                    v.invulnerableTime = 0;
+                    PowerKills.hurt(owner, v, t.l.damageSources().flyIntoWall(), (float) (2 + t.speed * 1.5));
+                    if (t.fire >= 1) {
+                        v.invulnerableTime = 0;
+                        PowerKills.hurt(owner, v, t.l.damageSources().onFire(), 3F + t.fire * 1.5F);
+                        t.l.sendParticles(ParticleTypes.FLAME, v.getX(), v.getY() + v.getBbHeight() / 2, v.getZ(), 8, 0.3, 0.4, 0.3, 0.02);
+                    }
+                }
             }
         }
     }
