@@ -180,31 +180,45 @@ public final class SiteTower extends FacilityBuilder {
         for (int cx = (o.getX() + BX0 - 4) >> 4; cx <= (o.getX() + RX1 + 4) >> 4; cx++)
             for (int cz = (o.getZ() - NZ - 6) >> 4; cz <= (o.getZ() + T + 6) >> 4; cz++)
                 l.getChunk(cx, cz);
+        // learn the plan first (nothing touched), then undo what an older patch filled in that the plan carves out,
+        // then put back only what's missing, each spot by the plan's last word on it
+        FacilityBuilder.Plan plan = new FacilityBuilder.Plan();
+        SiteTower learn = new SiteTower(l, o);
+        learn.patch = true;
+        learn.planning = plan;
+        learn.walk();
+        int undone = plan.undoFill(l);
         SiteTower b = new SiteTower(l, o);
         b.patch = true;
-        b.groundworks();
-        b.dclassBlock();
-        b.containmentLevel(-4, HCZP, "DEEP", B4_S, B4_N);
-        b.containmentLevel(-3, HCZP, "KETER", B3_S, B3_N);
-        b.containmentLevel(-2, HCZP, "HEAVY", B2_S, B2_N);
-        b.containmentLevel(-1, LCZP, "LIGHT", B1_S, B1_N);
-        b.ground();
-        b.research();
-        b.medical();
-        b.security();
-        b.archive();
-        b.offices();
-        b.servers();
-        b.launchControl();
-        b.council();
-        b.administrator();
-        for (int s = 0; s <= TOP; s++) b.facade(s);
-        b.roof();
-        b.reception();
-        b.stairwell();
-        b.residence();
-        b.seal();
-        return b.patched;
+        b.plan = plan;
+        b.walk();
+        if (undone > 0) BreachProtocol.LOGGER.info("Patch at {}: cleared {} blocks an older patch had filled in", o, undone);
+        return b.patched + undone;
+    }
+
+    /** Every part of the plan a patch walks (no staff, nothing sealed: the walls are in the plan anyway). */
+    private void walk() {
+        groundworks();
+        dclassBlock();
+        containmentLevel(-4, HCZP, "DEEP", B4_S, B4_N);
+        containmentLevel(-3, HCZP, "KETER", B3_S, B3_N);
+        containmentLevel(-2, HCZP, "HEAVY", B2_S, B2_N);
+        containmentLevel(-1, LCZP, "LIGHT", B1_S, B1_N);
+        ground();
+        research();
+        medical();
+        security();
+        archive();
+        offices();
+        servers();
+        launchControl();
+        council();
+        administrator();
+        for (int s = 0; s <= TOP; s++) facade(s);
+        roof();
+        reception();
+        stairwell();
+        residence();
     }
 
     private String register(String uuid, String owner) {

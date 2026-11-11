@@ -25,6 +25,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -119,10 +121,67 @@ public abstract class FacilityBuilder {
     protected boolean patch;
     protected int patched;
 
+    /**
+     * What the plan finally leaves at each spot. A patch walks the plan twice: first only to learn it (nothing is
+     * touched), then for real, where a spot is only filled by the plan's LAST word on it. (The builders lay solid
+     * shells and carve rooms out of them; filling from the first word would fill the rooms, the stairs and the lift.)
+     */
+    public static final class Plan {
+        final Map<BlockPos, Integer> count = new HashMap<>();
+        final Map<BlockPos, BlockState> last = new HashMap<>(); // null: whatever's there stays
+        final Map<BlockPos, Set<Block>> before = new HashMap<>(); // what the plan put there earlier, then replaced
+
+        void record(BlockPos p, BlockState s) {
+            p = p.immutable();
+            count.merge(p, 1, Integer::sum);
+            BlockState was = last.put(p, s);
+            if (was != null && (s == null || was.getBlock() != s.getBlock())) before.computeIfAbsent(p, k -> new HashSet<>()).add(was.getBlock());
+        }
+
+        /**
+         * Undoes what an older, one-pass patch did: a spot that ended up holding something the plan only put
+         * there on the way (a shell later carved into a room, stairwell or lift) is cleared, so the real pass can
+         * put the plan's last word there. Returns how many.
+         */
+        public int undoFill(ServerLevel l) {
+            int n = 0;
+            for (Map.Entry<BlockPos, Set<Block>> e : before.entrySet()) {
+                BlockPos p = e.getKey();
+                if (!last.containsKey(p) || last.get(p) == null || !l.isLoaded(p)) continue;
+                BlockState w = l.getBlockState(p);
+                if (w.isAir() || w.getBlock() == last.get(p).getBlock() || !e.getValue().contains(w.getBlock()) || w.hasBlockEntity()) continue;
+                l.setBlock(p, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS);
+                n++;
+            }
+            return n;
+        }
+    }
+
+    /** Set on the learning walk of a patch. */
+    protected Plan planning;
+    /** Set on the real walk of a patch. */
+    protected Plan plan;
+    private final Map<BlockPos, Integer> seen = new HashMap<>();
+
+    /** On the real walk: is this the plan's last word on the spot? (Earlier words are skipped.) */
+    private boolean finalWord(BlockPos p) {
+        if (plan == null) return true;
+        int n = seen.merge(p.immutable(), 1, Integer::sum);
+        Integer total = plan.count.get(p);
+        return total == null || n >= total;
+    }
+
+    /** A patch leaves this spot as it is (a door that's there, open or shut). */
+    protected void keep(BlockPos p) {
+        if (planning != null) planning.record(p, null);
+        else finalWord(p);
+    }
+
     /** True if it was placed (always, except when patching around something already there). */
     protected boolean place(BlockPos p, BlockState s) {
         if (patch) {
-            if (s.isAir() || !l.getBlockState(p).isAir()) return false;
+            if (planning != null) { planning.record(p, s); return false; }
+            if (!finalWord(p) || s.isAir() || !l.getBlockState(p).isAir()) return false;
             l.setBlock(p, s, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE | Block.UPDATE_SUPPRESS_DROPS);
             patched++;
             return true;
@@ -133,7 +192,10 @@ public abstract class FacilityBuilder {
 
     /** Placed the way a player would (multi-part furniture), unless patching and something's already there. */
     protected boolean placeLikePlayer(BlockPos p, Block blk, Direction facing) {
-        if (patch && !l.getBlockState(p).isAir()) return true;
+        if (patch) {
+            if (planning != null) { planning.record(p, blk.defaultBlockState()); return true; }
+            if (!finalWord(p) || !l.getBlockState(p).isAir()) return true;
+        }
         boolean ok = Placer.place(l, p, blk, facing);
         if (ok && patch) patched++;
         return ok;
@@ -344,7 +406,10 @@ public abstract class FacilityBuilder {
             }
             return origin.relative(right, w);
         }
-        if (patch && !l.getBlockState(origin).isAir()) return origin.relative(right, w); // the door's there: left as it is (open or shut)
+        if (patch && !l.getBlockState(origin).isAir()) { // the door's there: left as it is (open or shut)
+            for (int c = 0; c < w; c++) for (int r = 0; r < h; r++) keep(origin.relative(right, c).above(r));
+            return origin.relative(right, w);
+        }
         for (int c = 0; c < w; c++)
             for (int r = 0; r < h; r++)
                 place(origin.relative(right, c).above(r), st(kind + "[facing=" + f(out) + ",open=false,part=" + (c + r * w) + "]"));
