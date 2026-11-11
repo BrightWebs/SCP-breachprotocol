@@ -98,8 +98,6 @@ public final class AfterImages {
 
     /** Lays the images along the path, SPACING apart, measured back from where the runner is now. */
     private static void draw(PoseStack ps, MultiBufferSource buffers, PlayerRenderer r, AbstractClientPlayer p, Snap[] path, Vec3 now, Vec3 cam, int fade) {
-        PlayerModel<AbstractClientPlayer> model = r.getModel();
-        RenderType type = RenderType.entityTranslucent(p.getSkin().texture());
         boolean firstPerson = p == Minecraft.getInstance().player && Minecraft.getInstance().options.getCameraType().isFirstPerson();
         double want = SPACING, walked = 0;
         Vec3 prev = now;
@@ -110,9 +108,8 @@ public final class AfterImages {
             while (seg > 1e-4 && walked + seg >= want && drawn < IMAGES) {
                 double f = (want - walked) / seg;
                 Vec3 spot = prev.add(at.subtract(prev).scale(f));
-                Snap s = path[i];
                 float alpha = (0.42F - drawn * 0.06F) * (1F - fade / 7F);
-                if (alpha > 0.02F && !(firstPerson && spot.distanceToSqr(cam) < 2.5)) one(ps, buffers, model, type, p, s, spot, cam, alpha);
+                if (alpha > 0.02F && !(firstPerson && spot.distanceToSqr(cam) < 2.5)) one(ps, buffers, p, path[i], spot, cam, alpha);
                 drawn++;
                 want += SPACING;
             }
@@ -121,33 +118,136 @@ public final class AfterImages {
         }
     }
 
-    private static void one(PoseStack ps, MultiBufferSource buffers, PlayerModel<AbstractClientPlayer> model, RenderType type, AbstractClientPlayer p,
-                            Snap s, Vec3 spot, Vec3 cam, float alpha) {
-        ps.pushPose();
-        ps.translate(spot.x - cam.x, spot.y - cam.y, spot.z - cam.z);
-        float yaw = s.bodyYaw() * Mth.DEG_TO_RAD;
-        if (s.wall()) {
-            ps.translate(-Mth.sin(s.face()) * 0.35, 0.2, Mth.cos(s.face()) * 0.35);
-            ps.mulPose(new Quaternionf().rotateAxis(-1.3F, Mth.cos(s.face()), 0, Mth.sin(s.face())));
-        } else {
-            ps.mulPose(new Quaternionf().rotateAxis(0.64F, Mth.cos(yaw), 0, Mth.sin(yaw))); // the ninja run's lean, flat out
+    /** True while an after-image is being drawn (no name over it, no shadow under it). */
+    static boolean drawing;
+
+    /**
+     * One image: the runner drawn the way they're drawn right now (their skin as it is, hat or not, armour, or
+     * whatever creature they've become), but posed where and how they were, and see-through.
+     */
+    private static void one(PoseStack ps, MultiBufferSource buffers, AbstractClientPlayer p, Snap s, Vec3 spot, Vec3 cam, float alpha) {
+        var disp = Minecraft.getInstance().getEntityRenderDispatcher();
+        // borrow the pose they had then, and give it back after
+        float body = p.yBodyRot, bodyO = p.yBodyRotO, head = p.yHeadRot, headO = p.yHeadRotO, pitch = p.getXRot(), pitchO = p.xRotO;
+        float[] walk = Walk.get(p);
+        p.yBodyRot = p.yBodyRotO = s.bodyYaw();
+        p.yHeadRot = p.yHeadRotO = s.headYaw();
+        p.setXRot(s.headPitch());
+        p.xRotO = s.headPitch();
+        Walk.set(p, s.limbPos(), s.limbSpeed(), s.limbSpeed());
+        boolean shadows = Minecraft.getInstance().options.entityShadows().get();
+        drawing = true;
+        try {
+            disp.setRenderShadow(false);
+            disp.render(p, spot.x - cam.x, spot.y - cam.y, spot.z - cam.z, s.bodyYaw(), 1.0F, ps, Ghost.of(buffers, alpha), LightTexture.FULL_BRIGHT);
+        } finally {
+            drawing = false;
+            disp.setRenderShadow(shadows);
+            p.yBodyRot = body; p.yBodyRotO = bodyO; p.yHeadRot = head; p.yHeadRotO = headO;
+            p.setXRot(pitch); p.xRotO = pitchO;
+            if (walk != null) Walk.set(p, walk[0], walk[1], walk[2]);
         }
-        // as the living-entity renderer stands a model up
-        ps.mulPose(com.mojang.math.Axis.YP.rotationDegrees(180F - s.bodyYaw()));
-        ps.scale(-1F, -1F, 1F);
-        ps.scale(0.9375F, 0.9375F, 0.9375F);
-        ps.translate(0, -1.501F, 0);
-        model.attackTime = 0;
-        model.crouching = false;
-        model.riding = false;
-        model.young = false;
-        model.setAllVisible(true);
-        model.prepareMobModel(p, s.limbPos(), s.limbSpeed(), 0);
-        model.setupAnim(p, s.limbPos(), s.limbSpeed(), s.age(), Mth.wrapDegrees(s.headYaw() - s.bodyYaw()), s.headPitch());
-        // a little of the fire in it
-        int a = Mth.clamp((int) (alpha * 255), 0, 255);
-        int color = a << 24 | 0xFFD8B8;
-        model.renderToBuffer(ps, buffers.getBuffer(type), LightTexture.FULL_BRIGHT, OverlayTexture.NO_OVERLAY, color);
-        ps.popPose();
+    }
+
+    @SubscribeEvent
+    public static void noName(net.neoforged.neoforge.client.event.RenderNameTagEvent event) {
+        if (drawing) event.setCanRender(net.neoforged.neoforge.common.util.TriState.FALSE);
+    }
+
+    /** The walk cycle's own state (position, speed, last speed), read and set by name. */
+    private static final class Walk {
+        private static java.lang.reflect.Field pos, speed, old;
+        private static boolean broken;
+
+        private static boolean ready() {
+            if (pos != null) return true;
+            if (broken) return false;
+            try {
+                Class<?> c = net.minecraft.world.entity.WalkAnimationState.class;
+                pos = c.getDeclaredField("position"); pos.setAccessible(true);
+                speed = c.getDeclaredField("speed"); speed.setAccessible(true);
+                old = c.getDeclaredField("speedOld"); old.setAccessible(true);
+                return true;
+            } catch (Throwable t) { broken = true; pos = null; return false; }
+        }
+
+        static float[] get(Player p) {
+            if (!ready()) return null;
+            try { return new float[]{pos.getFloat(p.walkAnimation), speed.getFloat(p.walkAnimation), old.getFloat(p.walkAnimation)}; } catch (Throwable t) { return null; }
+        }
+
+        static void set(Player p, float position, float sp, float spOld) {
+            if (!ready()) return;
+            try { pos.setFloat(p.walkAnimation, position); speed.setFloat(p.walkAnimation, sp); old.setFloat(p.walkAnimation, spOld); } catch (Throwable ignored) {}
+        }
+    }
+
+    /**
+     * Buffers that make whatever is drawn into them see-through: each textured layer is swapped for its
+     * translucent twin, every vertex's alpha scaled down and warmed a touch; anything that can't be made
+     * see-through (glints, lines) is left out.
+     */
+    private static final class Ghost {
+        private static final Map<RenderType, RenderType> TWIN = new HashMap<>();
+        private static final RenderType NONE = RenderType.lines();
+        private static java.lang.reflect.Method state, cutout;
+        private static java.lang.reflect.Field texture;
+
+        static MultiBufferSource of(MultiBufferSource base, float alpha) {
+            return rt -> {
+                RenderType t = twin(rt);
+                if (t == NONE) return Nothing.INSTANCE;
+                return new Fade(base.getBuffer(t), alpha);
+            };
+        }
+
+        private static RenderType twin(RenderType rt) {
+            return TWIN.computeIfAbsent(rt, k -> {
+                try {
+                    if (state == null) {
+                        Class<?> comp = Class.forName("net.minecraft.client.renderer.RenderType$CompositeRenderType");
+                        state = comp.getDeclaredMethod("state"); state.setAccessible(true);
+                        texture = Class.forName("net.minecraft.client.renderer.RenderType$CompositeState").getDeclaredField("textureState"); texture.setAccessible(true);
+                        cutout = Class.forName("net.minecraft.client.renderer.RenderStateShard$EmptyTextureStateShard").getDeclaredMethod("cutoutTexture"); cutout.setAccessible(true);
+                    }
+                    if (!state.getDeclaringClass().isInstance(k)) return NONE;
+                    Object st = state.invoke(k);
+                    Object tex = texture.get(st);
+                    @SuppressWarnings("unchecked")
+                    java.util.Optional<net.minecraft.resources.ResourceLocation> loc = (java.util.Optional<net.minecraft.resources.ResourceLocation>) cutout.invoke(tex);
+                    return loc.map(RenderType::entityTranslucent).orElse(NONE);
+                } catch (Throwable t) {
+                    BreachProtocol.LOGGER.debug("After-images: {} can't be made see-through: {}", k, t.toString());
+                    return NONE;
+                }
+            });
+        }
+    }
+
+    /** Scales every vertex's alpha (and warms the colour a little: the fire in it). */
+    private record Fade(com.mojang.blaze3d.vertex.VertexConsumer in, float alpha) implements com.mojang.blaze3d.vertex.VertexConsumer {
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer addVertex(float x, float y, float z) { in.addVertex(x, y, z); return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setColor(int r, int g, int b, int a) {
+            in.setColor(r, Math.round(g * 0.85F), Math.round(b * 0.72F), Math.round(a * alpha)); return this;
+        }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setUv(float u, float v) { in.setUv(u, v); return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setUv1(int u, int v) { in.setUv1(u, v); return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setUv2(int u, int v) { in.setUv2(u, v); return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setNormal(float x, float y, float z) { in.setNormal(x, y, z); return this; }
+        @Override public void addVertex(float x, float y, float z, int color, float u, float v, int overlay, int light, float nx, float ny, float nz) {
+            int a = Math.round((color >>> 24) * alpha), r = (color >> 16) & 255, g = Math.round(((color >> 8) & 255) * 0.85F), b = Math.round((color & 255) * 0.72F);
+            in.addVertex(x, y, z, a << 24 | r << 16 | g << 8 | b, u, v, overlay, light, nx, ny, nz);
+        }
+    }
+
+    /** Swallows what can't be drawn see-through. */
+    private static final class Nothing implements com.mojang.blaze3d.vertex.VertexConsumer {
+        static final Nothing INSTANCE = new Nothing();
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer addVertex(float x, float y, float z) { return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setColor(int r, int g, int b, int a) { return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setUv(float u, float v) { return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setUv1(int u, int v) { return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setUv2(int u, int v) { return this; }
+        @Override public com.mojang.blaze3d.vertex.VertexConsumer setNormal(float x, float y, float z) { return this; }
     }
 }
