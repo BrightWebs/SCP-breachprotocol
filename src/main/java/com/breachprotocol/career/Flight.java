@@ -79,7 +79,7 @@ public final class Flight {
                 int g = parse(a[3]);
                 if (g <= 0) stopRun(p);
                 else {
-                    Integer was = RUN.put(p.getUUID(), Math.min(7, g));
+                    Integer was = RUN.put(p.getUUID(), Math.min(8, g));
                     step(p, true); // step assist: up whole blocks without a jump
                     boolean ninja = g >= 6, wasNinja = was != null && was >= 6;
                     if (ninja != wasNinja) ninjaPose(p, ninja);
