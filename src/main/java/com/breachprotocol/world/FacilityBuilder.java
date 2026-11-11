@@ -155,6 +155,27 @@ public abstract class FacilityBuilder {
             }
             return n;
         }
+
+        /**
+         * What a repair would do, without doing it, area by area: {missing, filled in wrongly, changed by hand}.
+         * "Filled in wrongly" is something the plan only had there on the way (an older patch's mistake);
+         * "changed by hand" is anything else that differs, which a repair leaves alone.
+         */
+        public Map<String, int[]> survey(ServerLevel l, java.util.function.Function<BlockPos, String> area) {
+            Map<String, int[]> out = new java.util.LinkedHashMap<>();
+            for (Map.Entry<BlockPos, BlockState> e : last.entrySet()) {
+                BlockState fin = e.getValue();
+                BlockPos p = e.getKey();
+                if (fin == null || !l.isLoaded(p)) continue;
+                BlockState w = l.getBlockState(p);
+                if (w.getBlock() == fin.getBlock()) continue;
+                Set<Block> b4 = before.get(p);
+                boolean wrong = !w.isAir() && b4 != null && b4.contains(w.getBlock()) && !w.hasBlockEntity();
+                int k = wrong ? 1 : w.isAir() ? 0 : 2;
+                out.computeIfAbsent(area.apply(p), x -> new int[3])[k]++;
+            }
+            return out;
+        }
     }
 
     /** Set on the learning walk of a patch. */

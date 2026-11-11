@@ -279,6 +279,64 @@ public class PhoneScreen extends Screen {
         return a << 24 | r << 16 | gr << 8 | b;
     }
 
+    // ------------------------------------------------------------------ facility review
+
+    private static int facBusy = -1;
+    private static long facBusyAt;
+    private static CompoundTag facLast;
+
+    /** True once a new report has come in since the last button press. */
+    private static boolean facSeen(CompoundTag rev) {
+        if (rev != facLast && !rev.equals(facLast)) { facLast = rev; facBusy = -1; return true; }
+        return facBusy == -1;
+    }
+
+    /** The review of one site, under its card: area by area, and the buttons to put it right. */
+    private int facReport(GuiGraphics g, CompoundTag r, int x, int y, int w, int si) {
+        facSeen(r);
+        if (r.getBoolean("none")) {
+            card(g, x + 6, y, w - 6, 24);
+            text(g, "No tower here to check against", x + 14, y + 4, AMBER);
+            small(g, "ONLY SITES THE FOUNDATION BUILT HAVE A PLAN", x + 14 + (int) (font.width("ONLY SITES THE FOUNDATION BUILT HAVE A PLAN") * 0.375F), y + 15, MUTED);
+            return y + 28;
+        }
+        ListTag rows = r.getList("rows", Tag.TAG_COMPOUND);
+        int m = r.getInt("m"), f = r.getInt("f"), c = r.getInt("c");
+        boolean clean = m + f == 0;
+        int shown = 0;
+        for (Tag t0 : rows) { CompoundTag row = (CompoundTag) t0; if (row.getInt("m") + row.getInt("f") > 0) shown++; }
+        int h = 30 + shown * 11 + (c > 0 ? 11 : 0) + 22;
+        card(g, x + 6, y, w - 6, h);
+        int cx = x + 14, cy = y + 5;
+        String head = r.getBoolean("done") ? (clean ? "Repaired \u2014 all in order" : "Repaired \u2014 " + (m + f) + " left")
+                : clean ? "All in order" : (m + f) + " blocks need putting right";
+        text(g, head, cx, cy, clean ? 0xFF5BE36F : AMBER);
+        cy += 11;
+        String sub = r.getBoolean("done") ? r.getInt("put") + " BLOCKS PUT RIGHT" : "CHECKED AGAINST THE SITE'S OWN PLAN";
+        small(g, sub, cx + (int) (font.width(sub) * 0.375F), cy, MUTED);
+        cy += 12;
+        for (Tag t0 : rows) {
+            CompoundTag row = (CompoundTag) t0;
+            int rm = row.getInt("m"), rf = row.getInt("f");
+            if (rm + rf == 0) continue;
+            text(g, ellipsize(row.getString("a").replaceFirst("  ", " "), w - 110), cx, cy, 0xFFE8EEF4);
+            String what = (rm > 0 ? rm + " missing" : "") + (rm > 0 && rf > 0 ? " \u00B7 " : "") + (rf > 0 ? rf + " blocked" : "");
+            text(g, what, x + w - 10 - font.width(what), cy, rf > 0 ? RED : AMBER);
+            cy += 11;
+        }
+        if (c > 0) {
+            String hand = c + " changed by hand \u2014 left alone";
+            small(g, hand.toUpperCase(Locale.ROOT), cx + (int) (font.width(hand.toUpperCase(Locale.ROOT)) * 0.375F), cy + 2, MUTED);
+            cy += 11;
+        }
+        cy += 3;
+        int bw = (w - 6 - 16 - 6) / 2;
+        boolean busy = facBusy == si && System.currentTimeMillis() - facBusyAt < 15000;
+        pill(g, cx, cy, bw, 14, busy ? "Working\u2026" : "Repair", 0xFF2E9E57, !clean && !busy, () -> { facBusy = si; facBusyAt = System.currentTimeMillis(); send("fac:fix:" + si, 0); });
+        pill(g, cx + bw + 6, cy, bw, 14, "Check again", 0xFF2E9E57, !busy, () -> { facBusy = si; facBusyAt = System.currentTimeMillis(); send("fac:check:" + si, 0); });
+        return y + h + 4;
+    }
+
     private void card(GuiGraphics g, int x, int y, int w, int h) {
         RAW = true;
         rrect(g, x, y, w, h, 8, 0xFF163D24);
@@ -2006,8 +2064,19 @@ public class PhoneScreen extends Screen {
             String info = st.getInt("r") + "m @ " + st.getInt("x") + ", " + st.getInt("z") + "  \u00B7  " + st.getString("on");
             small(g, ellipsize(info, (int) ((w - 60) / 0.75F)), x + 8 + (int) (font.width(ellipsize(info, (int) ((w - 60) / 0.75F))) * 0.375F), y + 14, MUTED);
             final int si = st.getInt("i");
-            if (st.getBoolean("mine") || rank() >= 6) pill(g, x + w - 46, y + 5, 40, 14, "Remove", RED, true, () -> send("site_remove", si));
+            boolean rm = st.getBoolean("mine") || rank() >= 6;
+            if (rm) pill(g, x + w - 46, y + 5, 40, 14, "Remove", RED, true, () -> send("site_remove", si));
+            CompoundTag rev = t.getCompound("facReview");
+            boolean open = rev.contains("i") && rev.getInt("i") == si;
+            if (st.getBoolean("rev")) {
+                boolean busy = facBusy == si && System.currentTimeMillis() - facBusyAt < 15000;
+                pill(g, x + w - (rm ? 92 : 46), y + 5, 42, 14, busy ? "\u2026" : open ? "Hide" : "Review", 0xFF2E9E57, !busy, () -> {
+                    if (open) send("fac:close", 0);
+                    else { facBusy = si; facBusyAt = System.currentTimeMillis(); send("fac:check:" + si, 0); }
+                });
+            }
             y += 27;
+            if (open) y = facReport(g, rev, x, y, w, si);
         }
         if (here.isEmpty()) {
             if (rank() >= 3 || t.getBoolean("ascended")) {

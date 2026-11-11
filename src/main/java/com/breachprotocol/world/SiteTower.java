@@ -177,16 +177,9 @@ public final class SiteTower extends FacilityBuilder {
      * Returns how many blocks went back.
      */
     public static int patch(ServerLevel l, BlockPos o) {
-        for (int cx = (o.getX() + BX0 - 4) >> 4; cx <= (o.getX() + RX1 + 4) >> 4; cx++)
-            for (int cz = (o.getZ() - NZ - 6) >> 4; cz <= (o.getZ() + T + 6) >> 4; cz++)
-                l.getChunk(cx, cz);
         // learn the plan first (nothing touched), then undo what an older patch filled in that the plan carves out,
         // then put back only what's missing, each spot by the plan's last word on it
-        FacilityBuilder.Plan plan = new FacilityBuilder.Plan();
-        SiteTower learn = new SiteTower(l, o);
-        learn.patch = true;
-        learn.planning = plan;
-        learn.walk();
+        FacilityBuilder.Plan plan = learn(l, o);
         int undone = plan.undoFill(l);
         SiteTower b = new SiteTower(l, o);
         b.patch = true;
@@ -194,6 +187,34 @@ public final class SiteTower extends FacilityBuilder {
         b.walk();
         if (undone > 0) BreachProtocol.LOGGER.info("Patch at {}: cleared {} blocks an older patch had filled in", o, undone);
         return b.patched + undone;
+    }
+
+    /** Learns a tower's plan (nothing is touched). */
+    private static FacilityBuilder.Plan learn(ServerLevel l, BlockPos o) {
+        for (int cx = (o.getX() + BX0 - 4) >> 4; cx <= (o.getX() + RX1 + 4) >> 4; cx++)
+            for (int cz = (o.getZ() - NZ - 6) >> 4; cz <= (o.getZ() + T + 6) >> 4; cz++)
+                l.getChunk(cx, cz);
+        FacilityBuilder.Plan plan = new FacilityBuilder.Plan();
+        SiteTower learn = new SiteTower(l, o);
+        learn.patch = true;
+        learn.planning = plan;
+        learn.walk();
+        return plan;
+    }
+
+    /** A facility review: area by area, {missing, filled in wrongly, changed by hand}; nothing is touched. */
+    public static Map<String, int[]> survey(ServerLevel l, BlockPos o) {
+        return learn(l, o).survey(l, p -> area(p.subtract(o)));
+    }
+
+    /** Which part of the tower a spot (relative to the origin) belongs to. */
+    private static String area(BlockPos r) {
+        if (r.getX() >= RX0 - 2) return "Residence";
+        if (r.getY() >= 0 && (r.getX() < 0 || r.getX() > T || r.getZ() < 0 || r.getZ() > T)) return r.getY() <= 2 ? "Grounds" : "Facade";
+        int s = Math.floorDiv(r.getY() - 1, STOREY);
+        if (s < LOWEST) s = LOWEST;
+        if (s > ROOF) s = ROOF;
+        return floorName(s);
     }
 
     /** Every part of the plan a patch walks (no staff, nothing sealed: the walls are in the plan anyway). */

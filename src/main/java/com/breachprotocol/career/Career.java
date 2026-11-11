@@ -1063,6 +1063,7 @@ public final class Career {
         com.breachprotocol.network.Command.addToSync(p, t);
         Contacts.addToSync(p, t);
         Sites.addToSync(p, t);
+        FacilityReview.addToSync(p, t);
         Containment.addToSync(p, t);
         Dominion.addToSync(p, t);
         BreachMissions.addToSync(p, t);
