@@ -288,9 +288,22 @@ public final class Toggles {
     }
 
     /** A blow the way SCP-096 deals it: their gifts sealed first, then its own caught damage, which nothing turns aside, and thrown back. */
+    /** SCP-096's strike as SCP Unleashed plays it: both strike sounds layered, a double sweep and a burst of smoke on the one struck. */
+    public static void strike(LivingEntity v) {
+        if (!(v.level() instanceof net.minecraft.server.level.ServerLevel l)) return;
+        double x = v.getX(), y = v.getY() + v.getBbHeight() * 0.5, z = v.getZ();
+        for (String id : new String[]{"scp096_strike", "scp096_strike_impact"}) {
+            net.minecraft.core.registries.BuiltInRegistries.SOUND_EVENT.getOptional(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("scp_unleashed", id))
+                    .ifPresent(snd -> l.playSound(null, x, y, z, snd, net.minecraft.sounds.SoundSource.HOSTILE, 1.6F, 0.9F + l.random.nextFloat() * 0.15F));
+        }
+        l.sendParticles(net.minecraft.core.particles.ParticleTypes.SWEEP_ATTACK, x, y, z, 2, 0.3, 0.2, 0.3, 0.0);
+        l.sendParticles(net.minecraft.core.particles.ParticleTypes.POOF, x, y, z, 10, 0.3, 0.5, 0.3, 0.02);
+    }
+
     public static void shyBlow(ServerPlayer p, LivingEntity v, float amount, double kb, int sealTicks) {
         seal(p, v, sealTicks);
         PowerKills.credit(p, v);
+        strike(v);
         v.invulnerableTime = 0;
         REDEALING = true;
         try { v.hurt(caughtExists(p) ? PowerKills.as(p, CAUGHT) : p.damageSources().playerAttack(p), amount); } finally { REDEALING = false; }
