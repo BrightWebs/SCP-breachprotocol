@@ -408,6 +408,12 @@ public final class SuperFlight {
         if (wallTicks % 3 == 0) p.playSound(st.getSoundType().getStepSound(), 0.5F, 1.4F);
     }
 
+    /** Running ablaze (gear 7 and up): yours we know; someone else's we judge by the ninja run at that speed. */
+    static boolean ablaze(Player p) {
+        if (p == Minecraft.getInstance().player) return runGear >= 7 && !flying;
+        return FlightState.NINJA.contains(p.getId()) && !p.getAbilities().flying && new Vec3(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo).length() > 3.8;
+    }
+
     static boolean wallRunning(Player p) {
         if (p == Minecraft.getInstance().player) return wallRun;
         double dy = p.getY() - p.yo, dh = new Vec3(p.getX() - p.xo, 0, p.getZ() - p.zo).length();

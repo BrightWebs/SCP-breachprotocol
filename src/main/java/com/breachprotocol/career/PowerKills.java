@@ -204,15 +204,31 @@ public final class PowerKills {
         if (v.level().isClientSide() || !manas()) return;
         ServerPlayer killer = powerKiller(v, event.getSource());
         // a kill by the Foundation's own people is the Administrator's: EP, skills, and its soul
-        if (killer == null) killer = staffOwner(v, event.getSource());
+        boolean powers = killer != null;
+        if (killer == null) { killer = staffOwner(v, event.getSource()); powers = killer != null; }
+        // the Administrator's own plain kills (a blade, an arrow) still take the soul, just not twice over
+        boolean plain = false;
+        if (killer == null && !(v instanceof net.minecraft.world.entity.player.Player)) {
+            net.minecraft.world.entity.Entity k = event.getSource().getEntity();
+            if (k instanceof ServerPlayer sp && Vault.chief(sp)) { killer = sp; plain = true; }
+        }
         if (killer == null) return;
-        // its soul, the way Manas Reborn weighs one (its EP at the race's soul rate) plus any souls it carried; twice over for the Administrator
+        // Manas Reborn counts souls in thousandths (its screen shows soul points / 1000): the creature's soul is a
+        // whole one, its EP adds Manas Reborn's own share (at the race's soul rate), and whatever souls it carried come too
         double victimEP = ep(v);
-        long souls = (long) Math.ceil(victimEP * soulRate() / 100.0) + Math.max(0, soulsOf(v));
-        if (souls <= 0) souls = 1;
-        if (Vault.chief(killer)) souls *= 2;
-        PENDING.put(v.getUUID(), new Pending(killer, victimEP, ep(killer), Vault.chief(killer) ? skillsOf(v) : List.of(), souls, soulsOf(killer)));
+        long souls = SOUL + (long) Math.ceil(victimEP * soulRate() / 100.0) + Math.max(0, soulsOf(v));
+        if (Vault.chief(killer) && powers) souls *= 2; // by SCP powers (or the Foundation's hands): doubled
+        PENDING.put(v.getUUID(), new Pending(killer, plain ? 0 : victimEP, ep(killer), Vault.chief(killer) && !plain ? skillsOf(v) : List.of(), souls, soulsOf(killer)));
     }
+
+    /** Souls as Manas Reborn's screen shows them (whole ones), with a tenth when there's a part one. */
+    private static String soulText(long points) {
+        long whole = points / SOUL, tenth = (points % SOUL) / 100;
+        return String.format("%,d", whole) + (tenth > 0 ? "." + tenth : "");
+    }
+
+    /** One whole soul, as Manas Reborn stores it. */
+    private static final long SOUL = 1000;
 
     /** After everyone (Manas Reborn included) has had their say: make it up to 100% of the creature's EP. */
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -227,7 +243,8 @@ public final class PowerKills {
         long owedSouls = pd.souls() - Math.max(0, soulsOf(pd.killer()) - pd.soulsBefore());
         if (owedSouls > 0) addSouls(pd.killer(), owedSouls);
         if (pd.souls() > 0 && Vault.chief(pd.killer()))
-            pd.killer().displayClientMessage(net.minecraft.network.chat.Component.literal("+" + String.format("%,d", pd.souls()) + " souls").withStyle(net.minecraft.ChatFormatting.DARK_PURPLE), true);
+            pd.killer().displayClientMessage(net.minecraft.network.chat.Component.literal("+" + soulText(pd.souls()) + (pd.souls() < 2 * SOUL ? " soul" : " souls")
+                    + "   \u00B7   " + soulText(soulsOf(pd.killer())) + " in all").withStyle(net.minecraft.ChatFormatting.DARK_PURPLE), true);
     }
 
     /**
