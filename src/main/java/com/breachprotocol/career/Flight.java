@@ -210,9 +210,13 @@ public final class Flight {
         for (var e : l.getEntitiesOfClass(net.minecraft.world.entity.LivingEntity.class, box, e -> e != p && e.isAlive() && !e.isSpectator())) {
             if (spare(p, e)) { nudge(p, e, now.subtract(was)); continue; }
             if (e.invulnerableTime > 10) continue;
+            // 096's blow, at that speed: a burst, everything they have sealed, damage nothing resists, and on fire
             e.igniteForSeconds(6);
-            PowerKills.hurt(p, e, l.damageSources().onFire(), 14F);
-            l.sendParticles(ParticleTypes.LAVA, e.getX(), e.getY() + e.getBbHeight() / 2, e.getZ(), 4, 0.3, 0.3, 0.3, 0);
+            Toggles.shyBlow(p, e, 40F, 2.4, 400);
+            double cy = e.getY() + e.getBbHeight() / 2;
+            l.sendParticles(ParticleTypes.EXPLOSION, e.getX(), cy, e.getZ(), 2, 0.4, 0.4, 0.4, 0);
+            l.sendParticles(ParticleTypes.LAVA, e.getX(), cy, e.getZ(), 6, 0.3, 0.3, 0.3, 0);
+            l.playSound(null, e.blockPosition(), SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 0.9F, 1.1F);
         }
     }
 

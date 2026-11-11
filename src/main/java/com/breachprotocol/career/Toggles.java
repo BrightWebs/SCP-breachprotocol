@@ -270,22 +270,32 @@ public final class Toggles {
         LivingEntity v = event.getEntity();
         boolean rage = raging(p);
         float amount = rage ? Math.max(event.getAmount() * 4F, 20F) : event.getAmount();
-        // their gifts sealed before the blow lands
-        int dur = rage ? 600 : 200;
+        if (!caughtExists(p)) { seal(p, v, rage ? 600 : 200); if (rage) event.setAmount(amount); return; } // no SCP Unleashed: an ordinary (if harder) blow
+        event.setCanceled(true);
+        shyBlow(p, v, amount, rage ? 1.6 : 0.4, rage ? 600 : 200);
+    }
+
+    private static boolean caughtExists(ServerPlayer p) {
+        return p.serverLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.DAMAGE_TYPE).getHolder(CAUGHT).isPresent();
+    }
+
+    /** Manas Reborn's skills, magic and energy sealed off the one struck. */
+    private static void seal(ServerPlayer p, LivingEntity v, int dur) {
         for (String id : SEALS) {
             var h = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getHolder(ResourceLocation.fromNamespaceAndPath("manas_reborn", id));
             h.ifPresent(e -> v.addEffect(new net.minecraft.world.effect.MobEffectInstance(e, dur, 0, false, true, true), p));
         }
-        var reg = p.serverLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.DAMAGE_TYPE);
-        if (reg.getHolder(CAUGHT).isEmpty()) { if (rage) event.setAmount(amount); return; } // no SCP Unleashed: an ordinary (if harder) blow
-        event.setCanceled(true);
+    }
+
+    /** A blow the way SCP-096 deals it: their gifts sealed first, then its own caught damage, which nothing turns aside, and thrown back. */
+    public static void shyBlow(ServerPlayer p, LivingEntity v, float amount, double kb, int sealTicks) {
+        seal(p, v, sealTicks);
         PowerKills.credit(p, v);
         v.invulnerableTime = 0;
         REDEALING = true;
-        try { v.hurt(PowerKills.as(p, CAUGHT), amount); } finally { REDEALING = false; }
-        double kb = rage ? 1.6 : 0.4;
+        try { v.hurt(caughtExists(p) ? PowerKills.as(p, CAUGHT) : p.damageSources().playerAttack(p), amount); } finally { REDEALING = false; }
         Vec3 push = v.position().subtract(p.position()).multiply(1, 0, 1).normalize().scale(kb);
-        v.push(push.x, rage ? 0.45 : 0.2, push.z);
+        v.push(push.x, kb > 1 ? 0.45 : 0.2, push.z);
         v.hurtMarked = true;
     }
 

@@ -182,10 +182,10 @@ public final class Secretary {
             // once a day, while someone's near: whatever's missing from the tower goes back, by its own plan (nothing doubled)
             if (RECEPTION.contains(s.name) && ow.isLoaded(o.offset(SiteTower.liftPanel(0))) && isTower(ow, s)
                     && ow.getNearestPlayer(o.getX() + 16, o.getY(), o.getZ() + 16, 96, false) != null) {
-                long now = ow.getGameTime();
+                long tNow = ow.getGameTime();
                 Long last = PATCHED.get(s.name);
-                if (last == null || now - last > 24000L) {
-                    PATCHED.put(s.name, now);
+                if (last == null || tNow - last > 24000L) {
+                    PATCHED.put(s.name, tNow);
                     int n = SiteTower.patch(ow, o);
                     if (n > 0) BreachProtocol.LOGGER.info("Patched {}: {} missing blocks put back", s.name, n);
                 }

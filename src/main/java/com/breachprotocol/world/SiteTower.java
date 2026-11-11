@@ -909,7 +909,7 @@ public final class SiteTower extends FacilityBuilder {
                 for (var prop : st.getProperties()) {
                     if (prop.getName().equals("facing") && prop instanceof net.minecraft.world.level.block.state.properties.DirectionProperty dp) st = st.setValue(dp, zf[1] == 0 ? Direction.NORTH : Direction.SOUTH);
                 }
-                place(p, st);
+                l.setBlock(p, st, 3);
             }
     }
 
