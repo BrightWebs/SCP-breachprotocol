@@ -202,12 +202,14 @@ public final class SiteTower extends FacilityBuilder {
         return plan;
     }
 
-    /** A facility review: area by area, {missing, filled in wrongly, changed by hand}; nothing is touched. */
-    public static Map<String, int[]> survey(ServerLevel l, BlockPos o) {
-        return learn(l, o).survey(l, p -> area(p.subtract(o)));
+    /** A facility review: every spot that differs from the tower's plan; nothing is touched. */
+    public static List<FacilityBuilder.Plan.Diff> survey(ServerLevel l, BlockPos o) {
+        return learn(l, o).diffs(l);
     }
 
-    /** Which part of the tower a spot (relative to the origin) belongs to. */
+    /** Which part of the tower a spot belongs to. */
+    public static String area(BlockPos o, BlockPos p) { return area(p.subtract(o)); }
+
     private static String area(BlockPos r) {
         if (r.getX() >= RX0 - 2) return "Residence";
         if (r.getY() >= 0 && (r.getX() < 0 || r.getX() > T || r.getZ() < 0 || r.getZ() > T)) return r.getY() <= 2 ? "Grounds" : "Facade";

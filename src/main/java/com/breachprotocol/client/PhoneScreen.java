@@ -301,40 +301,64 @@ public class PhoneScreen extends Screen {
             return y + 28;
         }
         ListTag rows = r.getList("rows", Tag.TAG_COMPOUND);
-        int m = r.getInt("m"), f = r.getInt("f"), c = r.getInt("c");
-        boolean clean = m + f == 0;
-        int shown = 0;
-        for (Tag t0 : rows) { CompoundTag row = (CompoundTag) t0; if (row.getInt("m") + row.getInt("f") > 0) shown++; }
-        int h = 30 + shown * 11 + (c > 0 ? 11 : 0) + 22;
+        int m = r.getInt("m"), f = r.getInt("f"), others = r.getInt("others"), stray = r.getInt("stray"), u = r.getInt("u");
+        int yours = r.getInt("yours"), kept = r.getInt("kept");
+        boolean clean = m + f + others + stray == 0;
+        int shown = rows.size();
+        int notes = (yours + kept > 0 ? 1 : 0) + (others + stray > 0 ? 1 : 0) + (u > 0 ? 2 : 0);
+        int h = 30 + shown * 11 + notes * 9 + 4 + 18 + (u > 0 ? 18 : 0) + 10;
         card(g, x + 6, y, w - 6, h);
         int cx = x + 14, cy = y + 5;
-        String head = r.getBoolean("done") ? (clean ? "Repaired \u2014 all in order" : "Repaired \u2014 " + (m + f) + " left")
-                : clean ? "All in order" : (m + f) + " blocks need putting right";
+        int issues = m + f + others + stray;
+        String head = r.getBoolean("done") ? (clean ? "Done \u2014 all in order" : "Done \u2014 " + issues + " left")
+                : clean ? "All in order" : issues + " blocks need putting right";
         text(g, head, cx, cy, clean ? 0xFF5BE36F : AMBER);
         cy += 11;
-        String sub = r.getBoolean("done") ? r.getInt("put") + " BLOCKS PUT RIGHT" : "CHECKED AGAINST THE SITE'S OWN PLAN";
+        String sub = r.getBoolean("done") ? (r.getInt("cleared") > 0 ? r.getInt("cleared") + " CLEARED \u00B7 " : "") + r.getInt("put") + " PUT RIGHT"
+                : "CHECKED AGAINST THE SITE'S OWN PLAN";
         small(g, sub, cx + (int) (font.width(sub) * 0.375F), cy, MUTED);
         cy += 12;
         for (Tag t0 : rows) {
             CompoundTag row = (CompoundTag) t0;
-            int rm = row.getInt("m"), rf = row.getInt("f");
-            if (rm + rf == 0) continue;
-            text(g, ellipsize(row.getString("a").replaceFirst("  ", " "), w - 110), cx, cy, 0xFFE8EEF4);
-            String what = (rm > 0 ? rm + " missing" : "") + (rm > 0 && rf > 0 ? " \u00B7 " : "") + (rf > 0 ? rf + " blocked" : "");
-            text(g, what, x + w - 10 - font.width(what), cy, rf > 0 ? RED : AMBER);
+            int rm = row.getInt("m"), rf = row.getInt("f"), ro = row.getInt("o"), ru = row.getInt("u");
+            text(g, ellipsize(row.getString("a").replaceFirst("  ", " "), w - 130), cx, cy, 0xFFE8EEF4);
+            List<String> bits = new ArrayList<>();
+            if (rm > 0) bits.add(rm + " missing");
+            if (rf > 0) bits.add(rf + " blocked");
+            if (ro > 0) bits.add(ro + " unwanted");
+            if (ru > 0) bits.add(ru + " ?");
+            String what = String.join(" \u00B7 ", bits);
+            text(g, what, x + w - 10 - font.width(what), cy, rf + ro > 0 ? RED : rm > 0 ? AMBER : MUTED);
             cy += 11;
         }
-        if (c > 0) {
-            String hand = c + " changed by hand \u2014 left alone";
-            small(g, hand.toUpperCase(Locale.ROOT), cx + (int) (font.width(hand.toUpperCase(Locale.ROOT)) * 0.375F), cy + 2, MUTED);
-            cy += 11;
+        cy += 2;
+        if (yours + kept > 0) { note(g, (yours > 0 ? yours + " placed by you" : "") + (yours > 0 && kept > 0 ? " \u00B7 " : "") + (kept > 0 ? kept + " Foundation fittings" : "") + " \u2014 kept", cx, cy); cy += 9; }
+        if (others + stray > 0) { note(g, (others > 0 ? others + " placed by others" : "") + (others > 0 && stray > 0 ? " \u00B7 " : "") + (stray > 0 ? stray + " stray (water, fire, webs...)" : ""), cx, cy); cy += 9; }
+        if (u > 0) {
+            note(g, u + " of unknown origin (?) \u2014 from before records began", cx, cy); cy += 9;
+            note(g, "blocks you place from now on are always kept", cx, cy); cy += 9;
         }
-        cy += 3;
-        int bw = (w - 6 - 16 - 6) / 2;
-        boolean busy = facBusy == si && System.currentTimeMillis() - facBusyAt < 15000;
-        pill(g, cx, cy, bw, 14, busy ? "Working\u2026" : "Repair", 0xFF2E9E57, !clean && !busy, () -> { facBusy = si; facBusyAt = System.currentTimeMillis(); send("fac:fix:" + si, 0); });
-        pill(g, cx + bw + 6, cy, bw, 14, "Check again", 0xFF2E9E57, !busy, () -> { facBusy = si; facBusyAt = System.currentTimeMillis(); send("fac:check:" + si, 0); });
+        cy += 4;
+        int bw = (w - 6 - 16 - 12) / 3;
+        boolean busy = facBusy == si && System.currentTimeMillis() - facBusyAt < 30000;
+        pill(g, cx, cy, bw, 14, busy ? "Working\u2026" : "Repair", 0xFF2E9E57, m + f > 0 && !busy, () -> facGo("fix", si));
+        pill(g, cx + bw + 6, cy, bw, 14, "Clear unwanted", 0xFF2E9E57, others + stray > 0 && !busy, () -> facGo("clear", si));
+        pill(g, cx + 2 * (bw + 6), cy, bw, 14, "Check again", 0xFF2E9E57, !busy, () -> facGo("check", si));
+        cy += 18;
+        if (u > 0) { pill(g, cx, cy, w - 6 - 16, 14, "Clear unknown too (" + u + ")", RED, !busy, () -> facGo("clearall", si)); cy += 18; }
+        small(g, "CLEARED BLOCKS GO TO YOUR VAULT STOREROOM", x + 6 + (w - 6) / 2, cy + 1, MUTED);
         return y + h + 4;
+    }
+
+    private void note(GuiGraphics g, String s, int x, int y) {
+        String up = s.toUpperCase(Locale.ROOT);
+        small(g, up, x + (int) (font.width(up) * 0.375F), y, MUTED);
+    }
+
+    private static void facGo(String what, int si) {
+        facBusy = si;
+        facBusyAt = System.currentTimeMillis();
+        send("fac:" + what + ":" + si, 0);
     }
 
     private void card(GuiGraphics g, int x, int y, int w, int h) {
