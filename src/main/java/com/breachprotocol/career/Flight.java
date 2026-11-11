@@ -459,16 +459,24 @@ public final class Flight {
                 t.radius *= 0.99;
                 if (t.fire > 0 && t.l.getGameTime() % 40 == 0) t.fire--;
             }
-            if (t.height < 5 || t.radius < 1.2) return true;
+            if (t.height < 5 || t.radius < 1.2) { hush(t); return true; }
             t.age++;
             spin(t);
             if (owner != null) catchIn(owner, t);
             if (t.age % 30 == 0) {
-                t.l.playSound(null, t.centre.x, t.centre.y + 4, t.centre.z, SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, (float) Math.min(6, 2 + t.height / 40), 0.5F);
+                // its roar, kept on its own channel so it can be cut off the moment it's gone (and quieter as it dies)
+                t.l.playSound(null, t.centre.x, t.centre.y + 4, t.centre.z, SoundEvents.ELYTRA_FLYING, SoundSource.WEATHER, (float) Math.min(6, 0.5 + t.height / 40), 0.5F);
                 if (t.fire >= 1) t.l.playSound(null, t.centre.x, t.centre.y + 2, t.centre.z, SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 2F, 0.6F);
             }
             return false;
         });
+    }
+
+    /** Gone: its wind stops with it, for everyone who could hear it (unless another of yours is still blowing nearby). */
+    private static void hush(Twister t) {
+        for (Twister o : TWISTERS) if (o != t && o.l == t.l && o.height >= 5 && o.centre.distanceToSqr(t.centre) < 160 * 160) return;
+        var stop = new net.minecraft.network.protocol.game.ClientboundStopSoundPacket(SoundEvents.ELYTRA_FLYING.getLocation(), SoundSource.WEATHER);
+        for (ServerPlayer q : t.l.players()) if (q.distanceToSqr(t.centre) < 256 * 256) q.connection.send(stop);
     }
 
     /** The funnel itself: wind spiralling up it, debris at its foot, cloud at its crown, and fire in it once it's burning. */
