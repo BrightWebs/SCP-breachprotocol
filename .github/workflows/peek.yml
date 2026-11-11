@@ -29,4 +29,8 @@ jobs:
           echo "== matching files =="
           find . -type f | grep -iE "${{ inputs.grep }}" | head -200
           echo "== contents =="
-          for f in $(find . -type f \( -name '*.json' -o -name '*.js' -o -name '*.toml' -o -name '*.mcfunction' \) | grep -iE "${{ inputs.grep }}" | head -60); do echo "---- $f"; head -c 6000 "$f"; echo; done
+          for f in $(find . -type f \( -name '*.json' -o -name '*.js' -o -name '*.toml' -o -name '*.mcfunction' \) | grep -iE "${{ inputs.grep }}" | grep -v animations | head -60); do echo "---- $f"; head -c 6000 "$f"; echo; done
+          echo "== files mentioning SpeedLevel / movement_speed =="
+          grep -rlE "SpeedLevel|movement_speed|flying_speed" --include=*.json --include=*.js --include=*.mcfunction . | grep -v animations | head -40
+          echo "== those lines =="
+          grep -rnE "SpeedLevel|movement_speed|\"amount\"|\"value\"|operation|speed" --include=*.json --include=*.js --include=*.mcfunction . | grep -v -e animations -e textures -e "/models/" | grep -iE "kinec|xlr8|alien_4|speed" | head -250
