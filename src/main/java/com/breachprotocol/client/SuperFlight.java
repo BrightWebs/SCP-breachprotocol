@@ -310,10 +310,11 @@ public final class SuperFlight {
             else jumpTap = ticks;
         }
         jumpWas = jumpKey;
-        // hands back (gear six and up) and crouch: a dead stop, and the speed goes on ahead as a sonic wave
+        // crouch at speed (any gear from two, but five, where it's the shoulder): a dead stop, and the speed goes on
+        // ahead as a sonic wave, as hard as you were going
         boolean crouch = free && o.keyShift.isDown(), crouchEdge = crouch && !crouchWas;
         crouchWas = crouch;
-        if (ok && runGear >= NINJA_GEAR && !wallRun && crouchEdge) {
+        if (ok && runGear >= 2 && runGear != RAM_GEAR && !ramming && !wallRun && crouchEdge) {
             sonicStop(p);
             shiftWas = true;
             return;
@@ -539,13 +540,15 @@ public final class SuperFlight {
         if (!flying && runGear == 0 || mc.options.hideGui || mc.player == null) return;
         GuiGraphics g = event.getGuiGraphics();
         if (!flying) {
-            String s = "SPRINT GEAR " + runGear + (runGear >= 8 ? "  ·  ABLAZE  ·  PAST XLR8" : runGear >= 7 ? "  ·  ABLAZE" : runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : wallRun ? "  ·  UP THE WALL" : "");
-            String gs = runGear < RAM_GEAR ? "DOUBLE-TAP SPRINT: GEAR UP"
+            String s = "SPRINT GEAR " + runGear + (runGear >= 7 ? "  ·  ABLAZE" : runGear >= 2 ? "  ·  SUPERSONIC" : "") + (ramming ? "  ·  RAMMING" : wallRun ? "  ·  UP THE WALL" : "");
+            String gs = runGear < 2 ? "DOUBLE-TAP SPRINT: GEAR UP"
+                    : runGear < 4 ? "DOUBLE-TAP SPRINT: GEAR UP  ·  CROUCH: SONIC STOP"
+                    : runGear < RAM_GEAR ? "DOUBLE-TAP SPRINT: GEAR UP  ·  CROUCH: SONIC STOP  ·  RUN CIRCLES: TORNADO"
                     : ramming ? "TAP CROUCH: STOP RAMMING  ·  DOUBLE-TAP JUMP: TAKE OFF"
                     : runGear < NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 6  ·  TAP CROUCH: SHOULDER  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : runGear == NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 7, FIRE  ·  CROUCH: SONIC STOP  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR 8  ·  CROUCH: SONIC STOP  ·  DOUBLE-TAP JUMP: TAKE OFF"
-                    : "CROUCH: SONIC STOP  ·  RUN AT A WALL: UP IT  ·  DOUBLE-TAP JUMP: TAKE OFF";
+                    : runGear == NINJA_GEAR ? "DOUBLE-TAP SPRINT: GEAR 7, FIRE  ·  CROUCH: SONIC STOP  ·  RUN CIRCLES: TORNADO"
+                    : runGear < RUN.length - 1 ? "DOUBLE-TAP SPRINT: GEAR 8  ·  CROUCH: SONIC STOP  ·  RUN CIRCLES: TORNADO"
+                    : "CROUCH: SONIC STOP  ·  RUN CIRCLES: A TORNADO OF FIRE  ·  DOUBLE-TAP JUMP: TAKE OFF";
             int x = g.guiWidth() / 2, y = g.guiHeight() - 62;
             g.drawString(mc.font, s, x - mc.font.width(s) / 2, y, ramming ? 0xFFFF9A6A : runGear >= 7 ? 0xFFFF8A3A : runGear >= NINJA_GEAR ? 0xFFB8E8FF : runGear >= 2 ? 0xFFFFE0A0 : 0xFFE0E0F0, true);
             PowerKeys.small(g, mc.font, gs, x - (int) (mc.font.width(gs) * 0.375F), y + 10, 0xFFA898C0);

@@ -51,6 +51,8 @@ public final class Flight {
 
     private static void stopRun(ServerPlayer p) {
         Integer was = RUN.remove(p.getUUID());
+        LOOPS.remove(p.getUUID());
+        HEADING.remove(p.getUUID());
         if (was != null && was >= 6) ninjaPose(p, false);
         if (RAM.remove(p.getUUID())) ramPose(p, false);
         step(p, false);
@@ -75,7 +77,7 @@ public final class Flight {
         }
         if (a[1].equals("run") && a.length >= 4 && a[2].equals("wave")) {
             // a dead stop from the ninja run: everything that speed was carrying keeps going, ahead of you
-            if (Dominion.level(p) >= 2 && RUN.getOrDefault(p.getUUID(), 0) >= 6) wave(p, Math.max(0.6, Math.min(8.0, parse(a[3]) / 100.0)));
+            if (Dominion.level(p) >= 2 && RUN.getOrDefault(p.getUUID(), 0) >= 2) wave(p, Math.max(0.6, Math.min(8.0, parse(a[3]) / 100.0)));
             return;
         }
         if (a[1].equals("run") && a.length >= 4 && (a[2].equals("gear") || a[2].equals("ram"))) {
@@ -258,7 +260,7 @@ public final class Flight {
         final java.util.Set<Integer> hit = new java.util.HashSet<>();
         Wave(UUID owner, ServerLevel l, Vec3 from, Vec3 dir, double speed) {
             this.owner = owner; this.l = l; this.from = from; this.dir = dir; this.speed = speed;
-            this.reach = 20 + speed * 9; // gear 8: about 70 blocks
+            this.reach = 8 + speed * 11; // gear 2: about 19 blocks; gear 8: about 70
         }
     }
 
@@ -272,16 +274,19 @@ public final class Flight {
         // you stop dead; the boom goes on without you
         p.setDeltaMovement(0, Math.min(0, p.getDeltaMovement().y), 0);
         p.hurtMarked = true;
-        l.playSound(null, at.x, at.y, at.z, SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 3.0F, 0.75F);
-        l.playSound(null, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0F, 0.6F);
-        l.playSound(null, at.x, at.y, at.z, SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 2.0F, 0.5F);
+        // the faster you were going, the bigger the bang
+        float k = (float) Math.min(1.0, speed / 5.6);
+        l.playSound(null, at.x, at.y, at.z, SoundEvents.WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 1.2F + k, 0.9F - k * 0.4F);
+        if (speed >= 1.5) l.playSound(null, at.x, at.y, at.z, SoundEvents.WARDEN_SONIC_BOOM, SoundSource.PLAYERS, 1.0F + k * 2, 1.1F - k * 0.35F);
+        if (speed >= 2.8) l.playSound(null, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.0F, 0.6F);
         Vec3 front = at.add(dir.scale(1.5));
-        l.sendParticles(ParticleTypes.EXPLOSION_EMITTER, front.x, front.y, front.z, 1, 0, 0, 0, 0);
-        l.sendParticles(ParticleTypes.GUST_EMITTER_LARGE, front.x, front.y, front.z, 1, 0, 0, 0, 0);
+        l.sendParticles(speed >= 2.8 ? ParticleTypes.EXPLOSION_EMITTER : ParticleTypes.EXPLOSION, front.x, front.y, front.z, speed >= 2.8 ? 1 : 3, 0.3, 0.3, 0.3, 0);
+        l.sendParticles(speed >= 2.1 ? ParticleTypes.GUST_EMITTER_LARGE : ParticleTypes.GUST_EMITTER_SMALL, front.x, front.y, front.z, 1, 0, 0, 0, 0);
         // the shock ring thrown off where you stood
-        for (int i = 0; i < 36; i++) {
-            double a = i * Math.PI * 2 / 36;
-            l.sendParticles(ParticleTypes.CLOUD, at.x, p.getY() + 0.1, at.z, 0, Math.cos(a), 0.02, Math.sin(a), 0.9);
+        int ring = 12 + (int) (k * 24);
+        for (int i = 0; i < ring; i++) {
+            double a = i * Math.PI * 2 / ring;
+            l.sendParticles(ParticleTypes.CLOUD, at.x, p.getY() + 0.1, at.z, 0, Math.cos(a), 0.02, Math.sin(a), 0.3 + k * 0.6);
         }
         // dust kicked up off the ground under you
         net.minecraft.world.level.block.state.BlockState under = l.getBlockState(p.blockPosition().below());
@@ -341,7 +346,7 @@ public final class Flight {
                     if (!(v instanceof ServerPlayer sp && sp.isCreative())) { v.push(w.dir.x * 0.5, 0.25, w.dir.z * 0.5); v.hurtMarked = true; }
                     continue;
                 }
-                float dmg = (float) ((10 + w.speed * 7) * fall); // gear 8, point-blank: about 50
+                float dmg = (float) ((4 + w.speed * 8) * fall); // gear 2, point-blank: 12; gear 8: about 50
                 v.invulnerableTime = 0;
                 Toggles.strike(v);
                 PowerKills.hurt(owner, v, w.l.damageSources().sonicBoom(owner), dmg);
@@ -353,6 +358,186 @@ public final class Flight {
                     || e instanceof net.minecraft.world.entity.item.FallingBlockEntity || e instanceof net.minecraft.world.entity.vehicle.AbstractMinecart || e instanceof net.minecraft.world.entity.vehicle.Boat) {
                 e.push(throwAt.x, throwAt.y * 0.6, throwAt.z);
                 e.hurtMarked = true;
+            }
+        }
+    }
+
+    // ================================================================== the tornado
+
+    /** Each runner's last few seconds of path: where, and how far the way they were going turned. */
+    private record Step(Vec3 at, double turn) {}
+
+    private static final Map<UUID, java.util.ArrayDeque<Step>> LOOPS = new HashMap<>();
+    private static final Map<UUID, Double> HEADING = new HashMap<>();
+
+    /** A tornado spun up by running circles: as wide as the circles, taller with every lap, to the clouds. */
+    private static final class Twister {
+        final UUID owner;
+        final ServerLevel l;
+        Vec3 centre;
+        double radius, height, ceiling, speed;
+        int fire;      // laps run at the top gear: the fire gets into it
+        long fed;
+        int age;
+        Twister(UUID owner, ServerLevel l, Vec3 centre, double radius) { this.owner = owner; this.l = l; this.centre = centre; this.radius = radius; }
+        /** Width at a height (0..1): narrow at the ground, opening out above. */
+        double r(double f) { return radius * (0.35 + 1.15 * Math.pow(f, 1.4)); }
+    }
+
+    private static final java.util.List<Twister> TWISTERS = new java.util.ArrayList<>();
+
+    /** Watches a runner's path; a lap closed at speed spins up (or feeds) a tornado where its middle was. */
+    private static void circling(ServerPlayer p, int gear) {
+        Vec3 now = p.position();
+        java.util.ArrayDeque<Step> path = LOOPS.computeIfAbsent(p.getUUID(), k -> new java.util.ArrayDeque<>());
+        Vec3 last = path.isEmpty() ? null : path.peekLast().at();
+        if (last == null) { path.add(new Step(now, 0)); return; }
+        Vec3 d = now.subtract(last).multiply(1, 0, 1);
+        if (d.lengthSqr() < 0.09) return; // not really moving
+        double h = Math.atan2(d.z, d.x);
+        Double was = HEADING.put(p.getUUID(), h);
+        double turn = was == null ? 0 : net.minecraft.util.Mth.wrapDegrees(Math.toDegrees(h - was)) * Mth_DEG;
+        path.add(new Step(now, turn));
+        while (path.size() > 140) path.poll();
+        if (gear < 4 || path.size() < 8) return;
+        double sum = 0;
+        for (Step s : path) sum += s.turn();
+        if (Math.abs(sum) < Math.PI * 2) return;
+        // a lap: is it round enough (any rough circle will do)?
+        double cx = 0, cz = 0;
+        for (Step s : path) { cx += s.at().x; cz += s.at().z; }
+        cx /= path.size(); cz /= path.size();
+        double mean = 0;
+        for (Step s : path) mean += Math.hypot(s.at().x - cx, s.at().z - cz);
+        mean /= path.size();
+        double var = 0;
+        for (Step s : path) { double e = Math.hypot(s.at().x - cx, s.at().z - cz) - mean; var += e * e; }
+        double spread = Math.sqrt(var / path.size());
+        path.clear();
+        path.add(new Step(now, 0));
+        if (mean < 2.5 || spread > mean * 0.5) return;
+        feed(p, new Vec3(cx, now.y, cz), Math.min(48, mean), RUN_SPEED[Math.min(gear, RUN_SPEED.length - 1)], gear >= 8);
+    }
+
+    private static final double Mth_DEG = Math.PI / 180.0;
+    /** The run's speeds, blocks a tick, gear by gear (as the client runs them). */
+    private static final double[] RUN_SPEED = {0, 0.6, 1.0, 1.5, 2.1, 2.8, 3.6, 4.6, 5.6};
+
+    private static void feed(ServerPlayer p, Vec3 centre, double radius, double speed, boolean ablaze) {
+        ServerLevel l = p.serverLevel();
+        Twister t = null;
+        for (Twister x : TWISTERS)
+            if (x.owner.equals(p.getUUID()) && x.l == l && x.centre.distanceTo(centre) < x.radius * 1.5 + 12) { t = x; break; }
+        int ground = l.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, (int) Math.floor(centre.x), (int) Math.floor(centre.z));
+        double base = Math.min(centre.y, ground);
+        double ceiling = l.dimensionType().hasCeiling() ? 100 : Math.max(48, 200 - base); // the overworld's clouds are at 192
+        if (t == null) {
+            t = new Twister(p.getUUID(), l, new Vec3(centre.x, base, centre.z), radius);
+            t.height = 10 + speed * 4;
+            TWISTERS.add(t);
+            l.playSound(null, centre.x, base, centre.z, SoundEvents.BREEZE_WIND_CHARGE_BURST.value(), SoundSource.PLAYERS, 3F, 0.5F);
+        } else {
+            t.centre = new Vec3(t.centre.x + (centre.x - t.centre.x) * 0.4, base, t.centre.z + (centre.z - t.centre.z) * 0.4);
+            t.radius += (radius - t.radius) * 0.5;
+            t.height += 14 + speed * 9; // a handful of laps at the top gear reaches the clouds
+        }
+        t.ceiling = ceiling;
+        t.height = Math.min(t.height, ceiling);
+        t.speed = Math.max(t.speed * 0.8, speed);
+        if (ablaze) t.fire = Math.min(6, t.fire + 1);
+        t.fed = l.getGameTime();
+    }
+
+    private static void twisters(MinecraftServer srv) {
+        if (TWISTERS.isEmpty()) return;
+        TWISTERS.removeIf(t -> {
+            ServerPlayer owner = srv.getPlayerList().getPlayer(t.owner);
+            long idle = t.l.getGameTime() - t.fed;
+            // left alone it winds down: lower, thinner, then gone
+            if (idle > 240 || owner == null) {
+                t.height *= 0.975;
+                t.radius *= 0.99;
+                if (t.fire > 0 && t.l.getGameTime() % 40 == 0) t.fire--;
+            }
+            if (t.height < 5 || t.radius < 1.2) return true;
+            t.age++;
+            spin(t);
+            if (owner != null) catchIn(owner, t);
+            if (t.age % 30 == 0) {
+                t.l.playSound(null, t.centre.x, t.centre.y + 4, t.centre.z, SoundEvents.ELYTRA_FLYING, SoundSource.PLAYERS, (float) Math.min(6, 2 + t.height / 40), 0.5F);
+                if (t.fire >= 2) t.l.playSound(null, t.centre.x, t.centre.y + 2, t.centre.z, SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 2F, 0.6F);
+            }
+            return false;
+        });
+    }
+
+    /** The funnel itself: wind spiralling up it, debris at its foot, cloud at its crown, and fire in it once it's burning. */
+    private static void spin(Twister t) {
+        ServerLevel l = t.l;
+        var rnd = l.random;
+        int n = (int) Math.min(170, 30 + t.height * 0.7 + t.radius);
+        boolean burning = t.fire >= 2;
+        java.util.List<ServerPlayer> see = new java.util.ArrayList<>();
+        for (ServerPlayer q : l.players()) if (q.distanceToSqr(t.centre) < 480 * 480) see.add(q);
+        if (see.isEmpty()) return;
+        double spinRate = 0.35 + t.speed * 0.08;
+        for (int i = 0; i < n; i++) {
+            double f = rnd.nextDouble();
+            double y = t.centre.y + f * t.height;
+            double a = rnd.nextDouble() * Math.PI * 2;
+            double r = t.r(f) * (0.75 + rnd.nextDouble() * 0.3);
+            double x = t.centre.x + Math.cos(a) * r, z = t.centre.z + Math.sin(a) * r;
+            // round and up: the swirl the way the laps went
+            double vx = -Math.sin(a) * spinRate * (1 + r * 0.05), vz = Math.cos(a) * spinRate * (1 + r * 0.05), vy = 0.12 + t.speed * 0.03;
+            net.minecraft.core.particles.ParticleOptions kind = burning && f < 0.8 && rnd.nextInt(3) == 0 ? ParticleTypes.FLAME
+                    : f > 0.85 && rnd.nextInt(3) == 0 ? ParticleTypes.CAMPFIRE_COSY_SMOKE : rnd.nextInt(4) == 0 ? ParticleTypes.POOF : ParticleTypes.CLOUD;
+            for (ServerPlayer q : see) l.sendParticles(q, kind, true, x, y, z, 0, vx, vy, vz, 1.0);
+        }
+        // its foot: dust and debris torn off the ground
+        net.minecraft.core.BlockPos foot = net.minecraft.core.BlockPos.containing(t.centre).below();
+        net.minecraft.world.level.block.state.BlockState under = l.getBlockState(foot);
+        if (!under.isAir() && t.age % 2 == 0) {
+            double a = rnd.nextDouble() * Math.PI * 2, r = t.r(0) * 1.2;
+            for (ServerPlayer q : see)
+                l.sendParticles(q, new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, under), true, t.centre.x + Math.cos(a) * r, t.centre.y + 0.3, t.centre.z + Math.sin(a) * r, 8, 1, 0.3, 1, 0.3);
+        }
+        if (burning && t.age % 3 == 0) for (ServerPlayer q : see) {
+            double f = rnd.nextDouble() * 0.6;
+            l.sendParticles(q, ParticleTypes.LAVA, true, t.centre.x, t.centre.y + f * t.height, t.centre.z, 2, t.r(f) * 0.5, 1, t.r(f) * 0.5, 0);
+        }
+        // the crown: where it meets the cloud
+        if (t.height >= t.ceiling - 1 && t.age % 2 == 0) for (ServerPlayer q : see)
+            l.sendParticles(q, ParticleTypes.CAMPFIRE_COSY_SMOKE, true, t.centre.x, t.centre.y + t.height, t.centre.z, 6, t.r(1) * 0.8, 1.5, t.r(1) * 0.8, 0.01);
+    }
+
+    /** Whatever it catches: the hostile are dragged round and up and battered (and burnt, once it's burning); friends only pushed clear; loose things taken up. */
+    private static void catchIn(ServerPlayer owner, Twister t) {
+        var box = new net.minecraft.world.phys.AABB(t.centre.x - t.r(1) - 3, t.centre.y - 2, t.centre.z - t.r(1) - 3, t.centre.x + t.r(1) + 3, t.centre.y + t.height, t.centre.z + t.r(1) + 3);
+        for (net.minecraft.world.entity.Entity e : t.l.getEntities(owner, box, e -> e.isAlive() && !e.isSpectator())) {
+            double f = net.minecraft.util.Mth.clamp((e.getY() - t.centre.y) / t.height, 0, 1);
+            double dx = e.getX() - t.centre.x, dz = e.getZ() - t.centre.z, d = Math.max(0.5, Math.hypot(dx, dz));
+            double reach = t.r(f) + 3;
+            if (d > reach) continue;
+            if (e instanceof net.minecraft.world.entity.LivingEntity v && spare(owner, v)) {
+                if (!(v instanceof ServerPlayer sp && sp.isCreative()) && t.age % 5 == 0) { v.push(dx / d * 0.4, 0.1, dz / d * 0.4); v.hurtMarked = true; }
+                continue;
+            }
+            if (!(e instanceof net.minecraft.world.entity.LivingEntity) && !(e instanceof net.minecraft.world.entity.item.ItemEntity)
+                    && !(e instanceof net.minecraft.world.entity.projectile.Projectile) && !(e instanceof net.minecraft.world.entity.item.FallingBlockEntity)) continue;
+            // round (with the laps), in toward the wall of wind, and up; flung out at the top
+            double tx = -dz / d, tz = dx / d, want = t.r(f) * 0.8;
+            double in = (want - d) * 0.06;
+            double up = f > 0.92 ? -0.05 : 0.22 + t.speed * 0.02;
+            Vec3 v0 = e.getDeltaMovement();
+            Vec3 v1 = new Vec3(tx * (0.55 + t.speed * 0.08) + dx / d * in, up, tz * (0.55 + t.speed * 0.08) + dz / d * in);
+            if (f > 0.92) v1 = v1.add(dx / d * 0.8, 0, dz / d * 0.8);
+            e.setDeltaMovement(v0.scale(0.3).add(v1.scale(0.7)));
+            e.hurtMarked = true;
+            e.fallDistance = 0;
+            if (e instanceof net.minecraft.world.entity.LivingEntity v && t.age % 10 == 0) {
+                v.invulnerableTime = 0;
+                PowerKills.hurt(owner, v, t.l.damageSources().flyIntoWall(), (float) (2 + t.speed * 1.5));
+                if (t.fire >= 2) { v.igniteForSeconds(5); v.invulnerableTime = 0; PowerKills.hurt(owner, v, t.l.damageSources().inFire(), 2F + t.fire); }
             }
         }
     }
@@ -373,6 +558,7 @@ public final class Flight {
         }
         embers(srv);
         waves(srv);
+        twisters(srv);
         if (srv.getTickCount() % 200 == 0) LAST.keySet().removeIf(id -> srv.getPlayerList().getPlayer(id) == null);
         // lying flat ends when the flight does
         com.breachprotocol.world.FlightState.LYING.removeIf(id -> {
@@ -387,6 +573,7 @@ public final class Flight {
             if (RAM.contains(p.getUUID())) ram(p);
             if (en.getValue() >= 6) p.fallDistance = 0; // off the top of a wall and down again, unhurt
             if (en.getValue() >= 7) blaze(p); else TRAIL.remove(p.getUUID());
+            circling(p, en.getValue());
             if (en.getValue() >= 2) {
                 ServerLevel l = p.serverLevel();
                 for (ServerPlayer q : l.players())
