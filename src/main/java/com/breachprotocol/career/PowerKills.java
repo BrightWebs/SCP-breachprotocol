@@ -193,7 +193,7 @@ public final class PowerKills {
         } catch (Throwable t) { BreachProtocol.LOGGER.debug("Couldn't take back skills: {}", t.toString()); }
     }
 
-    private record Pending(ServerPlayer killer, double victimEP, double before, List<CompoundTag> skills, int souls) {}
+    private record Pending(ServerPlayer killer, double victimEP, double before, List<CompoundTag> skills, long souls, long soulsBefore) {}
 
     private static final Map<UUID, Pending> PENDING = new HashMap<>();
 
@@ -203,14 +203,15 @@ public final class PowerKills {
         LivingEntity v = event.getEntity();
         if (v.level().isClientSide() || !manas()) return;
         ServerPlayer killer = powerKiller(v, event.getSource());
-        int souls = 0;
-        if (killer == null) {
-            // a kill by the Foundation's own people is the Administrator's: EP, skills, and its soul
-            killer = staffOwner(v, event.getSource());
-            if (killer == null) return;
-            souls = 1 + soulsOf(v);
-        }
-        PENDING.put(v.getUUID(), new Pending(killer, ep(v), ep(killer), Vault.chief(killer) ? skillsOf(v) : List.of(), souls));
+        // a kill by the Foundation's own people is the Administrator's: EP, skills, and its soul
+        if (killer == null) killer = staffOwner(v, event.getSource());
+        if (killer == null) return;
+        // its soul, the way Manas Reborn weighs one (its EP at the race's soul rate) plus any souls it carried; twice over for the Administrator
+        double victimEP = ep(v);
+        long souls = (long) Math.ceil(victimEP * soulRate() / 100.0) + Math.max(0, soulsOf(v));
+        if (souls <= 0) souls = 1;
+        if (Vault.chief(killer)) souls *= 2;
+        PENDING.put(v.getUUID(), new Pending(killer, victimEP, ep(killer), Vault.chief(killer) ? skillsOf(v) : List.of(), souls, soulsOf(killer)));
     }
 
     /** After everyone (Manas Reborn included) has had their say: make it up to 100% of the creature's EP. */
@@ -222,7 +223,11 @@ public final class PowerKills {
         double owed = pd.victimEP() - Math.max(0, gained);
         if (owed > 0.5) try { increaseEP.invoke(null, pd.killer(), owed); } catch (Throwable ignored) {}
         take(pd.killer(), pd.skills());
-        if (pd.souls() > 0) addSouls(pd.killer(), pd.souls());
+        // whatever Manas Reborn gave by itself counts toward it
+        long owedSouls = pd.souls() - Math.max(0, soulsOf(pd.killer()) - pd.soulsBefore());
+        if (owedSouls > 0) addSouls(pd.killer(), owedSouls);
+        if (pd.souls() > 0 && Vault.chief(pd.killer()))
+            pd.killer().displayClientMessage(net.minecraft.network.chat.Component.literal("+" + String.format("%,d", pd.souls()) + " souls").withStyle(net.minecraft.ChatFormatting.DARK_PURPLE), true);
     }
 
     /**
@@ -284,24 +289,47 @@ public final class PowerKills {
 
     // ---------------------------------------------------------------- souls (Manas Reborn's soul points)
 
+    private static Method existenceOf, getSouls, setSouls, markDirty;
+    private static Integer soulRate;
+
     private static Object existence(LivingEntity e) {
-        try { return Class.forName("io.github.manasmods.manas_reborn.storage.ManasStorages").getMethod("getExistenceFrom", LivingEntity.class).invoke(null, e); }
-        catch (Throwable t) { return null; }
+        try {
+            if (existenceOf == null) {
+                Class<?> ix = Class.forName("io.github.manasmods.manas_reborn.storage.ep.IExistence");
+                getSouls = ix.getMethod("getSoulPoints");
+                setSouls = ix.getMethod("setSoulPoints", int.class);
+                markDirty = ix.getMethod("markDirty");
+                existenceOf = Class.forName("io.github.manasmods.manas_reborn.storage.ManasStorages").getMethod("getExistenceFrom", LivingEntity.class);
+            }
+            return existenceOf.invoke(null, e);
+        } catch (Throwable t) { return null; }
+    }
+
+    /** Manas Reborn's EP-to-soul rate (percent), from its base race config. */
+    private static int soulRate() {
+        if (soulRate == null) {
+            soulRate = 100;
+            try {
+                Object cfg = Class.forName("io.github.manasmods.manas_reborn.race.RebornRace").getField("BASE_CONFIG").get(null);
+                if (cfg != null) soulRate = Math.max(1, cfg.getClass().getField("epToSoulRate").getInt(cfg));
+            } catch (Throwable t) { BreachProtocol.LOGGER.debug("Manas Reborn's soul rate: {}", t.toString()); }
+        }
+        return soulRate;
     }
 
     private static int soulsOf(LivingEntity e) {
         Object x = existence(e);
-        try { return x == null ? 0 : Math.max(0, (int) x.getClass().getMethod("getSoulPoints").invoke(x)); } catch (Throwable t) { return 0; }
+        try { return x == null ? 0 : (int) getSouls.invoke(x); } catch (Throwable t) { return 0; }
     }
 
-    private static void addSouls(ServerPlayer p, int n) {
+    private static void addSouls(ServerPlayer p, long n) {
         Object x = existence(p);
         if (x == null) return;
         try {
-            int now = (int) x.getClass().getMethod("getSoulPoints").invoke(x);
-            x.getClass().getMethod("setSoulPoints", int.class).invoke(x, now + n);
-            try { x.getClass().getMethod("markDirty").invoke(x); } catch (Throwable ignored) {}
-        } catch (Throwable t) { BreachProtocol.LOGGER.debug("Couldn't add souls: {}", t.toString()); }
+            long now = (int) getSouls.invoke(x);
+            setSouls.invoke(x, (int) Math.min(Integer.MAX_VALUE, now + n));
+            markDirty.invoke(x);
+        } catch (Throwable t) { BreachProtocol.LOGGER.warn("Couldn't add souls: {}", t.toString()); }
     }
 
     private static ServerPlayer powerKiller(LivingEntity v, DamageSource src) {

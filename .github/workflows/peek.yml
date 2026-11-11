@@ -1,0 +1,32 @@
+name: Peek at a mod's numbers
+on:
+  workflow_dispatch:
+    inputs:
+      slug:
+        description: Modrinth project slug
+        required: true
+      grep:
+        description: Path pattern of files to print
+        required: true
+jobs:
+  peek:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch and print matching files (nothing is kept)
+        run: |
+          set -e
+          curl -s "https://api.modrinth.com/v2/project/${{ inputs.slug }}/version" > v.json
+          python3 - <<'PY'
+          import json
+          v=json.load(open('v.json'))
+          for x in v[:12]: print(x['version_number'], x['loaders'], x['game_versions'][:3], x['files'][0]['filename'])
+          f=[x for x in v if 'forge' in x['loaders']] or v
+          open('url','w').write(f[0]['files'][0]['url'])
+          print('USING', f[0]['files'][0]['filename'])
+          PY
+          curl -sL "$(cat url)" -o mod.jar
+          mkdir x && cd x && unzip -q ../mod.jar
+          echo "== matching files =="
+          find . -type f | grep -iE "${{ inputs.grep }}" | head -200
+          echo "== contents =="
+          for f in $(find . -type f \( -name '*.json' -o -name '*.js' -o -name '*.toml' -o -name '*.mcfunction' \) | grep -iE "${{ inputs.grep }}" | head -60); do echo "---- $f"; head -c 6000 "$f"; echo; done
