@@ -352,6 +352,7 @@ public final class SuperFlight {
                     vy = Math.min(WALL_UP, 0.35 + wallTicks * 0.1);
                     h = dir.scale(0.15);
                     wallTicks++;
+                    p.yBodyRot = p.yBodyRotO = p.getYRot(); // the body squares up to the wall
                     wallDust(p, dir);
                 }
             } else if (blocked && tall >= 3) {
@@ -540,9 +541,11 @@ public final class SuperFlight {
             var ps = event.getPoseStack();
             ps.pushPose();
             if (wallRunning(p)) {
-                // sprinting up it: upright, leaning in, a little off the face so the head clears it
-                ps.translate(Mth.sin(yaw) * 0.3, 0, -Mth.cos(yaw) * 0.3);
-                ps.mulPose(new Quaternionf().rotateAxis(0.3F, Mth.cos(yaw), 0, Mth.sin(yaw)));
+                // up the wall: feet planted on the face, body pitched back off it, running straight up. Turned by
+                // where they face (the body's own turn drifts when there's no sideways movement to follow)
+                float face = (me ? p.getYRot() : p.getYHeadRot()) * Mth.DEG_TO_RAD;
+                ps.translate(-Mth.sin(face) * 0.35, 0.2, Mth.cos(face) * 0.35);
+                ps.mulPose(new Quaternionf().rotateAxis(-1.3F, Mth.cos(face), 0, Mth.sin(face)));
             } else {
                 // flat out and low, the way a ninja runs
                 float t = (float) Mth.clamp((hRun - 0.35) * 0.45, 0, 0.42) + 0.22F;
@@ -675,11 +678,12 @@ public final class SuperFlight {
             m.leftArm.yRot = 0.1F;
             m.leftArm.zRot = -0.18F;
             if (wallRunning(p)) {
-                // high knees, driving up the face, eyes on the top
-                float c = Mth.sin(age * 1.5F);
-                m.head.xRot = -0.7F;
-                m.rightLeg.xRot = -0.75F + c * 0.85F;
-                m.leftLeg.xRot = -0.75F - c * 0.85F;
+                // feet driving at the wall in turn, eyes up the face to the top
+                float c = Mth.sin(age * 1.6F);
+                m.head.xRot = -0.25F;
+                m.rightLeg.xRot = -0.55F + c * 0.95F;
+                m.leftLeg.xRot = -0.55F - c * 0.95F;
+                m.body.xRot = 0F;
                 m.rightLeg.yRot = m.leftLeg.yRot = 0F;
                 m.rightLeg.zRot = 0.04F;
                 m.leftLeg.zRot = -0.04F;
