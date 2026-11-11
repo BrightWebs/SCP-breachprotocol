@@ -224,10 +224,8 @@ public final class CareerEvents {
         if (!(event.getEntity() instanceof ServerPlayer p) || !Dominion.spared(p)) return;
         var inst = event.getEffectInstance();
         if (inst == null || inst.getEffect().value().isBeneficial()) return;
-        net.minecraft.world.entity.Entity from = event.getEffectSource();
-        boolean theirs = from != null && (Unleashed.isAnomaly(from) || com.breachprotocol.compat.UnleashedApi.isGateGuardian(from));
         var id = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT.getKey(inst.getEffect().value());
-        if (theirs || id != null && id.getNamespace().equals(Unleashed.MODID))
+        if (id != null && id.getNamespace().equals(Unleashed.MODID))
             event.setResult(net.neoforged.neoforge.event.entity.living.MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
     }
 
