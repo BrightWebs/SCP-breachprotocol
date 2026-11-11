@@ -1183,7 +1183,7 @@ public final class SiteTower extends FacilityBuilder {
     }
 
     /** The residence lift: its car on floor f (0..2), and the panel inside it. */
-    public static BlockPos resCar(int f) { return new BlockPos(RX1 - 2, f * STOREY + 1, 16); }
+    public static BlockPos resCar(int f) { return new BlockPos(RX1 - 2, f * STOREY + 1, 16); } // the car is x RX1-2..RX1-1
 
     public static BlockPos resPanel(int f) { return new BlockPos(RX1 - 1, f * STOREY + 2, 17); }
 
@@ -1205,8 +1205,10 @@ public final class SiteTower extends FacilityBuilder {
                 int x0 = RX0 + i * 6, x1 = x0 + 6;
                 room(rooms, x0, 0, x1, 14, Y, true);
                 room(rooms, x0, 18, x1, T, Y, true);
-                ezDoor(x0 + 2, 14, Y, S);
-                ezDoor(x0 + 2, 18, Y, N);
+                // the last rooms' doors sit a block further from the end, clear of the lift
+                int dx = i == 3 ? x0 + 1 : x0 + 2;
+                ezDoor(dx, 14, Y, S);
+                ezDoor(dx, 18, Y, N);
                 tall(x0 + 5, Y + 1, b2(i, 0), "locker", W);
                 tall(x0 + 5, Y + 1, b2(i, 1), "locker", W);
                 roomFurniture(x0, Y);
@@ -1214,14 +1216,15 @@ public final class SiteTower extends FacilityBuilder {
             // the facade: glass along both long sides
             for (int x = RX0; x <= RX1; x++) for (int yy = Y + 2; yy <= Y + 3; yy++) if ((x - RX0) % 6 != 0) { set(x, yy, 0, "reinforced_glass"); set(x, yy, T, "reinforced_glass"); }
             // the lift at the far end of the corridor: a car behind a partition, a door onto the corridor, the panel inside
-            fill(RX1 - 4, Y + 1, 15, RX1 - 4, Y + 4, 17, "facility_painted_concrete");
-            air(RX1 - 3, Y + 1, 15, RX1 - 1, Y + 4, 17);
-            fill(RX1 - 3, Y, 15, RX1 - 1, Y, 17, "facility_epoxy_floor");
+            // (2 wide, like the tower's, against the end wall: the rooms' doors either side stay clear of it)
+            fill(RX1 - 3, Y + 1, 15, RX1 - 3, Y + 4, 17, "facility_painted_concrete");
+            air(RX1 - 2, Y + 1, 15, RX1 - 1, Y + 4, 17);
+            fill(RX1 - 2, Y, 15, RX1 - 1, Y, 17, "facility_epoxy_floor");
             set(RX1 - 2, Y + 4, 16, "fluorescent_light[face=ceiling,facing=east,lit=true]");
             BlockPos panel = resPanel(f);
             set(panel.getX(), panel.getY(), panel.getZ(), "door_button[facing=west,powered=false]");
-            ezDoor(RX1 - 4, 15, Y, W);
-            set(RX1 - 5, Y + 3, 17, "facility_sign_elevator_small[facing=west]");
+            ezDoor(RX1 - 3, 15, Y, W);
+            set(RX1 - 4, Y + 3, 17, "facility_sign_elevator_small[facing=west]");
             plate(RX1 - 1, Y + 2, 15, W, "RESIDENCE", "FLOOR " + (f + 1));
         }
         // the beds, last, so nothing above overwrites them
@@ -1304,7 +1307,7 @@ public final class SiteTower extends FacilityBuilder {
     // ================================================================== touching up an existing tower
 
     /** Layout revision. A tower built (or touched up) at this revision has every furniture fix. */
-    public static final int LAYOUT = 5;
+    public static final int LAYOUT = 6;
 
     /**
      * Brings an existing tower's furnishings up to the current layout, in place: only the pieces that
@@ -1318,7 +1321,7 @@ public final class SiteTower extends FacilityBuilder {
         if (from < 2) b.touchUp();
         if (from < 3) b.touchUp3();
         if (from < 4) b.touchUp4();
-        if (from < 5) b.residence(); // revision 5: the residence rebuilt with three floors, a bed for everyone, and a lift for the stairs
+        if (from < 6) b.residence(); // revisions 5-6: the residence rebuilt with three floors, a bed for everyone, a lift for the stairs (clear of the end rooms' doors)
     }
 
     /** Revision 4: the bell on the secretary's counter. */
