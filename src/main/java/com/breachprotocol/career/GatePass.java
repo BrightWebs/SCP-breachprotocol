@@ -193,6 +193,7 @@ public final class GatePass {
     }
 
     private static void protect(ServerPlayer g) {
+        if (Career.isAscended(g)) return;
         g.addTag(TAG);
         if (!g.isInvulnerable()) g.setInvulnerable(true);
     }
@@ -210,92 +211,28 @@ public final class GatePass {
     /** The Administrator and the Ascendant: the Guardian knows them, always. */
     private static boolean master(ServerPlayer g) { return Vault.chief(g); }
 
-    private static final double MASTER_REACH = 160;
-
-    private static double guardianDistance(ServerPlayer g) { return guardianDistance(g, REACH + 32); }
-
-    private static double guardianDistance(ServerPlayer g, double look) {
+    private static double guardianDistance(ServerPlayer g) {
         double best = Double.MAX_VALUE;
-        for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(look), UnleashedApi::isGateGuardian)) {
+        for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(REACH + 32), UnleashedApi::isGateGuardian)) {
             double dx = e.getX() - g.getX(), dz = e.getZ() - g.getZ();
             best = Math.min(best, Math.sqrt(dx * dx + dz * dz));
         }
         return best;
     }
 
-    /** Where each Guardian stands, by dimension (looked for around the masters once a second). */
-    private static final Map<net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level>, List<net.minecraft.world.phys.Vec3>> SEEN = new HashMap<>();
-
-    /** Is this master near a Guardian we know of? */
-    private static boolean nearKnown(ServerPlayer g) {
-        List<net.minecraft.world.phys.Vec3> at = SEEN.get(g.level().dimension());
-        if (at == null) return false;
-        for (net.minecraft.world.phys.Vec3 v : at) {
-            double dx = v.x - g.getX(), dz = v.z - g.getZ();
-            if (dx * dx + dz * dz <= MASTER_REACH * MASTER_REACH) return true;
-        }
-        return false;
-    }
-
-    /** A full look around one master: remembers any Guardian found, and spares or releases them now. */
-    private static void look(ServerPlayer g) {
-        if (!master(g)) return;
-        boolean near = false;
-        for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(MASTER_REACH), UnleashedApi::isGateGuardian)) {
-            List<net.minecraft.world.phys.Vec3> at = SEEN.computeIfAbsent(g.level().dimension(), k -> new ArrayList<>());
-            if (at.stream().noneMatch(v -> v.distanceToSqr(e.position()) < 4)) at.add(e.position());
-            near = true;
-        }
-        if (near || nearKnown(g)) protect(g);
-        else if (!data(g.server).full.contains(g.getUUID().toString())) release(g);
-    }
-
-    // the moment a master arrives somewhere (out of the Garden, through a portal, a teleport, a login), before the
-    // Guardian has had a tick to see them as a stranger
-    @SubscribeEvent
-    public static void changedDimension(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (event.getEntity() instanceof ServerPlayer g) look(g);
-    }
-
-    @SubscribeEvent
-    public static void loggedIn(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer g) look(g);
-    }
-
-    @SubscribeEvent
-    public static void respawned(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerRespawnEvent event) {
-        if (event.getEntity() instanceof ServerPlayer g) look(g);
-    }
-
-    @SubscribeEvent
-    public static void teleported(net.neoforged.neoforge.event.entity.EntityTeleportEvent event) {
-        if (event.getEntity() instanceof ServerPlayer g && master(g) && !event.isCanceled()) {
-            // where they're going: spared there already if a Guardian stands near it
-            List<net.minecraft.world.phys.Vec3> at = SEEN.get(g.level().dimension());
-            if (at != null) for (net.minecraft.world.phys.Vec3 v : at) {
-                double dx = v.x - event.getTargetX(), dz = v.z - event.getTargetZ();
-                if (dx * dx + dz * dz <= MASTER_REACH * MASTER_REACH) { protect(g); return; }
-            }
-        }
-    }
-
-    /** Before anything else ticks (the Guardian included): its masters are spared every tick they're near it. */
+    /**
+     * Its masters aren't made untouchable to be spared (that would stop everything else fighting them too): the
+     * Guardian itself is told who they are (mixin.GateGuardianMixin, GateStrikeMixin). Anyone still carrying the
+     * old protection from an earlier version has it taken off here.
+     */
     @SubscribeEvent
     public static void early(ServerTickEvent.Pre event) {
         MinecraftServer s = event.getServer();
-        boolean full = s.getTickCount() % 20 == 0;
-        if (full) SEEN.clear();
-        for (ServerPlayer g : s.getPlayerList().getPlayers()) {
-            if (!master(g)) continue;
-            net.minecraft.world.phys.Vec3 was = LAST.put(g.getUUID(), g.position());
-            boolean jumped = was == null || was.distanceToSqr(g.position()) > 48 * 48; // moved by something other than their feet
-            if (full || jumped) look(g);
-            else if (nearKnown(g)) protect(g);
-        }
-        if (full) LAST.keySet().removeIf(id -> s.getPlayerList().getPlayer(id) == null);
+        if (s.getTickCount() % 20 != 0) return;
+        for (ServerPlayer g : s.getPlayerList().getPlayers())
+            if (master(g) && g.getTags().contains(TAG) && !data(s).full.contains(g.getUUID().toString()) && ESCORTS.values().stream().noneMatch(e -> e.guest().equals(g.getUUID())))
+                release(g);
     }
-
-    private static final Map<UUID, net.minecraft.world.phys.Vec3> LAST = new HashMap<>();
 
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {

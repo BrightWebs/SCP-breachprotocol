@@ -6,6 +6,7 @@
   "mixins": [
     "BlockStateBaseMixin",
     "GateGuardianMixin",
+    "GateStrikeMixin",
     "PlayerPoseMixin"
   ],
   "injectors": {

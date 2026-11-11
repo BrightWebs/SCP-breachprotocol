@@ -115,8 +115,7 @@ public final class CareerEvents {
      * Unleashed's Gate Guardian looks for when it decides whom to spare).
      */
     public static void shield(ServerPlayer p) {
-        // at the Gate the Guardian must always know you, whatever your Temperament (GatePass keeps the tag on you there)
-        boolean on = Career.isAscended(p) && (Dominion.auraAnomalies(p) != 0 && Dominion.auraCreatures(p) != 0 || p.getTags().contains(GatePass.TAG));
+        boolean on = Career.isAscended(p) && Dominion.auraAnomalies(p) != 0 && Dominion.auraCreatures(p) != 0;
         if (p.isInvulnerable() != on && !p.isCreative() && !p.isSpectator()) p.setInvulnerable(on);
     }
 
