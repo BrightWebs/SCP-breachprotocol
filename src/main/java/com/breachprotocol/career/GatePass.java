@@ -188,18 +188,25 @@ public final class GatePass {
     private static void release(ServerPlayer g) {
         if (g == null || !g.getTags().contains(TAG)) return;
         g.removeTag(TAG);
-        if (!Career.isAscended(g)) g.setInvulnerable(false);
+        if (Career.isAscended(g)) CareerEvents.shield(g); // back to what the Temperament says
+        else if (!g.isCreative() && !g.isSpectator()) g.setInvulnerable(false);
     }
 
     private static void protect(ServerPlayer g) {
-        if (Career.isAscended(g)) return;
         g.addTag(TAG);
         if (!g.isInvulnerable()) g.setInvulnerable(true);
     }
 
-    private static double guardianDistance(ServerPlayer g) {
+    /** The Administrator and the Ascendant: the Guardian knows them, always. */
+    private static boolean master(ServerPlayer g) { return Vault.chief(g); }
+
+    private static final double MASTER_REACH = 160;
+
+    private static double guardianDistance(ServerPlayer g) { return guardianDistance(g, REACH + 32); }
+
+    private static double guardianDistance(ServerPlayer g, double look) {
         double best = Double.MAX_VALUE;
-        for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(REACH + 32), UnleashedApi::isGateGuardian)) {
+        for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(look), UnleashedApi::isGateGuardian)) {
             double dx = e.getX() - g.getX(), dz = e.getZ() - g.getZ();
             best = Math.min(best, Math.sqrt(dx * dx + dz * dz));
         }
@@ -209,6 +216,12 @@ public final class GatePass {
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
         MinecraftServer s = event.getServer();
+        // its masters, checked often and from far off (they can come in at a hundred blocks a second)
+        if (s.getTickCount() % 4 == 0) for (ServerPlayer g : s.getPlayerList().getPlayers()) {
+            if (!master(g)) continue;
+            if (guardianDistance(g, MASTER_REACH) <= MASTER_REACH) protect(g);
+            else if (!data(s).full.contains(g.getUUID().toString())) release(g);
+        }
         if (s.getTickCount() % 10 != 0) return;
         Data d = data(s);
         Set<UUID> covered = new HashSet<>();
@@ -232,7 +245,7 @@ public final class GatePass {
             }
         }
         for (ServerPlayer g : s.getPlayerList().getPlayers()) {
-            if (banished(g) && !Career.isAscended(g)) {
+            if (banished(g) && !master(g)) {
                 release(g);
                 // the Guardian pushes the banished away from the Gate
                 for (Entity e : g.level().getEntities(g, g.getBoundingBox().inflate(70), UnleashedApi::isGateGuardian)) {
@@ -245,7 +258,7 @@ public final class GatePass {
                 }
                 continue;
             }
-            if (covered.contains(g.getUUID())) continue;
+            if (covered.contains(g.getUUID()) || master(g)) continue;
             boolean full = d.full.contains(g.getUUID().toString()) && !banished(g);
             if (full && guardianDistance(g) <= REACH) protect(g);
             else release(g);
