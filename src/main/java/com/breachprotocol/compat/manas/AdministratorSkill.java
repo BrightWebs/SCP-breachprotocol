@@ -21,14 +21,14 @@ public class AdministratorSkill extends Skill {
 
     public ResourceLocation getSkillIcon() { return ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "textures/skill/administrator.png"); }
 
-    public int getModes(ManasSkillInstance instance) { return 1; }
+    public int getModes(ManasSkillInstance instance) { return 2; }
 
-    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return 0; }
+    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return mode == 0 ? 1 : 0; }
 
-    public String getModeId(ManasSkillInstance instance, int mode) { return "autopilot"; }
+    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "hunt" : "guard"; }
 
     public Component getModeName(ManasSkillInstance instance, int mode) {
-        return Component.literal("Autopilot").withStyle(ChatFormatting.LIGHT_PURPLE);
+        return Component.literal(mode == 0 ? "Autopilot: Hunt" : "Autopilot: Guard").withStyle(mode == 0 ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.AQUA);
     }
 
     public double getManaCost(LivingEntity e, ManasSkillInstance instance, int mode) { return 0; }
@@ -41,6 +41,6 @@ public class AdministratorSkill extends Skill {
     public int getMobWeight(ManasSkillInstance instance, Mob m, int mode) { return 0; }
 
     public void onPressed(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
-        if (e instanceof ServerPlayer p && key >= 0) com.breachprotocol.career.Autopilot.action(p, "toggle");
+        if (e instanceof ServerPlayer p && key >= 0) com.breachprotocol.career.Autopilot.action(p, "toggle:" + mode);
     }
 }

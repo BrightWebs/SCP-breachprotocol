@@ -28,6 +28,8 @@ public final class FlightState {
     /** Autopilot (career.Autopilot), for this client: whether it's on, and the entity it's going for (-1: none). */
     public static volatile boolean autoOn;
     public static volatile int autoTarget = -1;
+    /** How it's going about it: 0 chase, 1 run straight through, 2 dive from above, 3 run circles (a tornado). */
+    public static volatile int autoTactic;
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();

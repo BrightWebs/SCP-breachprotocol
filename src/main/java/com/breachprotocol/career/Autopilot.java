@@ -46,7 +46,14 @@ public final class Autopilot {
     private static final double BLINK_AT = 14;  // further than this, and visible: blink
     private static final double REACH = 4.2;    // bare-hand reach
 
+    /** How it goes about a fight (sent to the client, which does the moving). */
+    static final int CHASE = 0, RAM = 1, DIVE = 2, TORNADO = 3;
+
     private static final class State {
+        int mode;            // 0 hunt: anything hostile; 1 guard: only what comes for you
+        int tactic, sentTactic = -1;
+        long tacticUntil, nextTornado, nextRam, nextDive;
+        boolean running;     // the run's gears are on (for the ram and the tornado)
         UUID target;
         int sent = -2;
         long nextBlink, nextBlow, nextPower, nextSkill;
@@ -57,19 +64,24 @@ public final class Autopilot {
 
     public static boolean on(ServerPlayer p) { return ON.containsKey(p.getUUID()); }
 
-    /** "toggle", from the key or the console. */
+    /** "toggle" or "toggle:mode" (the Administrator skill's mode: 0 Hunt, 1 Guard), from the skill or the phone. */
     public static void action(ServerPlayer p, String a) {
-        if (!a.equals("toggle")) return;
-        if (on(p)) { stop(p, "Autopilot off. You have yourself back."); return; }
+        if (!a.startsWith("toggle")) return;
+        int mode = a.startsWith("toggle:") ? ("1".equals(a.substring(7)) ? 1 : 0) : 0;
+        State had = ON.get(p.getUUID());
+        if (had != null && had.mode == mode) { stop(p, "Autopilot off. You have yourself back."); return; }
         if (!Vault.chief(p)) { p.displayClientMessage(Component.literal("Only the Administrator's body fights by itself.").withStyle(ChatFormatting.GRAY), true); return; }
-        ON.put(p.getUUID(), new State());
-        p.displayClientMessage(Component.literal("AUTOPILOT ENGAGED  ·  it hunts what you've marked hostile").withStyle(ChatFormatting.LIGHT_PURPLE), true);
+        State st = had != null ? had : new State();
+        st.mode = mode;
+        st.target = null;
+        ON.put(p.getUUID(), st);
+        p.displayClientMessage(Component.literal(mode == 0 ? "AUTOPILOT  ·  HUNT  ·  anything you've marked hostile" : "AUTOPILOT  ·  GUARD  ·  only what comes for you").withStyle(ChatFormatting.LIGHT_PURPLE), true);
         p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.BEACON_ACTIVATE, SoundSource.PLAYERS, 0.8F, 1.6F);
     }
 
     private static void stop(ServerPlayer p, String why) {
         State s = ON.remove(p.getUUID());
-        if (s != null) release(p, s);
+        if (s != null) { release(p, s); run(p, s, false); }
         send(p, -1, 11);
         if (why != null) {
             p.displayClientMessage(Component.literal(why).withStyle(ChatFormatting.GRAY), true);
@@ -108,9 +120,18 @@ public final class Autopilot {
         return e instanceof Mob m && m.getTarget() == p || e.getLastHurtMob() == p;
     }
 
-    /** Fair game: hostile by your rules, and either already after you, or out in the open where you can see it. */
-    private static boolean fair(ServerPlayer p, LivingEntity e) {
+    /** Coming for you: has you as its target, or has hurt you in the last few seconds. */
+    private static boolean onYou(ServerPlayer p, LivingEntity e) {
+        return e instanceof Mob m && m.getTarget() == p || p.getLastHurtByMob() == e && p.tickCount - p.getLastHurtByMobTimestamp() < 200;
+    }
+
+    /**
+     * Fair game. Guard: only what's coming for you. Hunt: anything hostile by your rules that's either coming
+     * for you or out in the open where you can see it.
+     */
+    private static boolean fair(ServerPlayer p, State s, LivingEntity e) {
         if (e == p || !e.isAlive() || e.isRemoved() || e.isSpectator() || e.distanceToSqr(p) > SEEK * SEEK) return false;
+        if (s.mode == 1) return onYou(p, e) && !Targets.yours(p, e);
         if (!Targets.hostile(p, e)) return false;
         if (comingFor(p, e)) return true;
         return onSurface(p.serverLevel(), e) && p.hasLineOfSight(e);
@@ -121,7 +142,7 @@ public final class Autopilot {
         LivingEntity cur = s.target == null ? null : l.getEntity(s.target) instanceof LivingEntity le ? le : null;
         LivingEntity best = null;
         double bestScore = Double.MAX_VALUE;
-        for (LivingEntity e : l.getEntitiesOfClass(LivingEntity.class, p.getBoundingBox().inflate(SEEK), e -> fair(p, e))) {
+        for (LivingEntity e : l.getEntitiesOfClass(LivingEntity.class, p.getBoundingBox().inflate(SEEK), e -> fair(p, s, e))) {
             double score = e.distanceToSqr(p) - (comingFor(p, e) ? 4000 : 0) - (e == cur ? 600 : 0); // whatever's on you first; and finish what you start
             if (score < bestScore) { bestScore = score; best = e; }
         }
@@ -142,18 +163,47 @@ public final class Autopilot {
         else s.target = null;
         int tid = t == null ? -1 : t.getId();
         if (tid != s.sent) { s.sent = tid; send(p, tid, 10); }
-        if (t == null) return;
+        if (t == null) { tactic(p, s, CHASE, now); run(p, s, false); return; }
 
         double d = p.distanceTo(t);
-        // far, and out in the open: blink onto it
-        if (d > BLINK_AT && now >= s.nextBlink && (onSurface(l, t) || comingFor(p, t))) {
+        boolean fast = Dominion.level(p) >= 2; // the run's gears and the flight are SCP-Ω's
+        // how to go about it: a tornado for a crowd, a run straight through, a dive from on high, or just in after it
+        if (now >= s.tacticUntil || s.tactic == CHASE && now % 20 == 0) {
+            int crowd = l.getEntitiesOfClass(LivingEntity.class, t.getBoundingBox().inflate(10), e -> fair(p, s, e)).size();
+            int next = CHASE;
+            long until = now + 40;
+            if (fast && crowd >= 3 && now >= s.nextTornado) { next = TORNADO; until = now + 200; s.nextTornado = now + 500; }
+            else if (fast && d > 9 && t.onGround() && now >= s.nextRam && l.random.nextInt(3) == 0) { next = RAM; until = now + 80; s.nextRam = now + 160; }
+            else if (d > 6 && p.getAbilities().mayfly && now >= s.nextDive && l.random.nextInt(3) == 0) { next = DIVE; until = now + 120; s.nextDive = now + 200; }
+            if (next != s.tactic || now >= s.tacticUntil) { tactic(p, s, next, now); s.tacticUntil = until; }
+        }
+        run(p, s, s.tactic == RAM || s.tactic == TORNADO);
+
+        // the run straight through: on reaching it, the sonic stop and a blow
+        if (s.tactic == RAM && d <= 2.8) {
+            Flight.wave(p, 4.6);
+            p.swing(InteractionHand.MAIN_HAND, true);
+            Toggles.shyBlow(p, t, 40F, 2.2, 400);
+            tactic(p, s, CHASE, now);
+            s.tacticUntil = now + 30;
+            s.nextBlow = now + 8;
+        }
+        // the dive: coming down on it from above
+        if (s.tactic == DIVE && d <= 3.2 && p.getY() >= t.getY() - 0.5) {
+            impact(p, t);
+            tactic(p, s, CHASE, now);
+            s.tacticUntil = now + 30;
+            s.nextBlow = now + 8;
+        }
+        // blinking is for when it's truly far (it has faster ways to close a gap)
+        if (s.tactic == CHASE && d > 40 && now >= s.nextBlink && (onSurface(l, t) || comingFor(p, t))) {
             blink(p, t);
-            s.nextBlink = now + 30;
+            s.nextBlink = now + 200;
             s.nextBlow = now + 3;
             d = p.distanceTo(t);
         }
         // bare hands, close in
-        if (d <= REACH && now >= s.nextBlow) {
+        if (d <= REACH && now >= s.nextBlow && s.tactic != TORNADO) {
             p.swing(InteractionHand.MAIN_HAND, true);
             Toggles.shyBlow(p, t, (float) Math.max(12, p.getAttributeValue(net.minecraft.world.entity.ai.attributes.Attributes.ATTACK_DAMAGE) * 2), 0.5, 200);
             s.nextBlow = now + 8;
@@ -162,6 +212,39 @@ public final class Autopilot {
         if (now >= s.nextPower) { if (power(p, t, d)) s.nextPower = now + 40 + l.random.nextInt(30); else s.nextPower = now + 10; }
         // a Manas Reborn skill, whenever one's ready
         if (s.held == null && now >= s.nextSkill) { if (skill(p, s, t, now)) s.nextSkill = now + 20 + l.random.nextInt(20); else s.nextSkill = now + 20; }
+    }
+
+    private static void tactic(ServerPlayer p, State s, int t, long now) {
+        s.tactic = t;
+        if (t != s.sentTactic) { s.sentTactic = t; send(p, t, 12); }
+    }
+
+    /** The run's top gear on (fire underfoot; laps spin a tornado) or off, as the tactic needs. */
+    private static void run(ServerPlayer p, State s, boolean on) {
+        if (on == s.running) return;
+        s.running = on;
+        try { Flight.action(p, new String[]{"pow", "run", "gear", on ? "8" : "0"}); } catch (Throwable ignored) {}
+    }
+
+    /** Coming down out of the sky onto it: a crater's worth of blow, everything near thrown off its feet. */
+    private static void impact(ServerPlayer p, LivingEntity t) {
+        ServerLevel l = p.serverLevel();
+        Vec3 at = t.position();
+        l.sendParticles(ParticleTypes.EXPLOSION_EMITTER, at.x, at.y + 0.5, at.z, 1, 0, 0, 0, 0);
+        l.playSound(null, at.x, at.y, at.z, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.PLAYERS, 2.5F, 0.6F);
+        l.playSound(null, at.x, at.y, at.z, SoundEvents.MACE_SMASH_GROUND_HEAVY, SoundSource.PLAYERS, 2F, 0.8F);
+        net.minecraft.world.level.block.state.BlockState under = l.getBlockState(t.blockPosition().below());
+        if (!under.isAir()) l.sendParticles(new net.minecraft.core.particles.BlockParticleOption(ParticleTypes.BLOCK, under), at.x, at.y + 0.1, at.z, 80, 2, 0.2, 2, 0.4);
+        p.swing(InteractionHand.MAIN_HAND, true);
+        Toggles.shyBlow(p, t, 60F, 1.6, 400);
+        for (LivingEntity e : l.getEntitiesOfClass(LivingEntity.class, t.getBoundingBox().inflate(5), e -> e != t && e != p && Targets.hostile(p, e))) {
+            Vec3 away = e.position().subtract(at).multiply(1, 0, 1);
+            away = away.lengthSqr() < 1e-4 ? new Vec3(0, 0, 1) : away.normalize();
+            PowerKills.hurt(p, e, l.damageSources().playerAttack(p), 14F);
+            e.push(away.x * 1.4, 0.7, away.z * 1.4);
+            e.hurtMarked = true;
+        }
+        p.fallDistance = 0;
     }
 
     /** Onto it, a couple of blocks short, facing it. */

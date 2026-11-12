@@ -266,7 +266,7 @@ public final class Flight {
 
     private static final java.util.List<Wave> WAVES = new java.util.ArrayList<>();
 
-    private static void wave(ServerPlayer p, double speed) {
+    static void wave(ServerPlayer p, double speed) {
         ServerLevel l = p.serverLevel();
         float yaw = p.getYRot() * net.minecraft.util.Mth.DEG_TO_RAD;
         Vec3 dir = new Vec3(-net.minecraft.util.Mth.sin(yaw), 0, net.minecraft.util.Mth.cos(yaw));

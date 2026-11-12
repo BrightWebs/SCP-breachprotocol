@@ -36,6 +36,7 @@ public final class ModNetwork {
                 ctx.enqueueWork(() -> {
                     int id = payload.entity();
                     if (payload.state() == 10) { com.breachprotocol.world.FlightState.autoOn = true; com.breachprotocol.world.FlightState.autoTarget = id; return; }
+                    if (payload.state() == 12) { com.breachprotocol.world.FlightState.autoTactic = id; return; }
                     if (payload.state() == 11) { com.breachprotocol.world.FlightState.autoOn = false; com.breachprotocol.world.FlightState.autoTarget = -1; return; }
                     if (payload.state() == 3) { com.breachprotocol.world.FlightState.NINJA.add(id); return; }
                     if (payload.state() == 4) { com.breachprotocol.world.FlightState.NINJA.remove(id); return; }

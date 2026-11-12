@@ -214,7 +214,7 @@
   "key.breachprotocol.power2": "Power slot 2",
   "key.breachprotocol.console": "Open the implant console",
   "breachprotocol.skill.administrator": "Administrator",
-  "breachprotocol.skill.administrator.description": "The Administrator's own. Use it and your body fights by itself, the way the great ones do: it hunts whatever you've marked hostile (anything coming for you first, then what it can see out in the open, never things hidden underground), flies to it and blinks onto it, strikes with SCP-096's blow, and throws your SCP powers and every Manas skill you hold, each when it's ready. Use it again to take yourself back.",
+  "breachprotocol.skill.administrator.description": "The Administrator's own. Use it and your body fights by itself, the way the great ones do. Hunt mode goes after whatever you've marked hostile (anything coming for you first, then what it can see out in the open, never things hidden underground); Guard mode only answers what comes for you. It closes in by flight, by a run straight through (a sonic stop and a blow), by a dive out of the sky, spins a burning tornado through a crowd, blinks only when something's truly far, and throws your SCP powers and every Manas skill you hold, each when it's ready. Use it again to take yourself back.",
   "breachprotocol.skill.shapeshift": "Shapeshift",
   "breachprotocol.skill.shapeshift.description": "The Administrator's. Mimic mode: use it and become whatever you're looking at, creature or object, at once; crouch and use it to come back. Archive mode: use it to open the Archive of your forms (Polymorph for creatures, Mimic for objects), searchable; click one to become it, shift-click to be yourself again. A creature's form brings its skills with it."
 }
