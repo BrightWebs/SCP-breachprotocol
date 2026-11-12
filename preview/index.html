@@ -31,7 +31,16 @@
     <button id="bSpin" class="on">Turn</button>
     <button id="bScale">Beside a player</button>
   </div>
-  <div class="parts">Horned skull, tusked jaw · glowing gold crown: violet diamond at the front, red stones either side, fire at its heart · ribcage round an ember heart · bone shoulders · clawed fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
+  <div class="row" id="moves">
+    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button>
+    <button data-m="swing">Swing</button><button data-m="bow">Draw bow</button><button data-m="block">Shield up</button><button data-m="eat">Eat</button>
+  </div>
+  <div class="row" id="items">
+    <button data-i="none">Empty hands</button><button data-i="sword" class="on">Sword</button><button data-i="pick">Pickaxe</button>
+    <button data-i="axe">Axe</button><button data-i="torch">Torch</button><button data-i="block">Block</button><button data-i="bow">Bow</button>
+    <button data-i="shield">Sword + shield</button><button data-i="phone">Phone</button>
+  </div>
+  <div class="parts">Stand, walk, run, swing, draw a bow, raise a shield, eat; hold a sword, pickaxe, axe, torch, block, bow, shield or your phone (items at 1.3× to suit the fists) · Horned skull, tusked jaw · glowing gold crown: violet diamond at the front, red stones either side, fire at its heart · ribcage round an ember heart · bone shoulders · blocky fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
 </div>
 <div class="hint">drag to turn · scroll to zoom · Minecraft scale: 1 block = 16 px</div>
 
@@ -154,6 +163,27 @@ const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0xb07810,
   featherD:new THREE.MeshLambertMaterial({map:featherDT,side:THREE.DoubleSide,alphaTest:.5}),
   veins:new THREE.MeshBasicMaterial({map:veinsT,side:THREE.DoubleSide,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.85})};
 
+
+// ---------- held items: Minecraft's flat item sprites, extruded a pixel thick the way the game draws them in hand
+function sprite(rows,pal){const g=new THREE.Group();const pxMats={};
+  rows.forEach((row,y)=>{[...row].forEach((ch,x)=>{if(ch==='.')return;const c=pal[ch];const m=pxMats[ch]||(pxMats[ch]=new THREE.MeshLambertMaterial({color:c}));
+    const b=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),m);b.position.set(x-7.5,7.5-y,0);g.add(b)})});return g}
+const SWORD=['..............ww','.............wlw','............wlw.','...........wlw..','..........wlw...','.........wlw....','........wlw.....','.......wlw......','..b...wlw.......','..bb.wlw........','...bbwlw........','....bdb.........','....hbb.........','...hh..b........','.ohh............','oo..............'];
+const PICK=['.....dddddd.....','...ddllllldd....','..dl......lld...','.dl.......hld...','.d.......h..ld..','........h....d..','.......h.....d..','......h.........','.....h..........','....h...........','...h............','..h.............','.h..............','h...............','................','................'];
+const AXE=['.......dd.......','......dlld......','.....dlllld.....','.....dllllhd....','.....dlllh.dd...','......dlh.......','.......h........','......h.........','.....h..........','....h...........','...h............','..h.............','.h..............','h...............','................','................'];
+const TORCH=['................','.......yy.......','......yoy.......','.......oy.......','.......hh.......','.......hh.......','.......hh.......','.......hh.......','.......hh.......','.......hh.......','.......hh.......','.......hh.......','.......hh.......','................','................','................'];
+const BOW=['..........sssh..','........ss..h...','.......s...h....','......s...h.....','.....s...h......','....s...h.......','...s...h........','...s..h.........','..s..h..........','..s.h...........','.s.h............','.sh.............','hh..............','h...............','................','................'];
+const PHONE=['....kkkkkk......','....kgggg k.....','....kgccgk......','....kgccgk......','....kgggg k.....','....kggggk......','....kkkkkk......'];
+const pal={w:0xf0f0f8,l:0xc8cad8,b:0x5a3a20,d:0x7a7a88,h:0x6a4a28,o:0x3a2810,y:0xffd040,s:0x8a6a3a,k:0x1a1a22,g:0x2a8a5a,c:0x6af0c0,' ':0x1a1a22};
+function itemModel(id){
+  if(id==='none')return null;
+  if(id==='block'){const g=new THREE.Group();const top=tex(16,16,(c,w,h)=>speckle(c,w,h,'#5aa03a',['#4a8a2a','#6ab84a'],R));const side=tex(16,16,(c,w,h)=>{speckle(c,w,h,'#8a5a30',['#7a4a26','#9a6a3a'],R);c.fillStyle='#5aa03a';c.fillRect(0,0,16,4)});
+    const m=new THREE.Mesh(new THREE.BoxGeometry(10,10,10),[mat(side),mat(side),mat(top),mat(side),mat(side),mat(side)]);g.add(m);return g}
+  if(id==='shield'){const g=new THREE.Group();const face=tex(12,22,(c,w,h)=>{speckle(c,w,h,'#7a5a34',['#6a4a2a','#8a6a3e'],R);c.fillStyle='#9a9aa8';c.fillRect(0,0,w,1);c.fillRect(0,h-1,w,1);c.fillRect(0,0,1,h);c.fillRect(w-1,0,1,h);c.fillRect(5,0,2,h)});
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(12,22,1.2),mat(face)));return g}
+  const art={sword:SWORD,pick:PICK,axe:AXE,torch:TORCH,bow:BOW,phone:PHONE}[id];
+  return sprite(art,pal);
+}
 const king=new THREE.Group();scene.add(king);
 // ---- legs: longer now (thigh and shin), heavy; the feet flat on the ground, four toes forward
 const THIGH=10, SHIN=10, HIP_Y=22.6;
@@ -181,7 +211,7 @@ function leg(side){
     const c=pivot(t2,0,0.2,2.1,0.6,0,0);
     box(c,1.1,1,2.2,0,-0.1,1,M.horn);                       // a black claw, curving down into the ground
   });
-  return hip;
+  return {hip,thigh,shin,foot,tx,sx};
 }
 const legL=leg(1),legR=leg(-1);
 // ---- pelvis and the spine, hunched forward
@@ -217,12 +247,12 @@ function arm(side){
   const fore=pivot(upper,0,-14,0,-0.15,0,side*0.05);
   box(fore,3,13,3,-1.6,-6.5,0,M.bone);box(fore,2.6,13,2.6,1.7,-6.5,-0.3,M.boneD);   // radius, ulna
   box(fore,8,3,7,0,-12.6,0,M.boneD);                          // the wrist
-  // the fist: knuckles, finger bones curled under, a claw on each
+  // the fist: a plain block of bone
   const hand=pivot(fore,0,-14,0);
   box(hand,9,6,8,0,-3,0,M.bone);
-  for(const x of[-3,-1,1,3]){box(hand,1.8,2,1.8,x,-6.5,3.2,M.boneD);const c=box(hand,1.2,2.4,1.2,x,-7.6,3.6,M.horn);c.rotation.x=-0.5}
-  const th=box(hand,2,4,2,side*-4.8,-3.5,2.4,M.boneD);th.rotation.z=side*0.4;
-  return {sh,upper};
+  // no fingers: the fist stays a plain block. Where a held item goes: the bottom of the fist, a little forward
+  const grip=pivot(hand,0,-5.2,1.2);
+  return {sh,upper,fore,hand,grip,side};
 }
 const armL=arm(1),armR=arm(-1);
 // ---- the head: low between the shoulders, thrust forward. A horned skull, crowned, cracked with fire.
@@ -368,9 +398,66 @@ const steve=new THREE.Group();scene.add(steve);steve.visible=false;steve.positio
 const sk=mat(tex(4,4,g=>{g.fillStyle='#c8946a';g.fillRect(0,0,4,4)})),sh=mat(tex(4,4,g=>{g.fillStyle='#2a8aa8';g.fillRect(0,0,4,4)})),pa=mat(tex(4,4,g=>{g.fillStyle='#3a3a8a';g.fillRect(0,0,4,4)}));
 box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,sh);box(steve,4,12,4,-6,18,0,sh);box(steve,4,12,4,2,6,0,pa);box(steve,4,12,4,-2,6,0,pa);
 
+
+// ---------- what's in its hands, and how it moves
+let move='idle',held='sword',heldR=null,heldL=null;
+const ITEM_SCALE=1.3;
+function hold(id){
+  for(const h of[heldR,heldL])if(h)h.parent.remove(h);
+  heldR=heldL=null;
+  const main=id==='shield'?'sword':id;
+  heldR=itemModel(main);
+  if(heldR){
+    // held the way the game holds it: the handle in the fist, the head forward and up
+    const flat=main!=='block';
+    heldR.scale.setScalar(ITEM_SCALE*(flat?1:0.75));
+    if(flat){heldR.rotation.set(-Math.PI/2+0.35,Math.PI/2,0);heldR.position.set(0,-1,4.5)}
+    if(main==='torch'||main==='phone'){heldR.rotation.set(0,Math.PI/2,0);heldR.position.set(0,2,1.5)}
+    if(main==='bow'){heldR.rotation.set(0,Math.PI/2,0.8);heldR.position.set(0,-1,1)}
+    if(!flat){heldR.position.set(0,-4,2.5)}
+    armR.grip.add(heldR);
+  }
+  if(id==='shield'){heldL=itemModel('shield');heldL.scale.setScalar(ITEM_SCALE);heldL.position.set(-0.5,-1,6);heldL.rotation.set(0,0,0);armL.grip.add(heldL)}
+}
+hold('sword');
+document.querySelectorAll('#moves button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#moves button').forEach(x=>x.classList.remove('on'));b.classList.add('on');move=b.dataset.m;
+  if(move==='bow'){hold('bow');setOn('#items','bow')} if(move==='block'){hold('shield');setOn('#items','shield')} }));
+document.querySelectorAll('#items button').forEach(b=>b.addEventListener('click',()=>{setOn('#items',b.dataset.i);held=b.dataset.i;hold(held)}));
+function setOn(sel,v){document.querySelectorAll(sel+' button').forEach(x=>x.classList.toggle('on',x.dataset.i===v||x.dataset.m===v))}
+
+// one step of the pose, every frame
+function animate(t){
+  const L=legL,Rg=legR,A=armL,B=armR;
+  let leg=0,armSwing=0,lean=0,bob=0,spd=0;
+  if(move==='walk'){spd=5.2;leg=0.55;armSwing=0.45;lean=0.05;bob=0.6}
+  if(move==='run'){spd=9;leg=0.95;armSwing=0.95;lean=0.32;bob=1.3}
+  const ph=t*spd;
+  // legs: thighs swing opposite, the shin folds as the leg comes through
+  for(const[lg,sgn]of[[L,1],[Rg,-1]]){
+    const sw=Math.sin(ph)*sgn;
+    lg.thigh.rotation.x=lg.tx-sw*leg;
+    const lift=Math.max(0,Math.cos(ph)*sgn)*leg;
+    lg.shin.rotation.x=lg.sx+lift*1.3;
+    lg.foot.rotation.x=-(lg.thigh.rotation.x+lg.shin.rotation.x);
+  }
+  king.position.y=Math.abs(Math.sin(ph))*bob*(spd?1:0);
+  spine.rotation.x=0.14+lean;
+  // arms: swinging against the legs; held poses over the top
+  const restA=-0.3, restB=-0.3;
+  A.upper.rotation.set(restA+Math.sin(ph)*armSwing*(spd?1:0)-lean,0,0.14);
+  B.upper.rotation.set(restB-Math.sin(ph)*armSwing*(spd?1:0)-lean,0,-0.14);
+  A.fore.rotation.x=-0.15-(move==='run'?0.9:0);B.fore.rotation.x=-0.15-(move==='run'?0.9:0);
+  if(!spd){A.upper.rotation.x+=Math.sin(t*0.8)*0.05;B.upper.rotation.x-=Math.sin(t*0.8)*0.05}
+  if(move==='swing'){const k=(t%1.1)/1.1;const a=k<0.35?-2.6*(k/0.35):-2.6+3.0*Math.min(1,(k-0.35)/0.2);B.upper.rotation.x=a;B.upper.rotation.z=-0.14+(k<0.55?0.3:0);B.fore.rotation.x=-0.4}
+  if(move==='bow'){B.upper.rotation.set(-1.55,0.15,-0.1);B.fore.rotation.x=-0.05;A.upper.rotation.set(-1.45,-0.5,0.2);A.fore.rotation.x=-0.7-Math.sin(t*1.5)*0.15}
+  if(move==='block'){A.upper.rotation.set(-1.1,0.5,0.1);A.fore.rotation.x=-0.9;B.upper.rotation.x=-0.35}
+  if(move==='eat'){B.upper.rotation.set(-1.3+Math.sin(t*14)*0.08,-0.5,0);B.fore.rotation.x=-1.1}
+  return spd;
+}
 // ---------- controls
 let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true,spread=true,openNow=1;
 const shot=/^#shot-(\d)$/.exec(location.hash);if(shot&&+shot[1]>=6){window.FEET=true}if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2,0.4,1.4][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}
+const ps=/^#pose-([a-z]+)-([a-z]+)$/.exec(location.hash);if(ps){move=ps[1];held=ps[2];hold(held);spin=false;flap=false;spread=false;openNow=0;yaw=0.9;document.querySelector('.panel').style.display='none';window.FT=true}
 const el=renderer.domElement;
 el.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)});
 el.addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-drag.x)*0.008;pitch=Math.max(-0.1,Math.min(1.3,pitch+(e.clientY-drag.y)*0.006));drag={x:e.clientX,y:e.clientY}});
@@ -387,7 +474,7 @@ addEventListener('resize',()=>{renderer.setSize(W(),H());camera.aspect=W()/H();c
 
 let t0=performance.now();
 function frame(now){
-  const t=(now-t0)/1000;
+  const t=window.FT?((window.FTk=(window.FTk||0)+1),1.3+(location.hash.includes('swing')?0.25:0)):(now-t0)/1000;
   if(spin&&!drag)yaw+=0.004;
   const ty=window.FEET?3:30, dd=window.FEET?45:dist;
   camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dd,ty+Math.sin(pitch)*dd,Math.cos(yaw)*Math.cos(pitch)*dd);
@@ -399,7 +486,7 @@ function frame(now){
   chest.rotation.x=0.16+br*0.02;
   head.rotation.x=-0.2+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
-  armL.upper.rotation.x=-0.3+Math.sin(t*0.8)*0.05;armR.upper.rotation.x=-0.3-Math.sin(t*0.8)*0.05;
+  const spd=animate(t);
   openNow+=((spread?1:0)-openNow)*0.04;
   const beat=flap&&spread?Math.sin(t*2.4):0;
   poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat);
