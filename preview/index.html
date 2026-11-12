@@ -37,6 +37,7 @@
     <button id="bSpread" class="on">Wings spread</button>
     <button id="bWings" class="on">Wings beat</button>
     <button id="bSpin" class="on">Turn</button>
+    <button id="bTurnBody">Body turns</button>
     <button id="bScale">Beside a player</button>
   </div>
   <div class="row" id="moves">
@@ -240,11 +241,12 @@ const pelvis=pivot(king,0,HIP_Y+1,0);
 box(pelvis,12,4,7,0,0.5,0,M.bone);
 box(pelvis,4,5,4,6,1.5,-0.5,M.boneD);box(pelvis,4,5,4,-6,1.5,-0.5,M.boneD); // the hip wings
 // ---- the tail: a long whip of vertebrae, back from the pelvis, drooping and curling up at its end, a bone blade at the tip
-const tail=[];{let p=pivot(pelvis,0,0,-3.5,-0.7,0,0);const N=18;
+let tailEnd=null;const tail=[];{let p=pivot(pelvis,0,0,-3.5,-0.7,0,0);const N=18;
   for(let i=0;i<N;i++){const k=i/N,t=3.4-2.3*k,L=2.7;
     box(p,t,t,L,0,0,-L/2,M.bone);box(p,t+0.9,t+0.6,0.9,0,0,-0.2,M.boneD);
     if(i%2==0&&i<N-2)box(p,0.8,1.2+t*0.5,0.9,0,t/2+0.5,-L/2,M.horn);
     tail.push(p);const q=pivot(p,0,0,-L,0.05,0,0);p=q}
+  tailEnd=p;
   const blade=p;box(blade,0.8,3.2,4.2,0,0,-1.6,M.horn);box(blade,0.8,1.6,2.4,0,0,-4.4,M.horn);box(blade,1.4,1.4,1.4,0,0,0,M.boneD);tail.push(blade)}
 const spine=pivot(pelvis,0,2.5,-1,0.14,0,0);
 for(let k=0;k<4;k++){box(spine,3.2,1.6,3.2,0,k*2.1+0.8,0,M.bone);box(spine,1.2,1.2,2.2,0,k*2.1+0.8,-2.2,M.boneD)}
@@ -334,7 +336,7 @@ const SPREAD=[1.0,0.35,-0.25,-0.85,-1.4], FOLD=[-1.05,-1.2,-1.32,-1.44,-1.55], F
 function wing(side){
   // a real wing's skeleton along the top edge (arm, forearm, hand, one long finger), and the feathers hanging DOWN
   // from it in overlapping rows, the way a bird's do: short ones by the body, the long flight feathers at the hand
-  const root=pivot(chest,side*4.5,CH-2.5,-CD/2-0.8);
+  const root=pivot(chest,side*5.5,CH-2.5,-CD/2-2.6);
   box(root,4,4,4,0,0,0,M.boneD);
   const upper=pivot(root,0,0,0);
   const UL=12;
@@ -376,12 +378,19 @@ function wing(side){
   return {root,upper,fore,wrist,hand,digit,feathers,flames,side};
 }
 // open: 0 folded down the back, 1 spread wide
+// eases v to a stop at lo, instead of a hard wall
+function soft(v,lo){const k=0.18;return v>lo+k?v:lo+k*Math.exp((v-lo-k)/k)}
 function poseWing(w,open,beat,amp=1,tilt=0,fly=false){
   const s=w.side;
   const flapY=fly?beat*0.75:0, inPlane=fly?0:1;
   const o=open*(1-0.3*Math.max(0,-beat)*Math.min(1,amp-0.5));
-  w.root.rotation.set(0.1*open+0.45*(1-open)+tilt,s*(1.35-1.2*open-beat*0.18*amp*open*inPlane+flapY),-s*0.12*(1-open));
-  const ua=-1.45+1.0*o+beat*0.25*o*amp*inPlane;                  // the arm: hanging down, or out and a little up
+  // the sweep: never forward of the shoulders (it'd go through the arms); flying, the whole beat sits further back
+  let ry=1.35-1.2*open-beat*0.18*amp*open*inPlane+flapY+(fly?0.4*open:0);
+  ry=soft(ry,0.22);
+  w.root.rotation.set(0.1*open+0.45*(1-open)+tilt,s*ry,-s*0.12*(1-open));
+  // the arm: hanging down, or out and a little up; on the downstroke it stops before it reaches the body's side
+  let ua=-1.45+1.0*o+beat*0.25*o*amp*inPlane+(inPlane&&amp>1.5?0.2*o:0);
+  if(o>0.5)ua=soft(ua,-0.7);
   w.upper.rotation.z=s*ua;
   const fr=1.9*o+2.75*(1-o)+beat*0.1*o-0.55*o;
   w.fore.rotation.z=s*fr;
@@ -479,6 +488,34 @@ document.querySelectorAll('#moves button').forEach(b=>b.addEventListener('click'
 document.querySelectorAll('#items button').forEach(b=>b.addEventListener('click',()=>{setOn('#items',b.dataset.i);held=b.dataset.i;hold(held);setTimeout(drawRows,0)}));
 function setOn(sel,v){document.querySelectorAll(sel+' button').forEach(x=>x.classList.toggle('on',x.dataset.i===v||x.dataset.m===v))}
 
+// ---------- the tail's physics: each vertebra is a spring hanging off the one before it, in the world. When the body
+// turns (or pitches over to gallop or fly), the tail is left pointing the old way and swings after it, the base first,
+// the tip last and furthest, whipping a little past and settling; walking, it sways with the stride
+const TN=18, tY=new Array(TN).fill(0), tVY=new Array(TN).fill(0), tP=new Array(TN).fill(0), tVP=new Array(TN).fill(0);
+let tLast=null, bodyYaw=0, turning=false;
+function tailPhysics(t){
+  let dt=tLast==null?0:Math.min(0.05,t-tLast);tLast=t;
+  const yaw0=king.rotation.y, pitch0=rig.rotation.x;   // the body's turn and its tilt, as the world sees them
+  const restP0=move==='fly'?-1.35:move==='gallop'?-0.35:-0.7;
+  const sway=move==='walk'||move==='run'||move==='gallop'?Math.sin(t*(move==='walk'?5.2:9)*0.5)*0.12:Math.sin(t*0.9)*0.05;
+  if(dt===0){for(let i=0;i<TN;i++){tY[i]=yaw0;tP[i]=pitch0+restP0+0.05*i}}
+  let parentY=yaw0, parentP=pitch0;
+  const steps=4,h=dt/steps;
+  for(let n=0;n<steps;n++){parentY=yaw0;parentP=pitch0;
+    for(let i=0;i<TN;i++){
+      const K=120-90*(i/TN), D=2*Math.sqrt(K)*0.32;            // stiff at the root, loose at the tip: a whip
+      const wantY=parentY+(i==0?sway:sway*0.15*Math.sin(t*2-i*0.5));
+      const wantP=parentP+(i==0?restP0:0.05);
+      tVY[i]+=(K*(wantY-tY[i])-D*tVY[i])*h;tY[i]+=tVY[i]*h;
+      tVP[i]+=(K*(wantP-tP[i])-D*tVP[i])*h;tP[i]+=tVP[i]*h;
+      // a spine only bends so far
+      tY[i]=parentY+Math.max(-0.55,Math.min(0.55,tY[i]-parentY));tP[i]=parentP+Math.max(-0.9,Math.min(0.6,tP[i]-parentP));
+      parentY=tY[i];parentP=tP[i];
+    }}
+  // back into each vertebra's own turn, relative to the one before
+  let py=yaw0,pp=pitch0;
+  for(let i=0;i<TN;i++){tail[i].rotation.y=tY[i]-py;tail[i].rotation.x=tP[i]-pp;py=tY[i];pp=tP[i]}
+}
 // one step of the pose, every frame
 function animate(t){
   neck.rotation.x=0.1;GROUND=false;
@@ -579,6 +616,7 @@ function toggle(id,fn){const b=document.getElementById(id);b.addEventListener('c
 toggle('bForm',v=>king.visible=v);
 toggle('bGround',v=>{ground.visible=v;embers.visible=v;fireLight.visible=v});
 toggle('bWings',v=>flap=v);
+toggle('bTurnBody',v=>turning=v);
 toggle('bSpread',v=>spread=v);
 toggle('bSpin',v=>spin=v);
 toggle('bScale',v=>steve.visible=v);
@@ -598,8 +636,9 @@ function frame(now){
   chest.rotation.x=0.16+br*0.02;
   head.rotation.x=-0.2+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
+  if(turning){const k=Math.sin(t*0.8);king.rotation.y=Math.sign(k)*Math.pow(Math.abs(k),0.4)*1.1}else king.rotation.y*=0.9;
   const spd=animate(t);
-  tail.forEach((p,i)=>{if(i==tail.length-1)return;const base=i==0?(move==='fly'?-1.35:move==='gallop'?-0.35:-0.7):0.05;p.rotation.x=base+Math.sin(t*1.4-i*0.35)*0.03*(i?1:0);p.rotation.y=Math.sin(t*1.1-i*0.4)*(0.05+i*0.004)*(spd?1.6:1)});
+  tailPhysics(t);
   if(GROUND){king.updateMatrixWorld(true);let low=1e9;const v=new THREE.Vector3();
     for(const lg of[legL,legR]){v.set(0,-2.4,1.5);lg.foot.localToWorld(v);low=Math.min(low,v.y);v.set(0,-2.4,6);lg.foot.localToWorld(v);low=Math.min(low,v.y)}
     for(const ar of[armL,armR]){for(const z of[-4,4]){v.set(0,-6,z);ar.hand.localToWorld(v);low=Math.min(low,v.y)}}
