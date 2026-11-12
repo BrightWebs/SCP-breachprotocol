@@ -32,6 +32,8 @@ public final class FlightState {
     public static volatile int autoTactic;
     /** Who has heat vision on, and at what strength (0..4: 5%, 15%, 50%, 80%, 100%). */
     public static final java.util.Map<Integer, Integer> HEAT = new ConcurrentHashMap<>();
+    /** Whose eyes glow (heat vision's crouch-use), beam or no beam. */
+    public static final Set<Integer> EYES = ConcurrentHashMap.newKeySet();
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();

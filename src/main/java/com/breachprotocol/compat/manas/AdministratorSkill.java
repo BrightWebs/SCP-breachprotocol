@@ -43,14 +43,17 @@ public class AdministratorSkill extends Skill implements io.github.manasmods.man
     /** Autopilot: use it, on or off; crouch and use it, Hunt or Guard. Heat Vision: hold it to burn (see onHeld). */
     public void onPressed(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
         if (!(e instanceof ServerPlayer p) || key < 0) return;
-        if (mode == 1) com.breachprotocol.career.HeatVision.holding(p, tier(instance));
+        if (mode == 1) {
+            if (p.isShiftKeyDown()) com.breachprotocol.career.HeatVision.eyes(p);     // crouch-use: the eyes glow (or stop)
+            else com.breachprotocol.career.HeatVision.holding(p, tier(instance));
+        }
         else com.breachprotocol.career.Autopilot.action(p, p.isShiftKeyDown() ? "switch" : "toggle");
     }
 
     /** Heat Vision, for as long as the key is held: the beams come, and keep coming. */
     public boolean onHeld(ManasSkillInstance instance, LivingEntity e, int heldTicks, int mode) {
         if (mode != 1) return false;
-        if (e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.holding(p, tier(instance));
+        if (e instanceof ServerPlayer p && !p.isShiftKeyDown()) com.breachprotocol.career.HeatVision.holding(p, tier(instance));
         return true;
     }
 

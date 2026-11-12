@@ -31,7 +31,7 @@ public final class HeatBeams {
 
     @SubscribeEvent
     public static void render(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS || FlightState.HEAT.isEmpty()) return;
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS || FlightState.HEAT.isEmpty() && FlightState.EYES.isEmpty()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
         float pt = event.getPartialTick().getGameTimeDeltaPartialTick(false);
@@ -43,10 +43,13 @@ public final class HeatBeams {
         ps.translate(-cam.x, -cam.y, -cam.z);
         Matrix4f m = ps.last().pose();
         float flick = 0.85F + (float) Math.sin((mc.level.getGameTime() + pt) * 1.7) * 0.15F;
-        for (Map.Entry<Integer, Integer> en : FlightState.HEAT.entrySet()) {
-            Entity e = mc.level.getEntity(en.getKey());
+        java.util.Set<Integer> who = new java.util.HashSet<>(FlightState.HEAT.keySet());
+        who.addAll(FlightState.EYES);
+        for (int id : who) {
+            Entity e = mc.level.getEntity(id);
             if (!(e instanceof Player p) || p.isInvisible()) continue;
-            int tier = Math.max(0, Math.min(4, en.getValue()));
+            Integer beaming = FlightState.HEAT.get(id);
+            int tier = beaming == null ? 0 : Math.max(0, Math.min(4, beaming));
             Vec3 eye = p.getEyePosition(pt), dir = p.getViewVector(pt);
             boolean me = p == mc.player && mc.options.getCameraType().isFirstPerson();
             Vec3 side = new Vec3(-dir.z, 0, dir.x);
@@ -59,6 +62,13 @@ public final class HeatBeams {
             Vec3 neck = eye.subtract(0, 0.214, 0);
             Vec3 face = neck.add(up.scale(3 * PX)).add(dir.scale(4 * PX + 0.012));
             Vec3 eyeL = face.add(side.scale(1.5 * PX)), eyeR = face.subtract(side.scale(1.5 * PX));
+            if (beaming == null) {
+                if (!me) for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
+                    glow(m, vc, ey, cam, 0.03F, 1F, 0.75F, 0.6F, 1F);
+                    glow(m, vc, ey, cam, 0.07F, 1F, 0.12F, 0.05F, 0.5F * flick);
+                }
+                continue;
+            }
             // where it lands (below 80% it stops at the first block)
             double range = RANGE[tier];
             Vec3 end = eye.add(dir.scale(range));

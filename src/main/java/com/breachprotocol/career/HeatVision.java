@@ -82,6 +82,16 @@ public final class HeatVision {
         try { beam(p, tier); } catch (Throwable t) { BreachProtocol.LOGGER.debug("Heat vision: {}", t.toString()); }
     }
 
+    private static final java.util.Set<UUID> EYES = new java.util.HashSet<>();
+
+    /** Crouch and use it: the eyes glow, and keep glowing, until you do it again. */
+    public static void eyes(ServerPlayer p) {
+        boolean on = EYES.add(p.getUUID());
+        if (!on) EYES.remove(p.getUUID());
+        PacketDistributor.sendToPlayersTrackingEntityAndSelf(p, new FlightPosePayload(p.getId(), on ? 26 : 27));
+        p.serverLevel().playSound(null, p.blockPosition(), on ? SoundEvents.FIRECHARGE_USE : SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 0.4F, 1.6F);
+    }
+
     /** Let go. */
     public static void release(ServerPlayer p) {
         FED.remove(p.getUUID());
@@ -97,7 +107,7 @@ public final class HeatVision {
 
     @SubscribeEvent
     public static void tick(ServerTickEvent.Post event) {
-        if (ON.isEmpty()) return;
+        if (ON.isEmpty() && EYES.isEmpty()) return;
         MinecraftServer srv = event.getServer();
         for (UUID id : new ArrayList<>(ON.keySet())) {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
@@ -105,6 +115,10 @@ public final class HeatVision {
             long now = p.serverLevel().getGameTime();
             // no longer held (the key's up, the skill switched, the player gone): it stops
             if (now - FED.getOrDefault(id, 0L) > 3 || !p.isAlive() || p.isSpectator()) release(p);
+        }
+        if (srv.getTickCount() % 40 == 0) for (UUID id : EYES) {
+            ServerPlayer p = srv.getPlayerList().getPlayer(id);
+            if (p != null) PacketDistributor.sendToPlayersTrackingEntityAndSelf(p, new FlightPosePayload(p.getId(), 26));
         }
         if (srv.getTickCount() % 40 == 0) for (UUID id : ON.keySet()) {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
