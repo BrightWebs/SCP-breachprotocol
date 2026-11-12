@@ -25,6 +25,9 @@ public final class FlightState {
     public static final Set<Integer> RAMMING = ConcurrentHashMap.newKeySet();
     /** Client: other players (by entity id) in the sixth running gear, the ninja run. */
     public static final Set<Integer> NINJA = ConcurrentHashMap.newKeySet();
+    /** Autopilot (career.Autopilot), for this client: whether it's on, and the entity it's going for (-1: none). */
+    public static volatile boolean autoOn;
+    public static volatile int autoTarget = -1;
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();

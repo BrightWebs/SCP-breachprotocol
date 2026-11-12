@@ -46,11 +46,15 @@ public final class ManasBridge {
     private static final ResourceLocation SOURCE = ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "shapeshift");
     private static final String FORM = "bp_shape_form";
     private static ShapeshiftSkill SKILL;
+    public static final ResourceLocation ADMIN_ID = ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "administrator");
+    private static AdministratorSkill ADMIN;
 
     public static void register(RegisterEvent event) {
         event.register(SkillAPI.getSkillRegistryKey(), helper -> {
             SKILL = new ShapeshiftSkill();
             helper.register(ID, SKILL);
+            ADMIN = new AdministratorSkill();
+            helper.register(ADMIN_ID, ADMIN);
         });
     }
 
@@ -72,8 +76,14 @@ public final class ManasBridge {
 
     /** The Administrator has it; it's learned the first time they're seen without it. */
     public static void grant(ServerPlayer p) {
-        if (SKILL == null || learned(p)) return;
-        try { SkillHelper.learnSkill(p, SKILL); p.getPersistentData().putBoolean("bp_shape_granted", true); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Couldn't grant Shapeshift: {}", t.toString()); }
+        if (SKILL != null && !learned(p))
+            try { SkillHelper.learnSkill(p, SKILL); p.getPersistentData().putBoolean("bp_shape_granted", true); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Couldn't grant Shapeshift: {}", t.toString()); }
+        // and the Administrator skill itself (the autopilot)
+        if (ADMIN != null) {
+            boolean have;
+            try { have = SkillAPI.getSkillsFrom(p).getSkill(ADMIN_ID).isPresent(); } catch (Throwable t) { have = p.getPersistentData().getBoolean("bp_admin_granted"); }
+            if (!have) try { SkillHelper.learnSkill(p, ADMIN); p.getPersistentData().putBoolean("bp_admin_granted", true); } catch (Throwable t) { BreachProtocol.LOGGER.warn("Couldn't grant Administrator: {}", t.toString()); }
+        }
     }
 
     // ---------------------------------------------------------------- using it

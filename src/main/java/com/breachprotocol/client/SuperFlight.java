@@ -106,6 +106,9 @@ public final class SuperFlight {
             send("pow:fly:charge:0");
             if (canLaunch(p)) launch(p);
         }
+        // the autopilot has the body: it steers, flight and run alike
+        if (Autopilot.steering()) { if (runGear > 0) runShift(p, 0); return; }
+        if (Autopilot.justReleased()) vel = p.getDeltaMovement();
         boolean now = eligible(p);
         if (!now) {
             if (flying) land(p);
