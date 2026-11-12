@@ -302,13 +302,15 @@ function wing(side){
 // open: 0 folded down the back, 1 spread wide
 function poseWing(w,open,beat){
   const s=w.side,o=open;
-  w.root.rotation.set(0.1*o,s*(1.3-1.15*o),s*0.1*(1-o));
+  w.root.rotation.set(0.1*o+0.45*(1-o),s*(1.35-1.2*o),-s*0.12*(1-o));   // folded: laid along the back, tips swept back
   const ua=-1.45+0.85*o+beat*0.25*o;                   // humerus: hanging down, or out and down
   const fa=1.25+0.1*o;                                  // the forearm's own lift above the humerus...
   const absFore=ua+fa+ (1.4-0.25)*o*0+0;               // (kept simple: absolute forearm angle)
   w.upper.rotation.z=s*ua;
-  w.fore.rotation.z=s*(1.9*o+1.1*(1-o)+beat*0.1*o);
-  const foreAbs=ua+(1.9*o+1.1*(1-o));
+  w.fore.rotation.z=s*(1.9*o+2.75*(1-o)+beat*0.1*o);             // folded: the forearm doubled up beside the arm
+  const foreAbs=ua+(1.9*o+2.75*(1-o));
+  // feathers: fanned across the gaps when spread; lying along their fingers when folded
+  for(const fp of w.feathers)fp.rotation.z=s*(-1.45*o-0.12*(1-o));
   w.fingers.forEach((f,i)=>{const want=SPREAD[i]*o+FOLD[i]*(1-o)-beat*0.12*o*(i/4);f.rotation.z=s*(want-foreAbs)});
 }
 const wingL=wing(1),wingR=wing(-1);
