@@ -134,13 +134,15 @@ public final class HeatVision {
         ServerLevel l = p.serverLevel();
         long now = l.getGameTime();
         Vec3 from = p.getEyePosition(), dir = p.getViewVector(1F);
-        double range = RANGE[tier];
+        // no limit but sight: it reaches as far as you can see (the world as far as it's loaded round you)
+        double range = Math.max(64, p.server.getPlayerList().getViewDistance() * 16.0);
         boolean cuts = tier >= 3, pierces = tier >= 2;
         // where it stops: the first solid block (below 80%); at 80% and up it goes on through
         double end = range;
         BlockPos stop = null;
         for (double d = 0.5; d <= range; d += 0.5) {
             BlockPos bp = BlockPos.containing(from.add(dir.scale(d)));
+            if (!l.isLoaded(bp)) { end = d; break; }
             BlockState st = l.getBlockState(bp);
             if (!st.isAir() && !st.getCollisionShape(l, bp).isEmpty() || st.getFluidState().is(Fluids.WATER) && tier < 3) {
                 if (!cuts) { end = d; stop = bp; break; }
@@ -182,7 +184,7 @@ public final class HeatVision {
         // what it does to the world
         if (tier == 1 && stop != null && now % 10 == 0) ignite(l, stop, dir);
         if (tier == 2 && stop != null && now % 6 == 0) ignite(l, stop, dir);
-        if (tier >= 3) cut(p, l, from, dir, range, tier, now);
+        if (tier >= 3) cut(p, l, from, dir, RANGE[tier], tier, now);   // it bores through the ground only so far
         // its sound, and a spray where it lands
         if (now % 8 == 0) l.playSound(null, to.x, to.y, to.z, SoundEvents.FIRE_AMBIENT, SoundSource.PLAYERS, 0.8F + tier * 0.4F, 1.4F - tier * 0.15F);
         l.sendParticles(tier >= 3 ? ParticleTypes.LAVA : ParticleTypes.SMALL_FLAME, to.x, to.y, to.z, 1 + tier, 0.15, 0.15, 0.15, 0.02);

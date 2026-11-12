@@ -81,7 +81,7 @@ public final class HeatBeams {
                 continue;
             }
             // where it lands (below 80% it stops at the first block)
-            double range = RANGE[tier];
+            double range = Math.max(64, mc.options.getEffectiveRenderDistance() * 16.0);   // as far as you can see
             Vec3 end = eye.add(dir.scale(range));
             if (tier < 3) {
                 BlockHitResult hit = mc.level.clip(new ClipContext(eye, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.ANY, p));
