@@ -26,11 +26,12 @@
   <div class="row">
     <button id="bForm" class="on">Skull King</button>
     <button id="bGround" class="on">Burning ground</button>
+    <button id="bSpread" class="on">Wings spread</button>
     <button id="bWings" class="on">Wings beat</button>
     <button id="bSpin" class="on">Turn</button>
     <button id="bScale">Beside a player</button>
   </div>
-  <div class="parts">Skull &amp; jaw · gold crown, violet gems · ribcage round an ember heart · bone pauldrons · clawed hands · skeletal wings, ember membrane · cracked obsidian ground, magma veins, flames</div>
+  <div class="parts">Horned skull, tusked jaw · gold crown, violet stones · ribcage round an ember heart · bone shoulders · clawed fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
 </div>
 <div class="hint">drag to turn · scroll to zoom · Minecraft scale: 1 block = 16 px</div>
 
@@ -97,6 +98,40 @@ membrane2T.wrapS=membrane2T.wrapT=THREE.RepeatWrapping;membrane2T.repeat.set(0.0
 const veinsT=tex(64,64,(g,w,h)=>{g.fillStyle='#000';g.fillRect(0,0,w,h);for(let k=0;k<18;k++){let x=R()*w,y=R()*h,a=R()*6.28;g.strokeStyle='rgba(255,90,20,1)';g.lineWidth=1;g.beginPath();g.moveTo(x,y);for(let s=0;s<24;s++){a+=(R()-.5)*.9;x+=Math.cos(a)*2;y+=Math.sin(a)*2;g.lineTo(x,y)}g.stroke()}});
 veinsT.wrapS=veinsT.wrapT=THREE.RepeatWrapping;veinsT.repeat.set(0.03,0.03);
 function mat(t,o={}){return new THREE.MeshLambertMaterial(Object.assign({map:t},o))}
+
+const flameTex=tex(8,16,(g)=>{g.fillStyle='#ff4a10';g.fillRect(2,6,4,10);g.fillStyle='#ff9a20';g.fillRect(3,3,2,10);g.fillStyle='#ffe060';g.fillRect(3,9,2,5);g.fillStyle='#ff6a10';g.fillRect(1,11,1,4);g.fillRect(6,10,1,5)});
+function featherTex(dark){return tex(16,48,(g,w,h)=>{
+  g.clearRect(0,0,w,h);
+  for(let y=0;y<h;y++){
+    const k=y/h; const half=Math.max(1,Math.round((w/2-1)*Math.sin(Math.min(1,k*1.25)*Math.PI*0.5)*(k>0.92?(1-k)*12:1)));
+    for(let x=w/2-half;x<w/2+half;x++){
+      const edge=Math.abs(x-w/2+0.5)/half;
+      const base=dark?[16,12,20]:[24,20,30];
+      const sheen=edge>0.75?[70,40,110]:edge>0.5?[40,30,60]:base;
+      const n=(R()*14)|0;g.fillStyle=`rgb(${sheen[0]+n},${sheen[1]+n},${sheen[2]+n})`;g.fillRect(x,y,1,1);
+    }
+    if(y%5==0&&y>4){g.fillStyle='rgba(0,0,0,0)';g.clearRect(w/2+half-1,y,1,1)}  // a notch here and there
+  }
+  g.fillStyle='#8a7a96';for(let y=0;y<h-3;y++)g.fillRect(w/2,y,1,1);           // the shaft
+});}
+// a feather lying along +x in the wing (its root at the left): black, its end burning
+function burningFeather(){return tex(48,16,(g,w,h)=>{
+  g.clearRect(0,0,w,h);
+  for(let x=0;x<w;x++){
+    const k=x/w; const half=Math.max(1,Math.round((h/2-1)*Math.sin(Math.min(1,k*1.4)*Math.PI*0.5)*(k>0.9?(1-k)*10:1)));
+    for(let y=h/2-half;y<h/2+half;y++){
+      const edge=Math.abs(y-h/2+0.5)/half, n=(R()*14)|0;
+      let c=edge>0.7?[60,36,96]:edge>0.45?[34,26,50]:[18,14,24];
+      if(k>0.7){const f=(k-0.7)/0.3;const fire=f>0.7?[255,220,90]:f>0.4?[255,140,30]:[200,40,10];const mix=Math.min(1,f*1.6);c=c.map((v,j)=>v*(1-mix)+fire[j]*mix)}
+      g.fillStyle=`rgb(${(c[0]+n)|0},${(c[1]+n)|0},${(c[2]+n)|0})`;g.fillRect(x,y,1,1);
+    }
+    if(x%6==3&&x<w*0.7){g.clearRect(x,h/2+half-1,1,1)}
+  }
+  g.fillStyle='#7a6a86';for(let x=0;x<w*0.75;x++)g.fillRect(x,h/2,1,1);
+});}
+const burnT=burningFeather();
+const burnMaskT=tex(48,16,(g,w,h)=>{g.fillStyle='#000';g.fillRect(0,0,w,h);const gr=g.createLinearGradient(w*0.68,0,w,0);gr.addColorStop(0,'#000');gr.addColorStop(1,'#fff');g.fillStyle=gr;g.fillRect(0,0,w,h)});
+const featherT=featherTex(false),featherDT=featherTex(true);
 // ---------- building boxes the way Minecraft models are: pixel units, pivots
 function box(parent,w,h,d,x,y,z,m){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),Array.isArray(m)?m:[m,m,m,m,m,m]);
@@ -114,6 +149,8 @@ const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0x6a4a08,
   crack:mat(crackT,{emissive:0xff3a10,emissiveMap:crackMaskT,emissiveIntensity:1.2}),
   horn:mat(hornT),muzzle:mat(muzzleT),dark:new THREE.MeshLambertMaterial({color:0x14060e}),
   membrane:new THREE.MeshLambertMaterial({map:membrane2T,side:THREE.DoubleSide,transparent:true,opacity:.9,emissive:0x3a0610,emissiveIntensity:.6}),
+  feather:new THREE.MeshLambertMaterial({map:burnT,side:THREE.DoubleSide,alphaTest:.5,emissive:0xff5a10,emissiveMap:burnMaskT,emissiveIntensity:1}),
+  featherD:new THREE.MeshLambertMaterial({map:featherDT,side:THREE.DoubleSide,alphaTest:.5}),
   veins:new THREE.MeshBasicMaterial({map:veinsT,side:THREE.DoubleSide,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.85})};
 
 const king=new THREE.Group();scene.add(king);
@@ -127,9 +164,19 @@ function leg(side){
   box(shin,2,6.5,2,-1.1,-3.2,0,M.bone);box(shin,1.6,6.5,1.6,1.2,-3.2,-0.4,M.boneD); // tibia, fibula
   box(shin,4.6,2,4.6,0,-6.6,0,M.boneD);                 // ankle
   const foot=pivot(shin,0,-7.2,0,-0.1,0,0);
-  box(foot,6,2,5,0,-0.4,1.6,M.bone);                    // the foot's bones, reaching forward
-  for(const t of[-2.2,0,2.2]){box(foot,1.4,1.4,3,t,-0.6,5.2,M.bone);const c=box(foot,1,1.2,1.6,t,-0.8,7.2,M.horn);c.rotation.x=0.5}
-  box(foot,2.4,1.6,2,0,-0.4,-1.8,M.boneD);              // heel
+  box(foot,4.4,2,3.6,0,-0.2,0.4,M.boneD);                // the ankle's knot of bones
+  box(foot,2.2,1.8,3,0,-0.6,-2.4,M.bone);                // heel spur, back
+  // four toes, splayed: a long bone each, two knuckled joints, a black claw
+  [[-2.4,-0.32],[-0.8,-0.1],[0.8,0.1],[2.4,0.32]].forEach(([x,ang],i)=>{
+    const t=pivot(foot,x*0.6,-0.6,1.6,0,ang,0);
+    const L1=i==0||i==3?3.2:4;
+    box(t,1.5,1.4,L1,0,0,L1/2,M.bone);                   // metatarsal
+    box(t,1.9,1.7,1.6,0,0,L1,M.boneD);                    // knuckle
+    const t2=pivot(t,0,0,L1,0.25,0,0);
+    box(t2,1.3,1.2,2.4,0,0,1.3,M.bone);                   // toe bone
+    const c=pivot(t2,0,0,2.6,0.55,0,0);
+    box(c,1.1,1,2,0,-0.2,0.9,M.horn);                     // claw, curving into the ground
+  });
   return hip;
 }
 const legL=leg(1),legR=leg(-1);
@@ -206,46 +253,63 @@ const eyeFlames=[];
 for(const sd of[1,-1]){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:soulTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
   s.position.set(sd*2.9,6,6.2);head.add(s);eyeFlames.push(s)}
 
-// ---- the wings: dragon-like, a bone arm and four long fingers, a ragged burning membrane between
+// ---- the wings: bare bone, the way the drawing has them: a heavy arm crooked at the elbow, a hooked claw at the
+// wrist, and long fingers fanning from it, each bone curving like a scythe. Black feathers grow along each finger
+// and fill the space to the next, burning at their ends. Folded, the fingers close together and the whole wing lies
+// down the back; spread, they fan wide.
+const SPREAD=[1.0,0.35,-0.25,-0.85,-1.4], FOLD=[-1.05,-1.2,-1.32,-1.44,-1.55], FLEN=[24,32,36,32,26];
 function wing(side){
-  const root=pivot(chest,side*5,CH-3,-CD/2-0.5);
-  const base=pivot(root,0,0,0);                                  // turned by the flap
-  const WX=13,WY=5.2;                                           // the wrist, out and up from the shoulder
-  bone(pivot(base,0,0,0,0,0,Math.atan2(side*WX,-WY)),14,3.2);   // humerus
-  const wrist=pivot(base,side*WX,WY,0);
-  box(wrist,3.6,3.6,3.6,0,0,0,M.boneD);
-  const hook=pivot(wrist,0,1.5,0,0,0,side*-0.5);box(hook,1.4,4,1.4,0,2,0,M.horn);   // the wrist claw
-  const fingers=[{len:30,phi:1.05},{len:38,phi:0.45},{len:36,phi:-0.15},{len:28,phi:-0.75}];
-  for(const f of fingers){
-    const g=pivot(wrist,0,0,0,0,0,Math.atan2(side*Math.cos(f.phi),-Math.sin(f.phi)));
-    let p=g,t=2.0;
-    for(let k=0;k<3;k++){const l=f.len/3;box(p,t,l+0.4,t,0,-l/2,0,k==2?M.horn:M.bone);if(k<2)box(p,t+0.8,1.4,t+0.8,0,-l,0,M.boneD);p=pivot(p,0,-l,0);t*=0.75}
-    f.tip=[side*Math.cos(f.phi)*f.len,Math.sin(f.phi)*f.len];
-  }
-  // the membrane, in the wrist's plane: from the shoulder up to the wrist, out to each fingertip, scalloped and torn between
-  const shape=new THREE.Shape();
-  const back=[-side*WX,-WY];
-  const tail=[back[0]+side*5,back[1]-20];
-  shape.moveTo(back[0],back[1]);
-  shape.lineTo(0,0);
-  shape.lineTo(fingers[0].tip[0]*0.5,fingers[0].tip[1]*0.5);
-  fingers.forEach((f,i)=>{
-    shape.lineTo(f.tip[0],f.tip[1]);
-    const nx=fingers[i+1]?fingers[i+1].tip:tail;
-    const mx=(f.tip[0]+nx[0])/2,my=(f.tip[1]+nx[1])/2;
-    const dip=i==fingers.length-1?0.8:0.6;
-    shape.lineTo(f.tip[0]*0.8+mx*0.2,f.tip[1]*0.8+my*0.2-0.8);
-    shape.lineTo(mx*dip+side*1.4,my*dip-0.6);
-    shape.lineTo(mx*dip-side*0.6,my*dip+1.2);                  // a tear
-    shape.lineTo(mx*(dip+0.06),my*(dip+0.06));
-    shape.lineTo(nx[0]*0.8+mx*0.2,nx[1]*0.8+my*0.2+0.6);
+  const root=pivot(chest,side*4.5,CH-2.5,-CD/2-0.8);
+  box(root,4,4,4,0,0,0,M.boneD);
+  const upper=pivot(root,0,0,0);
+  const UL=12;
+  box(upper,UL,3,3,side*UL/2,0,0,M.bone);box(upper,4,3.6,3.6,side*UL,0,0,M.boneD);       // humerus, the elbow
+  const fore=pivot(upper,side*UL,0,0);
+  const FL=15;
+  box(fore,FL,2.4,2.4,side*FL/2,0,0.6,M.bone);box(fore,FL,1.6,1.6,side*FL/2,0,-0.8,M.boneD); // radius and ulna
+  const wrist=pivot(fore,side*FL,0,0);
+  box(wrist,4,4,3.4,0,0,0,M.boneD);
+  const hook=pivot(wrist,0,1.6,0,0,0,side*0.3);box(hook,1.6,4,1.6,0,2,0,M.horn);const hook2=pivot(hook,0,4,0,0,0,side*-1.1);box(hook2,1.2,3,1.2,0,1.5,0,M.horn); // the claw
+  const fingers=[],feathers=[],flames=[];
+  FLEN.forEach((len,i)=>{
+    const f=pivot(wrist,0,0,-0.3*i);
+    const segs=[];let p=f,t=2.2;
+    for(let k=0;k<3;k++){
+      const l=len/3;
+      box(p,l+0.6,t,t,side*l/2,0,0,k==2?M.horn:M.bone);
+      if(k<2)box(p,2.2+t*0.4,t+0.9,t+0.9,side*l,0,0,M.boneD);
+      // feathers along this bone, reaching down to the next finger
+      const nPer=k==0?2:3;
+      for(let q=0;q<nPer;q++){
+        const at=l*(0.2+0.8*q/nPer);
+        const r=k*l+at;                                  // distance out along the finger
+        const gap=i<FLEN.length-1?(SPREAD[i]-SPREAD[i+1]):0.55;
+        const flen=Math.max(7,Math.min(24,r*gap*1.25+5));
+        const fp=pivot(p,side*at,0,-0.4-i*0.12-q*0.04,0,0,side*-1.45);
+        const m=new THREE.Mesh(new THREE.PlaneGeometry(flen,4.6),M.feather);m.position.x=side*flen/2;fp.add(m);
+        feathers.push(fp);
+        if((q+k+i)%2==0){const fl=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+          fl.position.set(side*flen,0,0.2);fp.add(fl);flames.push(fl)}
+      }
+      segs.push(p);
+      if(k<2){p=pivot(p,side*l,0,0,0,0,side*-0.16);}           // each joint bends it on, like a scythe
+      t*=0.75;
+    }
+    fingers.push(f);
   });
-  shape.lineTo(tail[0],tail[1]);
-  shape.lineTo(back[0],back[1]);
-  const geo=new THREE.ShapeGeometry(shape);
-  const mem=new THREE.Mesh(geo,M.membrane);mem.position.z=-0.4;wrist.add(mem);
-  const veins=new THREE.Mesh(geo,M.veins);veins.position.z=-0.7;wrist.add(veins);
-  return {root,base,wrist};
+  return {root,upper,fore,wrist,fingers,feathers,flames,side};
+}
+// open: 0 folded down the back, 1 spread wide
+function poseWing(w,open,beat){
+  const s=w.side,o=open;
+  w.root.rotation.set(0.1*o,s*(1.3-1.15*o),s*0.1*(1-o));
+  const ua=-1.45+0.85*o+beat*0.25*o;                   // humerus: hanging down, or out and down
+  const fa=1.25+0.1*o;                                  // the forearm's own lift above the humerus...
+  const absFore=ua+fa+ (1.4-0.25)*o*0+0;               // (kept simple: absolute forearm angle)
+  w.upper.rotation.z=s*ua;
+  w.fore.rotation.z=s*(1.9*o+1.1*(1-o)+beat*0.1*o);
+  const foreAbs=ua+(1.9*o+1.1*(1-o));
+  w.fingers.forEach((f,i)=>{const want=SPREAD[i]*o+FOLD[i]*(1-o)-beat*0.12*o*(i/4);f.rotation.z=s*(want-foreAbs)});
 }
 const wingL=wing(1),wingR=wing(-1);
 king.position.y=0;
@@ -272,7 +336,6 @@ glow.rotation.x=-Math.PI/2;glow.position.y=0.2;ground.add(glow);
 // cracked blocks pushed up here and there
 for(let i=0;i<14;i++){const a=R()*Math.PI*2,r=18+R()*34;const b=box(ground,8+R()*6,1+R()*3,8+R()*6,Math.cos(a)*r,0.8,Math.sin(a)*r,mat(groundTex,{emissive:0xff4a10,emissiveMap:groundTex,emissiveIntensity:.6}));b.rotation.y=R()*3;b.rotation.x=(R()-.5)*.25}
 // flames: little sprites that rise and fade
-const flameTex=tex(8,16,(g)=>{g.fillStyle='#ff4a10';g.fillRect(2,6,4,10);g.fillStyle='#ff9a20';g.fillRect(3,3,2,10);g.fillStyle='#ffe060';g.fillRect(3,9,2,5);g.fillStyle='#ff6a10';g.fillRect(1,11,1,4);g.fillRect(6,10,1,5)});
 const flames=[];
 for(let i=0;i<70;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
   s.userData={a:R()*Math.PI*2,r:6+R()*52,t:R(),sp:.4+R()*.8,size:3+R()*4};ground.add(s);flames.push(s)}
@@ -289,8 +352,8 @@ const sk=mat(tex(4,4,g=>{g.fillStyle='#c8946a';g.fillRect(0,0,4,4)})),sh=mat(tex
 box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,sh);box(steve,4,12,4,-6,18,0,sh);box(steve,4,12,4,2,6,0,pa);box(steve,4,12,4,-2,6,0,pa);
 
 // ---------- controls
-let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true;
-const shot=/^#shot-(\d)$/.exec(location.hash);if(shot){yaw=[0.6,2.4,-0.9,3.14][+shot[1]]||0;spin=false;document.querySelector('.panel').style.display='none'}
+let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true,spread=true,openNow=1;
+const shot=/^#shot-(\d)$/.exec(location.hash);if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}
 const el=renderer.domElement;
 el.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)});
 el.addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-drag.x)*0.008;pitch=Math.max(-0.1,Math.min(1.3,pitch+(e.clientY-drag.y)*0.006));drag={x:e.clientX,y:e.clientY}});
@@ -300,6 +363,7 @@ function toggle(id,fn){const b=document.getElementById(id);b.addEventListener('c
 toggle('bForm',v=>king.visible=v);
 toggle('bGround',v=>{ground.visible=v;embers.visible=v;fireLight.visible=v});
 toggle('bWings',v=>flap=v);
+toggle('bSpread',v=>spread=v);
 toggle('bSpin',v=>spin=v);
 toggle('bScale',v=>steve.visible=v);
 addEventListener('resize',()=>{renderer.setSize(W(),H());camera.aspect=W()/H();camera.updateProjectionMatrix()});
@@ -317,9 +381,10 @@ function frame(now){
   head.rotation.x=-0.2+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
   armL.upper.rotation.x=-0.3+Math.sin(t*0.8)*0.05;armR.upper.rotation.x=-0.3-Math.sin(t*0.8)*0.05;
-  const f=flap?Math.sin(t*1.9):0.3;
-  wingL.base.rotation.y=-0.25-f*0.35;wingR.base.rotation.y=0.25+f*0.35;
-  wingL.base.rotation.z=-0.1+f*0.12;wingR.base.rotation.z=0.1-f*0.12;
+  openNow+=((spread?1:0)-openNow)*0.04;
+  const beat=flap&&spread?Math.sin(t*2.4):0;
+  poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat);
+  for(const w of[wingL,wingR])w.flames.forEach((fl,i)=>{const k=0.6+Math.sin(t*8+i*1.7)*0.25+Math.sin(t*13+i)*0.1;fl.scale.set(2.6*k,4.2*k,1);fl.material.opacity=0.6+openNow*0.4});
   halo.rotation.y=t*1.5;halo.position.y=11+Math.sin(t*2)*0.6;
   for(const e of eyeFlames){const k=0.8+Math.sin(t*9+e.position.x)*0.2;e.scale.set(2.2*k,4.2*k,1)}
   const pulse=0.75+Math.sin(t*3.1)*0.25+Math.sin(t*7.3)*0.08;
