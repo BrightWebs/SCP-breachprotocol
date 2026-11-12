@@ -76,7 +76,8 @@ public final class SkullRenderer {
         // in the air a moment (a step down, a stride at speed) isn't flying; a jump is
         float airT; boolean jumped;
         // flight: speed and its change, the turn, the bank; the flaps (how many left, where in one, how hard)
-        float speedS, accS, flyYaw, turnS, bank, flapPh, flapAmp, cruiseT, climbK, climbCyc, headS, diveS, burstCool;
+        float speedS, accS, flyYaw, turnS, bank, flapPh, flapAmp, cruiseT, climbK, climbCyc, headS, diveS, burstCool, slideK, slideYaw;
+        int slideSide = 1;
         int flapsLeft; boolean hard, flyInit;
     }
 
@@ -159,29 +160,77 @@ public final class SkullRenderer {
         if (p != null && FlightState.SKULL.containsKey(p.getId()) && form(p, event.getPartialTick()) >= 0.5F) event.setCanceled(true);
     }
 
-    private static boolean wasClinging;
+    private static boolean jumpWas;
+    private static int slideSpark;
+
+    /** Which way the wall is from this player (a unit step toward it, flat), or null. */
+    public static Vec3 wallDir(Player p) {
+        Vec3 best = null;
+        double bestD = 999;
+        for (int d = 0; d < 4; d++) {
+            float wy = d * 90F;
+            Vec3 dir = new Vec3(-Mth.sin(wy * Mth.DEG_TO_RAD), 0, Mth.cos(wy * Mth.DEG_TO_RAD));
+            var bb = p.getBoundingBox().deflate(0.02, 0.3, 0.02).move(dir.x * 0.2, 0.1, dir.z * 0.2);
+            if (p.level().noCollision(p, bb)) continue;
+            double diff = Math.abs(Mth.wrapDegrees(wy - p.getYRot()));
+            if (diff < bestD) { bestD = diff; best = dir; }
+        }
+        return best;
+    }
+
+    private static void climbState(net.minecraft.client.player.LocalPlayer p, boolean on) {
+        if (FlightState.localClimb == on) return;
+        FlightState.localClimb = on;
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(new com.breachprotocol.network.PhoneActionPayload("pow:climb:" + (on ? 1 : 0), 0));
+    }
 
     /**
-     * Climbing, for the one playing: sprint while climbing and it goes up hand over hand, fast; reach the top
-     * still pressing on and it hauls itself up over the edge onto it, instead of hanging under the lip.
+     * Climbing walls, in True Form. Against a wall, W and crouch together take hold. Then: W climbs (sprint too, and
+     * it climbs fast); let go of everything and it slides down the wall, a hand and a foot on it, looking down where
+     * it's going; crouch and it holds still. Reaching the top with W held, it hauls itself up over the edge; jump
+     * and it kicks off the wall; slide all the way down and it lets go on the ground.
      */
     @SubscribeEvent
-    public static void climbTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+    public static void climbTick(net.neoforged.neoforge.event.tick.PlayerTickEvent.Pre event) {
         Minecraft mc = Minecraft.getInstance();
-        var p = mc.player;
-        if (p == null || mc.isPaused()) return;
-        boolean cling = FlightState.clinging(p);
-        boolean forward = p.input != null && p.input.forwardImpulse > 0;
-        if (cling && forward && p.horizontalCollision && mc.options.keySprint.isDown()) {
-            Vec3 v = p.getDeltaMovement();
-            p.setDeltaMovement(v.x, Math.max(v.y, 0.45), v.z);
+        if (!(event.getEntity() instanceof net.minecraft.client.player.LocalPlayer p) || p != mc.player) return;
+        FlightState.localId = p.getUUID();
+        boolean forward = mc.options.keyUp.isDown(), shift = mc.options.keyShift.isDown(), sprint = mc.options.keySprint.isDown(), jump = mc.options.keyJump.isDown();
+        boolean jumpEdge = jump && !jumpWas;
+        jumpWas = jump;
+        boolean beside = FlightState.wallBeside(p);
+        Vec3 wall = beside ? wallDir(p) : null;
+        if (!FlightState.localClimb) {
+            if (beside && wall != null && forward && shift) climbState(p, true);
+            else return;
         }
-        if (wasClinging && !cling && forward && !p.onGround() && p.isShiftKeyDown()) {
+        if (!beside || wall == null) {
+            climbState(p, false);
             // over the top: up and onto it
-            Vec3 look = Vec3.directionFromRotation(0, p.getYRot());
-            p.setDeltaMovement(look.x * 0.32, 0.38, look.z * 0.32);
+            if (forward) { Vec3 look = Vec3.directionFromRotation(0, p.getYRot()); p.setDeltaMovement(look.x * 0.3, 0.42, look.z * 0.3); }
+            return;
         }
-        wasClinging = cling;
+        if (jumpEdge) {
+            // a kick off the wall
+            climbState(p, false);
+            p.setDeltaMovement(-wall.x * 0.6, 0.55, -wall.z * 0.6);
+            return;
+        }
+        if (p.onGround() && !forward && !shift) { climbState(p, false); return; }
+        double vy = forward ? (sprint ? 0.42 : 0.2) : shift ? 0 : -0.16;
+        // pressed to the wall, a little sideways if it's steered
+        float side = (mc.options.keyLeft.isDown() ? 1 : 0) - (mc.options.keyRight.isDown() ? 1 : 0);
+        Vec3 along = new Vec3(wall.z, 0, -wall.x).scale(side * 0.08);
+        p.setDeltaMovement(wall.x * 0.05 + along.x, vy, wall.z * 0.05 + along.z);
+        p.resetFallDistance();
+    }
+
+    /** On the wall, the keys steer the climb (not a walk away from it). */
+    @SubscribeEvent
+    public static void climbInput(net.neoforged.neoforge.client.event.MovementInputUpdateEvent event) {
+        if (!FlightState.localClimb) return;
+        var in = event.getInput();
+        in.forwardImpulse = 0; in.leftImpulse = 0; in.jumping = false;
     }
 
     // ================================================================== moving it
@@ -210,9 +259,9 @@ public final class SkullRenderer {
         // stepping down a block, or a stride at speed, it's still on its feet
         boolean grounded = p.onGround() || !flying && !lying && !rig.jumped && rig.airT < 0.6F && !p.isInWater();
         // against a wall: climbing (walk into it; crouch holds on) or running straight up it
-        boolean climbing = !flying && !lying && !p.onGround() && (FlightState.clinging(p) || com.breachprotocol.client.SuperFlight.wallRunning(p));
+        boolean climbing = !flying && !lying && (FlightState.clinging(p) && !(p.onGround() && dy > -0.01 && dy < 0.01 && !p.isCrouching()) || !p.onGround() && com.breachprotocol.client.SuperFlight.wallRunning(p));
         // running: on two legs through the first and second gears; from the third (a block and a half a tick) up, on all fours
-        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : grounded && (h > 1.3 || st == 6) ? GALLOP : IDLE;
+        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : (grounded || Math.abs(dy) < 0.35 && !rig.jumped) && (h > 1.3 || st == 6) ? GALLOP : IDLE;
         // crouching: moving, a lion's prowl; still, it sits down
         boolean crouch = p.isCrouching() && grounded && move == IDLE;
         if (crouch && h > 0.015) move = PROWL;
@@ -220,7 +269,15 @@ public final class SkullRenderer {
         float sitK = rig.sitK;
 
         float bodyYaw = move == FLY ? Mth.rotLerp(pt, p.yRotO, p.getYRot()) : Mth.rotLerp(pt, p.yBodyRotO, p.yBodyRot);
-        if (move == CLIMB) bodyYaw = wallYaw(p, bodyYaw);
+        if (move == CLIMB) {
+            bodyYaw = wallYaw(p, bodyYaw);
+            if (dy < -0.04 && !com.breachprotocol.client.SuperFlight.wallRunning(p)) {
+                // sliding: turned most of the way out from the wall, toward the side it was looking
+                float want = bodyYaw + rig.slideSide * 125F;
+                if (!gui) rig.slideYaw += Mth.wrapDegrees(want - rig.slideYaw) * Math.min(1, dt * 8);
+                bodyYaw = rig.slideYaw;
+            } else if (!gui) rig.slideYaw = bodyYaw;
+        }
         // flying, it holds a steady line: the way it's heading, smoothed (not every twitch of the view)
         float flyBeat = 0;
         if (move == FLY) { flyBeat = flight(rig, p, dt, dx, dy, dz, pt, real && !gui); bodyYaw = rig.headS; }
@@ -366,16 +423,50 @@ public final class SkullRenderer {
 
         float dropPx = 0;
         if (!gui) rig.climbK += ((move == CLIMB ? 1 : 0) - rig.climbK) * Math.min(1, dt * 6);
-        if (move == CLIMB) {
-            // up the wall on all fours, the claws out: each hand and foot grabs, holds while it pulls, lets go and reaches
-            if (!gui) rig.climbCyc += dt * (float) Mth.clamp(Math.abs(dy) * 20 / 2.5, 0, 3);
+        boolean sliding = move == CLIMB && dy < -0.04 && !com.breachprotocol.client.SuperFlight.wallRunning(p);
+        if (!gui) rig.slideK += ((sliding ? 1 : 0) - rig.slideK) * Math.min(1, dt * 7);
+        if (move == CLIMB && !sliding) {
+            // up the wall on all fours, the claws out: each hand and foot grabs, holds while it pulls, lets go and
+            // reaches; holding still, it stays put, and turns to look where you look, letting go with the hand on that
+            // side to see round
+            if (!gui && dy > 0.01) rig.climbCyc += dt * (float) Mth.clamp(dy * 20 / 2.5, 0.4, 3);
             dropPx = prowl(m, rig.climbCyc);
+            float look = Mth.clamp(net, -1.2F, 1.2F);
+            m.chest.ry -= look * 0.45F; m.neck.ry = -look * 0.3F; m.head.ry = -look * 0.55F;
+            if (Math.abs(look) > 0.7F) {
+                SkullModel.Arm free = look > 0 ? B : A;
+                float k2 = Math.min(1, (Math.abs(look) - 0.7F) / 0.4F);
+                lr(free.upper, -0.2F, 0, free.side * 1.2F, k2); lr(free.fore, -0.7F, 0, 0, k2);
+            }
             wingO = 0; beat = 0; lift = 0;
         }
+        if (sliding) {
+            // sliding down the wall like a hero: turned out from it, one hand and one foot on it (claws dragging),
+            // the other arm out, looking down where it's going, wings a little open
+            float sk = rig.slideK * rig.slideK * (3 - 2 * rig.slideK);
+            int sd = rig.slideSide;
+            SkullModel.Arm wa = sd > 0 ? A : B, oa = wa == A ? B : A;
+            SkullModel.Leg wl = sd > 0 ? L : R, ol = wl == L ? R : L;
+            lr(spine, 0.3F, 0, 0, sk); lr(chest, 0.2F, sd * -0.25F, 0, sk); lr(neck, 0.35F, sd * -0.2F, 0, sk); lr(head, 0.45F, sd * -0.25F, 0, sk);
+            lr(wa.upper, 2.6F, 0, wa.side * 0.45F, sk); lr(wa.fore, -0.25F, 0, 0, sk);
+            lr(oa.upper, -0.5F, 0, oa.side * -1.0F, sk); lr(oa.fore, -0.6F, 0, 0, sk);
+            lr(wl.thigh, 0.75F, 0, wl.side * -0.35F, sk); lr(wl.shin, 1.1F, 0, 0, sk); lr(wl.foot, -1.2F, 0, 0, sk);
+            lr(ol.thigh, -0.45F, 0, ol.side * -0.08F, sk); lr(ol.shin, 0.7F, 0, 0, sk); lr(ol.foot, -0.25F, 0, 0, sk);
+            wingO = 0.35F; beat = 0; lift = 0;
+            // sparks off the dragging claws
+            if (real && !gui && p.level().random.nextInt(2) == 0) {
+                Vec3 wd = wallDir(p);
+                if (wd != null) {
+                    double hy = p.getY() + p.getBbHeight() * 0.85;
+                    p.level().addParticle(ParticleTypes.CRIT, p.getX() + wd.x * p.getBbWidth() * 0.55, hy, p.getZ() + wd.z * p.getBbWidth() * 0.55, -wd.x * 0.1, 0.15, -wd.z * 0.1);
+                }
+            }
+        }
+        if (!sliding && !gui) rig.slideSide = net >= 0 ? 1 : -1;
         for (int i = 0; i < 2; i++) {
             SkullModel.Arm ar = m.arms[i];
             float u = ((rig.climbCyc + (i == 0 ? 0.25F : 0.75F)) % 1 + 1) % 1;
-            boolean grip = u < 0.62F;
+            boolean grip = u < 0.62F || dy <= 0.01;
             float ck = rig.climbK;
             ar.claws.sx = ar.claws.sy = ar.claws.sz = ck;
             ar.claws.rx = grip ? 0.9F : 0.1F;
@@ -420,7 +511,10 @@ public final class SkullRenderer {
         float S = 0.85F / 16F * scale / 1.75F;
         Map<Node, Matrix4f> mats = new IdentityHashMap<>();
         Matrix4f rootM = new Matrix4f();
-        if (move == CLIMB) {
+        if (move == CLIMB && rig.slideK > 0.5F) {
+            // sliding: upright, its back half to the wall (the reaching hand and the bent leg on it)
+            rootM.translate(0, 0, 0);
+        } else if (move == CLIMB) {
             // laid against the wall, belly to it, head up: the wall is the ground it crawls on
             float w = p.getBbWidth() / 2F / S;
             rootM.translate(0, 0.35F * p.getBbHeight() / S, w).rotateX(-Mth.HALF_PI).translate(0, -dropPx, 0);

@@ -75,6 +75,7 @@ public final class PhoneActions {
                     String[] pa = action.split(":");
                     if (pa.length < 2) { }
                     else if (pa[1].equals("fly") || pa[1].equals("run")) com.breachprotocol.career.Flight.action(p, pa);
+                    else if (pa[1].equals("climb") && pa.length >= 3) com.breachprotocol.career.SkullKing.climb(p, pa[2].equals("1"));
                     else if (pa[1].equals("auto")) com.breachprotocol.career.Powers.setAuto(p, pa);
                     else if (pa[1].equals("mode") || pa[1].equals("type") || pa[1].equals("player")) com.breachprotocol.career.Targets.action(p, action);
                     else if (pa.length == 3) try { com.breachprotocol.career.Powers.cast(p, pa[1], Integer.parseInt(pa[2])); } catch (NumberFormatException ignored) {}

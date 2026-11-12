@@ -36,6 +36,9 @@ public final class FlightState {
     public static final Set<Integer> EYES = ConcurrentHashMap.newKeySet();
     /** Who has taken SCP-Ω's other shape, the Skull King: {state (30 changing, 31 changed, 32 changing back), the game time it began}. */
     public static final java.util.Map<Integer, long[]> SKULL = new ConcurrentHashMap<>();
+    /** Client: who's on a wall (others, as the server says; yourself, localClimb). */
+    public static final Set<Integer> CLIMBERS = ConcurrentHashMap.newKeySet();
+    public static volatile boolean localClimb;
 
     /** Is this player wholly in True Form (the Skull King)? Either side. */
     public static boolean trueForm(Player p) {
@@ -45,12 +48,15 @@ public final class FlightState {
         return s != null && (s[0] == 31 || s[0] == 30 && p.level().getGameTime() - s[1] >= 70);
     }
 
-    /**
-     * In True Form, holding crouch against a wall, it takes hold and climbs (walk into it to go up; just crouch to
-     * cling); without crouch, a wall's only a wall. It keeps hold until its feet are over the top.
-     */
+    /** On a wall (it took hold with W and crouch), and the wall's still there. */
     public static boolean clinging(Player p) {
-        if (!p.isShiftKeyDown() || p.getAbilities().flying || p.isSpectator() || p.isPassenger() || p.isInWater() || !trueForm(p)) return false;
+        boolean on = p.level().isClientSide ? (p.getUUID().equals(localId) ? localClimb : CLIMBERS.contains(p.getId())) : false;
+        return on && wallBeside(p);
+    }
+
+    /** In True Form, beside something solid it could take hold of (above its feet), not flying. */
+    public static boolean wallBeside(Player p) {
+        if (p.getAbilities().flying || p.isSpectator() || p.isPassenger() || p.isInWater() || !trueForm(p)) return false;
         net.minecraft.world.phys.AABB bb = p.getBoundingBox();
         bb = new net.minecraft.world.phys.AABB(bb.minX - 0.12, bb.minY + 0.05, bb.minZ - 0.12, bb.maxX + 0.12, bb.maxY - 0.1, bb.maxZ + 0.12);
         return !p.level().noCollision(p, bb);

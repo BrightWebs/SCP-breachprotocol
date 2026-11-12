@@ -37,6 +37,8 @@ public final class ModNetwork {
                     int id = payload.entity();
                     if (payload.state() == 10) { com.breachprotocol.world.FlightState.autoOn = true; com.breachprotocol.world.FlightState.autoTarget = id; return; }
                     if (payload.state() >= 20 && payload.state() <= 24) { com.breachprotocol.world.FlightState.HEAT.put(id, payload.state() - 20); return; }
+                    if (payload.state() == 40) { com.breachprotocol.world.FlightState.CLIMBERS.add(id); return; }
+                    if (payload.state() == 41) { com.breachprotocol.world.FlightState.CLIMBERS.remove(id); return; }
                     if (payload.state() >= 30 && payload.state() <= 33) {
                         long now = ctx.player() == null ? 0 : ctx.player().level().getGameTime();
                         long[] was = com.breachprotocol.world.FlightState.SKULL.get(id);

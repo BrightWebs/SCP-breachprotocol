@@ -238,6 +238,26 @@ public final class SkullKing {
         event.setNewSize(event.getNewSize().withEyeHeight(0.79F * p.getScale()));
     }
 
+    /** Who's on a wall (their client says so; the server keeps them from taking a fall for it). */
+    private static final Map<UUID, Long> CLIMBING = new HashMap<>();
+
+    public static void climb(ServerPlayer p, boolean on) {
+        if (on && !whole(p)) return;
+        if (on) CLIMBING.put(p.getUUID(), Long.MAX_VALUE); else CLIMBING.computeIfPresent(p.getUUID(), (k, v) -> p.serverLevel().getGameTime() + 20);
+        PacketDistributor.sendToPlayersTrackingEntity(p, new FlightPosePayload(p.getId(), on ? 40 : 41));
+    }
+
+    @SubscribeEvent
+    public static void climbers(ServerTickEvent.Post event) {
+        if (CLIMBING.isEmpty()) return;
+        for (Iterator<Map.Entry<UUID, Long>> it = CLIMBING.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<UUID, Long> en = it.next();
+            ServerPlayer p = event.getServer().getPlayerList().getPlayer(en.getKey());
+            if (p == null || p.serverLevel().getGameTime() > en.getValue()) { it.remove(); continue; }
+            p.resetFallDistance();
+        }
+    }
+
     // ================================================================== staying changed
 
     @SubscribeEvent
