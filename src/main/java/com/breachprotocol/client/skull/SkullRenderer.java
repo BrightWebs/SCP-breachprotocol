@@ -73,7 +73,7 @@ public final class SkullRenderer {
         // the tail: each vertebra's direction in the world (turn, tilt) and how fast it's swinging
         final float[] tY = new float[SkullModel.TAIL], tP = new float[SkullModel.TAIL], tVY = new float[SkullModel.TAIL], tVP = new float[SkullModel.TAIL];
         boolean tailSet;
-        float yawAcc, lastYaw, drag, trailP, acc;
+        float yawAcc, lastYaw, drag, trailP, acc, sitK, cyc;
     }
 
     private static final Map<Integer, Rig> RIGS = new HashMap<>();
@@ -150,14 +150,16 @@ public final class SkullRenderer {
 
     // ================================================================== moving it
 
-    private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3;
+    private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3, PROWL = 4;
 
     private static void draw(Player p, Rig rig, float pt, PoseStack ps, MultiBufferSource buf, int light, float reveal, boolean real, boolean fp) {
         Minecraft mc = Minecraft.getInstance();
         SkullModel m = rig.model;
         float t = (p.tickCount + pt) / 20F;
-        float dt = rig.lastFrame < 0 ? 0.05F : Mth.clamp(t - rig.lastT, 0, 0.2F);
-        rig.lastT = t; rig.lastFrame = 1;
+        // drawn in a screen (the inventory's little figure, turned to face you): show it, but don't let it move the tail
+        boolean gui = mc.screen != null && pt == 1.0F && !fp;
+        float dt = gui ? 0 : rig.lastFrame < 0 ? 0.05F : Mth.clamp(t - rig.lastT, 0, 0.2F);
+        if (!gui) { rig.lastT = t; rig.lastFrame = 1; }
 
         double dx = p.getX() - p.xo, dy = p.getY() - p.yo, dz = p.getZ() - p.zo;
         double h = Math.sqrt(dx * dx + dz * dz);
@@ -166,6 +168,11 @@ public final class SkullRenderer {
         boolean flying = st == 1 || !p.onGround() && p.getAbilities().flying && !p.isInWater();
         // from the third running gear up (a block and a half a tick), down on all fours
         int move = lying ? FLY : flying ? HOVER : p.onGround() && (h > 1.2 || st == 6) ? GALLOP : IDLE;
+        // crouching: moving, a lion's prowl; still, it sits down
+        boolean crouch = p.isCrouching() && p.onGround() && move == IDLE;
+        if (crouch && h > 0.015) move = PROWL;
+        if (!gui) rig.sitK += ((crouch && move != PROWL ? 1 : 0) - rig.sitK) * Math.min(1, dt * 2.2F);
+        float sitK = rig.sitK;
 
         float bodyYaw = move == FLY ? Mth.rotLerp(pt, p.yRotO, p.getYRot()) : Mth.rotLerp(pt, p.yBodyRotO, p.yBodyRot);
         float headYaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
@@ -259,7 +266,7 @@ public final class SkullRenderer {
         }
 
         // ---- the head follows where they look
-        neck.ry = net * 0.3F; head.ry += net * 0.7F;
+        neck.ry = -net * 0.3F; head.ry -= net * 0.7F;
         if (move != FLY) { neck.rx += pitch * 0.3F; head.rx += pitch * 0.7F; } else head.rx += pitch * 0.4F;
 
         // ---- hands: fists one after the other, a swung weapon, a drawn bow, a raised shield, eating
@@ -302,6 +309,25 @@ public final class SkullRenderer {
             }
         }
 
+        float dropPx = 0;
+        if (move == PROWL) {
+            if (!gui) rig.cyc += dt * 0.85F;
+            dropPx = prowl(m, rig.cyc);
+            wingO = 0; beat = 0; lift = 0;
+        }
+        if (sitK > 0.002F) {
+            // sitting down cross-legged, a fist on the knee, the jaw on the other fist; settling into it, and out
+            float sk = sitK * sitK * (3 - 2 * sitK);
+            lr(spine, 0.3F, 0, 0, sk); lr(chest, 0.2F + br * 0.015F, -0.12F, 0, sk); lr(neck, 0, 0, 0, sk); lr(head, -0.47F + Mth.sin(t * 0.5F) * 0.015F, 0.06F, 0, sk);
+            lr(L.thigh, -1.753F, 0, 0.376F, sk); lr(L.shin, -0.198F, 0.138F, -2.274F, sk); lr(L.foot, 1.826F, 0.663F, -0.531F, sk);
+            lr(R.thigh, -1.857F, 0, -0.382F, sk); lr(R.shin, 0.049F, 0, 1.897F, sk); lr(R.foot, 1.68F, -0.305F, 0.251F, sk);
+            lr(A.upper, 1.113F, -0.886F, 1.866F, sk); lr(A.fore, -1.973F, 0, 0, sk);
+            lr(B.upper, -1.072F, 1.013F, 0, sk); lr(B.fore, -1.882F, 0, 0, sk);
+            m.jaw.rx += (0.05F - m.jaw.rx) * sk;
+            dropPx = 21 * sk; lift *= 1 - sk;
+            if (sk > 0.5F) { wingO = 0; beat = 0; }
+        }
+
         // ---- the wings
         float k = 1 - (float) Math.pow(1 - 0.12, dt * 60);
         rig.open += (wingO - rig.open) * k;
@@ -313,9 +339,9 @@ public final class SkullRenderer {
         m.diamond.ry = Mth.sin(t * 0.8F) * 0.25F;
 
         // ---- the tail, by its physics
-        float restP = move == FLY ? -1.35F : move == GALLOP ? -0.35F : -0.7F;
-        float walkSway = (amt > 0.15F || move == GALLOP ? (move == GALLOP ? 0.14F : 0.1F * amt) * Mth.sin(ph * 0.5F) : 0) + Mth.sin(t * 0.9F) * 0.04F;
-        tail(rig, dt, -bodyYaw * Mth.DEG_TO_RAD, move == FLY ? rigTilt : 0, restP, walkSway, dx, dy, dz, t);
+        float restP = move == FLY ? -1.35F : move == GALLOP ? -0.35F : move == PROWL ? -0.55F : -0.7F * (1 - sitK) - 0.3F * sitK;
+        float walkSway = move == PROWL ? Mth.sin(t * 1.6F) * 0.22F : (1 - sitK) * (amt > 0.15F || move == GALLOP ? (move == GALLOP ? 0.14F : 0.1F * amt) * Mth.sin(ph * 0.5F) : 0) + Mth.sin(t * 0.9F) * 0.04F;
+        tail(rig, dt, -bodyYaw * Mth.DEG_TO_RAD, move == FLY ? rigTilt : 0, restP, walkSway, dx, dy, dz, t, sitK);
 
         // ================================================================== laying it out
         float scale = p.getScale();
@@ -325,7 +351,7 @@ public final class SkullRenderer {
         if (move == FLY) {
             // about the middle of the body, at the middle of the (low) box the flier has
             rootM.translate(0, p.getBbHeight() / 2F / S, 0).rotateX(rigTilt).translate(0, -30 + rigLiftPx, 0);
-        } else rootM.translate(0, lift + rigLiftPx, 0);
+        } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
         if (move == GALLOP) {
             // stand on whichever's lowest, fist or foot
@@ -345,7 +371,7 @@ public final class SkullRenderer {
             // in first person you look out of its head: the body's laid out so the skull's where your eyes are
             Vector3f ho = E.transformPosition(mats.get(m.head).transformPosition(new Vector3f()));
             Vector3f up = E.transformDirection(new Vector3f(0, 6.9F, 3));
-            shift.set(-ho.x - up.x, p.getEyeHeight() - ho.y - up.y, -ho.z - up.z);
+            shift.set(-ho.x - up.x, (p.getEyeHeight() - ho.y - up.y) * (move == PROWL ? 0 : 1 - sitK), -ho.z - up.z);
             ps.pushPose();
             ps.translate(shift.x, shift.y, shift.z);
         }
@@ -412,7 +438,7 @@ public final class SkullRenderer {
             hand(p, main, mainItem, main == A, mats, base, E, buf, light);
             hand(p, off, offItem, off == A, mats, base, E, buf, light);
         }
-        if (real) {
+        if (real && !gui) {
             if (sockets[0] != null && sockets[1] != null) {
                 Vec3 at = new Vec3(Mth.lerp(pt, p.xOld, p.getX()), Mth.lerp(pt, p.yOld, p.getY()), Mth.lerp(pt, p.zOld, p.getZ()));
                 SOCKETS.put(p.getId(), new Vec3[]{at.add(sockets[0]), at.add(sockets[1])});
@@ -427,6 +453,67 @@ public final class SkullRenderer {
         Matrix4f m = new Matrix4f(parent).translate(n.x, n.y, n.z).rotateXYZ(n.rx, n.ry, n.rz).scale(n.sx, n.sy, n.sz);
         out.put(n, m);
         for (Node k : n.kids) walk(k, m, out);
+    }
+
+    private static void lr(Node n, float x, float y, float z, float k) { n.rx += (x - n.rx) * k; n.ry += (y - n.ry) * k; n.rz += (z - n.rz) * k; }
+
+    /** Two bones from base to target, in the body's side plane (y up, z forward); angles from straight down, + swung back. */
+    private static float[] ik2(float by, float bz, float ty, float tz, float L1, float L2, float parentPitch, boolean kneeForward) {
+        float dy = ty - by, dz = tz - bz;
+        float d = (float) Math.hypot(dy, dz);
+        d = Mth.clamp(d, Math.abs(L1 - L2) + 0.05F, L1 + L2 - 0.05F);
+        float at = (float) Math.atan2(-dz, -dy);
+        float b = (float) Math.acos(Mth.clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1));
+        float bend = Mth.PI - (float) Math.acos(Mth.clamp((L1 * L1 + L2 * L2 - d * d) / (2 * L1 * L2), -1, 1));
+        float a1 = kneeForward ? at - b : at + b, a2 = kneeForward ? a1 + bend : a1 - bend;
+        return new float[]{a1 - parentPitch, a2 - a1, a2};
+    }
+
+    /** Where a foot is through its step (u 0..1): {along the stride, off the ground}. Planted, then swung forward in an arc. */
+    private static float[] step(float u, float stride, float lift, float duty) {
+        if (u < duty) return new float[]{stride * (0.5F - u / duty), 0};
+        float k = (u - duty) / (1 - duty), e = k * k * (3 - 2 * k);
+        return new float[]{stride * (-0.5F + e), lift * Mth.sin(Mth.PI * k)};
+    }
+
+    /**
+     * Crouching, moving: a lion's walk. The back long and level, the head low; every foot set down, carried back
+     * under the body, lifted and swung forward (back left, front left, back right, front right), the legs worked out
+     * from where the feet are: back knees forward, feet set behind the hips, on its toes; front legs straight under
+     * the shoulders when they bear weight. Returns how far the body's lowered (pixels).
+     */
+    private static float prowl(SkullModel m, float cyc) {
+        float DROP = 2.5F, duty = 0.62F;
+        float bob = Mth.sin(cyc * Mth.PI * 4) * 0.35F;
+        float ground = DROP - bob;
+        m.spine.rot(0.98 + Mth.sin(cyc * Mth.PI * 4 + 0.6F) * 0.03, 0, 0);
+        m.chest.rot(0.42, Mth.sin(cyc * Mth.PI * 2) * 0.06, Mth.sin(cyc * Mth.PI * 2) * 0.03);
+        m.neck.rot(-0.95, 0, 0);
+        m.head.rot(-0.2 + Mth.sin(cyc * Mth.PI * 4) * 0.02, -Mth.sin(cyc * Mth.PI * 2) * 0.07, 0);
+        for (int i = 0; i < 2; i++) {
+            SkullModel.Leg lg = m.legs[i];
+            float u = ((cyc + (i == 0 ? 0 : 0.5F)) % 1 + 1) % 1;
+            float[] f = step(u, 16, 5, duty);
+            float[] r = ik2(lg.hip.y, lg.hip.z, ground + 5.2F + f[1], -4.5F + f[0], 10, 10, 0, true);
+            lg.thigh.rot(r[0], 0, lg.side * -0.06);
+            lg.shin.rot(r[1], 0, 0);
+            float toe = u < duty ? 0.35F : 0.35F + 0.5F * Mth.sin(Mth.PI * (u - duty) / (1 - duty));
+            lg.foot.rot(toe - r[2], 0, 0);
+        }
+        // where the shoulders are, now the chest's tipped forward
+        Map<Node, Matrix4f> at = new IdentityHashMap<>();
+        walk(m.root, new Matrix4f(), at);
+        float pitch = m.spine.rx + m.chest.rx;
+        for (int i = 0; i < 2; i++) {
+            SkullModel.Arm ar = m.arms[i];
+            float u = ((cyc + (i == 0 ? 0.25F : 0.75F)) % 1 + 1) % 1;
+            float[] f = step(u, 16, 5.5F, duty);
+            Vector3f sh = at.get(ar.upper).transformPosition(new Vector3f());
+            float[] r = ik2(sh.y, sh.z, ground + f[1] + 0.3F, sh.z + 1 + f[0], 14, 20, pitch, false);
+            ar.upper.rot(r[0], 0, ar.side * -0.06);
+            ar.fore.rot(r[1], 0, 0);
+        }
+        return DROP - bob;
     }
 
     /** Eases v to a stop at lo, instead of a hard wall. */
@@ -465,7 +552,7 @@ public final class SkullRenderer {
      * of bouncing off it, and anything smaller than a hair's movement is let rest. Moving fast it streams out level
      * behind (climbing it hangs, diving it lifts). It stays behind the body, clear of the back and legs.
      */
-    private static void tail(Rig rig, float dt, float yawNow, float pitch0, float restP, float sway, double dx, double dy, double dz, float t) {
+    private static void tail(Rig rig, float dt, float yawNow, float pitch0, float restP, float sway, double dx, double dy, double dz, float t, float sitK) {
         int TN = SkullModel.TAIL;
         if (!rig.tailSet) { rig.yawAcc = yawNow; rig.lastYaw = yawNow; }
         rig.yawAcc += wrap(yawNow - rig.lastYaw);
@@ -491,8 +578,9 @@ public final class SkullRenderer {
             for (int i = 0; i < TN; i++) {
                 float k = i / (float) TN;
                 float K = 140 - 100 * k, D = 2 * (float) Math.sqrt(K) * 0.7F;   // a follow-through, not a wobble
-                float wantY = parentY + (i == 0 ? sway : sway * 0.12F * Mth.sin(t * 2 - i * 0.45F));
-                float wantP = parentP + (i == 0 ? restP : 0.05F);
+                // sitting, it curls round beside it to the front, like a cat's, the tip lifting and flicking
+                float wantY = parentY + 0.17F * sitK + (i == 0 ? sway : sway * 0.12F * Mth.sin(t * 2 - i * 0.45F)) + (i == TN - 1 ? Mth.sin(t * 1.3F) * 0.25F * sitK : 0);
+                float wantP = parentP + (i == 0 ? restP : i > 13 ? 0.05F + 0.12F * sitK : 0.05F * (1 - sitK));
                 float wd = rig.drag * (0.5F + 0.5F * k);
                 if (wd > 0) wantP += (pitch0 + rig.trailP - wantP) * wd * (i == 0 ? 0.6F : 0.35F);
                 rig.tVY[i] += (K * (wantY - rig.tY[i]) - D * rig.tVY[i]) * STEP; rig.tY[i] += rig.tVY[i] * STEP;
@@ -505,7 +593,8 @@ public final class SkullRenderer {
                 float lo = i == 0 ? Math.min(restP, -0.05F) - 0.5F : -0.28F, hi = i == 0 ? 0.1F : 0.3F;
                 if (rp < lo || rp > hi) { rig.tP[i] = parentP + Mth.clamp(rp, lo, hi); rig.tVP[i] *= 0.3F; }
                 float wy = rig.tY[i] - yaw0;
-                if (Math.abs(wy) > 1.0F) { rig.tY[i] = yaw0 + Math.copySign(1.0F, wy); rig.tVY[i] *= 0.3F; }
+                float wl = 1.0F + 2.4F * sitK;
+                if (Math.abs(wy) > wl) { rig.tY[i] = yaw0 + Math.copySign(wl, wy); rig.tVY[i] *= 0.3F; }
                 if (rig.tP[i] > pitch0 + 0.45F) { rig.tP[i] = pitch0 + 0.45F; rig.tVP[i] = Math.min(0, rig.tVP[i]); }
                 // at rest: rest
                 if (Math.abs(rig.tVY[i]) < 0.002F && Math.abs(wantY - rig.tY[i]) < 0.001F) rig.tVY[i] = 0;
