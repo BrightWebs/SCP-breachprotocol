@@ -30,6 +30,8 @@ public final class FlightState {
     public static volatile int autoTarget = -1;
     /** How it's going about it: 0 chase, 1 run straight through, 2 dive from above, 3 run circles (a tornado). */
     public static volatile int autoTactic;
+    /** Who has heat vision on, and at what strength (0..4: 5%, 15%, 50%, 80%, 100%). */
+    public static final java.util.Map<Integer, Integer> HEAT = new ConcurrentHashMap<>();
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();

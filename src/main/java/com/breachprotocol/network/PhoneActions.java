@@ -61,6 +61,7 @@ public final class PhoneActions {
                 else if (action.startsWith("guide_ent:")) { try { com.breachprotocol.career.BreachMissions.guideEntity(p, Integer.parseInt(action.substring(10)), "Rift"); } catch (NumberFormatException ignored) {} }
                 else if (action.startsWith("wp:")) com.breachprotocol.career.Waypoints.action(p, action.substring(3));
                 else if (action.startsWith("shape:")) com.breachprotocol.career.Shapeshift.action(p, action.substring(6));
+                else if (action.startsWith("heat:")) com.breachprotocol.career.HeatVision.action(p, action.substring(5));
                 else if (action.startsWith("auto:")) com.breachprotocol.career.Autopilot.action(p, action.substring(5));
                 else if (action.startsWith("fac:")) com.breachprotocol.career.FacilityReview.action(p, action.substring(4));
                 else if (action.startsWith("vault:")) com.breachprotocol.career.Vault.action(p, action.substring(6));
