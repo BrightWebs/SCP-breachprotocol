@@ -16,6 +16,14 @@
   button:hover{border-color:#c79bff}
   .hint{position:fixed;right:16px;bottom:14px;font-size:11px;color:#8a76a8}
   .parts{font-size:11px;color:#a894c4;margin-top:8px;line-height:1.6}
+  .edit{position:fixed;right:16px;top:16px;width:270px;background:rgba(18,8,26,.88);border:1px solid #4a2a66;padding:12px 14px;border-radius:6px;font-size:12px}
+  .edit h2{font-size:12px;letter-spacing:.14em;margin:0 0 8px;color:#f0d8ff}
+  .edit .r{display:grid;grid-template-columns:62px 30px 30px 1fr 30px 30px;gap:4px;align-items:center;margin:3px 0}
+  .edit .r b{font-weight:normal;color:#bca8d8}
+  .edit .v{text-align:center;color:#fff;font-variant-numeric:tabular-nums}
+  .edit button{padding:4px 0}
+  .edit textarea{width:100%;height:58px;background:#0e0614;color:#e8dcff;border:1px solid #4a2a66;font:11px ui-monospace,monospace;margin-top:8px;resize:none}
+  .edit .tabs{display:flex;gap:6px;margin-bottom:8px}
 </style>
 </head>
 <body>
@@ -41,6 +49,13 @@
     <button data-i="shield">Sword + shield</button><button data-i="phone">Phone</button>
   </div>
   <div class="parts">Stand, walk, run, swing, draw a bow, raise a shield, eat; hold a sword, pickaxe, axe, torch, block, bow, shield or your phone (items at 1.3× to suit the fists) · Horned skull, tusked jaw · glowing gold crown: violet diamond at the front, red stones either side, fire at its heart · ribcage round an ember heart · bone shoulders · blocky fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
+</div>
+<div class="edit" id="edit">
+  <h2>PLACE THE ITEM</h2>
+  <div class="tabs"><button id="eMain" class="on">In the main hand</button><button id="eOff">Shield (off hand)</button></div>
+  <div id="eRows"></div>
+  <div class="row"><button id="eReset">Reset this item</button><button id="eCopy">Copy numbers</button></div>
+  <textarea id="eOut" readonly></textarea>
 </div>
 <div class="hint">drag to turn · scroll to zoom · Minecraft scale: 1 block = 16 px</div>
 
@@ -399,6 +414,14 @@ const sk=mat(tex(4,4,g=>{g.fillStyle='#c8946a';g.fillRect(0,0,4,4)})),sh=mat(tex
 box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,sh);box(steve,4,12,4,-6,18,0,sh);box(steve,4,12,4,2,6,0,pa);box(steve,4,12,4,-2,6,0,pa);
 
 
+// ---------- placement adjustments, per item (your own, from the panel): moved in pixels, turned in degrees
+let OFFS={};try{OFFS=JSON.parse(localStorage.getItem('skullking-offsets')||'{}')}catch(e){OFFS={}}
+const ZERO={px:0,py:0,pz:0,rx:0,ry:0,rz:0};
+function off(id){return Object.assign({},ZERO,OFFS[id]||{})}
+function saveOffs(){try{localStorage.setItem('skullking-offsets',JSON.stringify(OFFS))}catch(e){}}
+function applyOff(obj,id,basePos,baseQ){const o=off(id);
+  obj.quaternion.copy(baseQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rx*Math.PI/180,o.ry*Math.PI/180,o.rz*Math.PI/180)));
+  obj.position.copy(basePos).add(new THREE.Vector3(o.px,o.py,o.pz))}
 // ---------- what's in its hands, and how it moves
 let move='idle',held='sword',heldR=null,heldL=null;
 const ITEM_SCALE=1.3;
@@ -424,6 +447,8 @@ function hold(id){
     heldR.scale.setScalar(main==='block'?S*0.6:S);
     const h=handle.clone().multiplyScalar(main==='block'?S*0.6:S).applyQuaternion(heldR.quaternion);
     heldR.position.copy(h.negate());
+    heldR.userData={id:main,basePos:heldR.position.clone(),baseQ:heldR.quaternion.clone()};
+    applyOff(heldR,main,heldR.userData.basePos,heldR.userData.baseQ);
     armR.grip.add(heldR);
   }
   if(id==='shield'){heldL=itemModel('shield');heldL.scale.setScalar(ITEM_SCALE);armL.grip.add(heldL)}
@@ -431,7 +456,7 @@ function hold(id){
 hold('sword');
 document.querySelectorAll('#moves button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#moves button').forEach(x=>x.classList.remove('on'));b.classList.add('on');move=b.dataset.m;
   if(move==='bow'){hold('bow');setOn('#items','bow')} if(move==='block'){hold('shield');setOn('#items','shield')} }));
-document.querySelectorAll('#items button').forEach(b=>b.addEventListener('click',()=>{setOn('#items',b.dataset.i);held=b.dataset.i;hold(held)}));
+document.querySelectorAll('#items button').forEach(b=>b.addEventListener('click',()=>{setOn('#items',b.dataset.i);held=b.dataset.i;hold(held);setTimeout(drawRows,0)}));
 function setOn(sel,v){document.querySelectorAll(sel+' button').forEach(x=>x.classList.toggle('on',x.dataset.i===v||x.dataset.m===v))}
 
 // one step of the pose, every frame
@@ -463,9 +488,28 @@ function animate(t){
   if(move==='eat'){B.upper.rotation.set(-1.3+Math.sin(t*14)*0.08,-0.5,0);B.fore.rotation.x=-1.1}
   // the shield stays upright and faces forward, held out in front of the fist, whatever the arm's doing
   if(heldL){king.updateMatrixWorld(true);const gq=new THREE.Quaternion();armL.grip.getWorldQuaternion(gq);const kq=new THREE.Quaternion();king.getWorldQuaternion(kq);
-    heldL.quaternion.copy(gq.invert().multiply(kq));heldL.position.copy(new THREE.Vector3(-1,2,5.5).applyQuaternion(heldL.quaternion));}
+    const bq=gq.invert().multiply(kq);applyOff(heldL,'shield',new THREE.Vector3(-1,2,5.5).applyQuaternion(bq),bq);}
   return spd;
 }
+// ---------- the placement panel
+let editing='main';
+const rows=document.getElementById('eRows');
+const AX=[['Move X','px',0.5],['Move Y','py',0.5],['Move Z','pz',0.5],['Turn X','rx',5],['Turn Y','ry',5],['Turn Z','rz',5]];
+function curId(){return editing==='shield'?'shield':(held==='shield'?'sword':held)}
+function drawRows(){rows.innerHTML='';const id=curId(),o=off(id);
+  if(id==='none'){rows.innerHTML='<p>Pick an item to place it.</p>';return}
+  for(const[label,k,st]of AX){const r=document.createElement('div');r.className='r';
+    r.innerHTML=`<b>${label}</b><button data-d="${-st*4}">«</button><button data-d="${-st}">−</button><span class="v">${o[k].toFixed(k[0]=='p'?1:0)}${k[0]=='p'?' px':'°'}</span><button data-d="${st}">+</button><button data-d="${st*4}">»</button>`;
+    r.querySelectorAll('button').forEach(b=>b.addEventListener('click',()=>{const cur=off(id);cur[k]=+(cur[k]+(+b.dataset.d)).toFixed(2);OFFS[id]=cur;saveOffs();refresh()}));
+    rows.appendChild(r)}
+  document.getElementById('eOut').value=Object.keys(OFFS).filter(k=>OFFS[k]).map(k=>{const o=off(k);return `${k}: move ${o.px} ${o.py} ${o.pz} px, turn ${o.rx} ${o.ry} ${o.rz} deg`}).join('\n')||'(nothing moved yet)';
+}
+function refresh(){if(heldR&&heldR.userData.id)applyOff(heldR,heldR.userData.id,heldR.userData.basePos,heldR.userData.baseQ);drawRows()}
+document.getElementById('eMain').addEventListener('click',e=>{editing='main';e.target.classList.add('on');document.getElementById('eOff').classList.remove('on');drawRows()});
+document.getElementById('eOff').addEventListener('click',e=>{editing='shield';e.target.classList.add('on');document.getElementById('eMain').classList.remove('on');if(held!=='shield'){hold('shield');held='shield';setOn('#items','shield')}drawRows()});
+document.getElementById('eReset').addEventListener('click',()=>{delete OFFS[curId()];saveOffs();refresh()});
+document.getElementById('eCopy').addEventListener('click',()=>{const t=document.getElementById('eOut');t.select();try{navigator.clipboard.writeText(t.value).catch(()=>{})}catch(e){}});
+drawRows();
 // ---------- controls
 let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true,spread=true,openNow=1;
 const shot=/^#shot-(\d)$/.exec(location.hash);if(shot&&+shot[1]>=6){window.FEET=true}if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2,0.4,1.4][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}

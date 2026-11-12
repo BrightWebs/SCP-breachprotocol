@@ -13,7 +13,7 @@ jobs:
       - name: Shots
         run: |
           mkdir -p shots
-          for h in pose-idle-sword pose-run-none pose-swing-sword pose-bow-bow pose-block-shield pose-walk-torch pose-idle-block; do
+          for h in pose-idle-sword pose-block-shield; do
             google-chrome --headless=new --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=1000,900 \
               --virtual-time-budget=6000 --screenshot=shots/$h.png "file://$PWD/preview/index.html#$h" || true
           done
