@@ -74,6 +74,7 @@ public final class Powers {
             new Power("reveal", "Reveal", "The registry", "◎", 0xC8A0FF, "Every anomaly within reach glows through walls for thirty seconds.", 1, 20 * 20, 16, 128, 96, Aim.AROUND),
             new Power("blink", "Blink", "SCP-173, the Sculpture", "✸", 0xC0C0C0, "Step to wherever you're looking. You don't cross the space between.", 1, 20 * 6, 8, 64, 32, Aim.LOOK_POINT),
             new Power("still", "Still", "The Administrator", "☮", 0x7FE0A0, "Everything around you that means you harm calms down, for good.", 1, 20 * 15, 8, 48, 24, Aim.AROUND),
+            new Power("skullking", "The Skull King", "SCP-Ω", "♛", 0xB040FF, "Tap: become SCP-Ω's other shape. You come apart into bone from the feet up, growing as you go, crowned and burning, winged, and when the change is done you roar: everything hostile is thrown back and every creature that hears it runs in fear. Your heat vision burns violet from its eye sockets. Tap again to be a man.", 2, 0, 0, 0, 0, Aim.TOGGLE),
             new Power("judgement", "Judgement", "SCP-Ω", "☠", 0xFF4040, "Every hostile creature within reach dies.", 2, 20 * 60, 8, 48, 24, Aim.AROUND),
             new Power("call", "Call Secretary", "Your office", "☎", 0xF0A8C8, "She hurries to you on foot, taking the lift.", 1, 20 * 30, 0, 0, 0, Aim.SELF),
             new Power("summon", "Summon Secretary", "Your office", "✉", 0xF0A8C8, "She's at your side at once.", 1, 20 * 60, 0, 0, 0, Aim.SELF),

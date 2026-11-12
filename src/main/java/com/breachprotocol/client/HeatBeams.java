@@ -66,6 +66,13 @@ public final class HeatBeams {
             Vec3 neck = eye.subtract(0, 0.214, 0);
             Vec3 face = neck.add(up.scale(3 * PX)).add(dir.scale(4 * PX + 0.012));
             Vec3 eyeL = face.add(side.scale(1.5 * PX)), eyeR = face.subtract(side.scale(1.5 * PX));
+            // as the Skull King: violet, and from its eye sockets (its eyes already burn; no glow of a man's)
+            boolean king = FlightState.SKULL.containsKey(id) && com.breachprotocol.client.skull.SkullRenderer.form(p, pt) >= 0.5F;
+            Vec3[] sock = king ? com.breachprotocol.client.skull.SkullRenderer.SOCKETS.get(id) : null;
+            if (sock != null) { eyeL = sock[0]; eyeR = sock[1]; }
+            float cr = king ? 0.75F : 1F, cg = king ? 0.1F : 0.1F, cb = king ? 1F : 0.02F;      // the glow round it
+            float kr = king ? 1F : 1F, kg = king ? 0.55F : 0.55F, kb = king ? 1F : 0.35F;       // the core
+            if (king && beaming == null) continue;
             if (beaming == null) {
                 if (!me) for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
                     glow(m, vc, ey, cam, 0.03F, 1F, 0.75F, 0.6F, 1F);
@@ -83,19 +90,19 @@ public final class HeatBeams {
             float w = WIDTH[tier] * flick;
             if (!me) {
                 for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
-                    glow(m, vc, ey, cam, 0.03F, 1F, 0.75F, 0.6F, 1F);                        // the lit pixel
-                    glow(m, vc, ey, cam, 0.08F + tier * 0.015F, 1F, 0.12F, 0.05F, 0.55F);    // its bloom
+                    glow(m, vc, ey, cam, king ? 0.06F : 0.03F, 1F, king ? 0.7F : 0.75F, king ? 1F : 0.6F, 1F);                        // the lit pixel
+                    glow(m, vc, ey, cam, (king ? 0.16F : 0.08F) + tier * 0.015F, cr, cg, cb, 0.55F);    // its bloom
                 }
             }
             // in first person the beams come from just below your view, so they don't fill your sight
             Vec3 sL = me ? eye.add(dir.scale(0.6)).add(side.scale(0.12)).subtract(up.scale(0.12)) : eyeL;
             Vec3 sR = me ? eye.add(dir.scale(0.6)).subtract(side.scale(0.12)).subtract(up.scale(0.12)) : eyeR;
             for (Vec3 s : new Vec3[]{sL, sR}) {
-                beam(m, vc, s, end, cam, w * 3.2F, 1F, 0.1F, 0.02F, 0.35F);   // the glow round it
-                beam(m, vc, s, end, cam, w, 1F, 0.55F, 0.35F, 0.95F);         // the core
-                if (tier >= 3) beam(m, vc, s, end, cam, w * 0.35F, 1F, 1F, 0.9F, 1F);
+                beam(m, vc, s, end, cam, w * 3.2F, cr, cg, cb, 0.35F);   // the glow round it
+                beam(m, vc, s, end, cam, w, kr, kg, kb, 0.95F);         // the core
+                if (tier >= 3) beam(m, vc, s, end, cam, w * 0.35F, 1F, king ? 0.9F : 1F, king ? 1F : 0.9F, 1F);
             }
-            glow(m, vc, end, cam, 0.25F + tier * 0.18F, 1F, 0.3F, 0.05F, 0.8F);
+            glow(m, vc, end, cam, 0.25F + tier * 0.18F, king ? 0.8F : 1F, king ? 0.25F : 0.3F, king ? 1F : 0.05F, 0.8F);
         }
         ps.popPose();
         buf.endBatch(RenderType.lightning());

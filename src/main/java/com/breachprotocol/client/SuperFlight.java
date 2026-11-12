@@ -644,7 +644,7 @@ public final class SuperFlight {
     private static final java.util.Map<Integer, Integer> AIR = new java.util.HashMap<>();
 
     /** 0 not flying, 1 upright (hovering, drifting), 2 flat out. */
-    static int style(Player p) {
+    public static int style(Player p) {
         if (p.isFallFlying() || p.isPassenger() || p.isInWater() || p.isSleeping()) return 0;
         boolean me = p == Minecraft.getInstance().player;
         if (me ? charging : FlightState.CHARGING.contains(p.getId())) return 3;

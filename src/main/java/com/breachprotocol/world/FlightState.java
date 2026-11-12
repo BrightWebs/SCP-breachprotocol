@@ -34,6 +34,8 @@ public final class FlightState {
     public static final java.util.Map<Integer, Integer> HEAT = new ConcurrentHashMap<>();
     /** Whose eyes glow (heat vision's crouch-use), beam or no beam. */
     public static final Set<Integer> EYES = ConcurrentHashMap.newKeySet();
+    /** Who has taken SCP-Ω's other shape, the Skull King: {state (30 changing, 31 changed, 32 changing back), the game time it began}. */
+    public static final java.util.Map<Integer, long[]> SKULL = new ConcurrentHashMap<>();
 
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();

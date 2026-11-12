@@ -21,13 +21,14 @@ public class AdministratorSkill extends Skill implements io.github.manasmods.man
 
     public ResourceLocation getSkillIcon() { return ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "textures/skill/administrator.png"); }
 
-    public int getModes(ManasSkillInstance instance) { return 2; }
+    public int getModes(ManasSkillInstance instance) { return 3; }
 
-    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return mode == 0 ? 1 : 0; }
+    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return reverse ? (mode + 2) % 3 : (mode + 1) % 3; }
 
-    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "autopilot" : "heat_vision"; }
+    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "autopilot" : mode == 1 ? "heat_vision" : "skull_king"; }
 
     public Component getModeName(ManasSkillInstance instance, int mode) {
+        if (mode == 2) return Component.literal("SCP-Ω: The Skull King").withStyle(ChatFormatting.DARK_PURPLE);
         return mode == 1 ? Component.literal("Heat Vision").withStyle(ChatFormatting.RED) : Component.literal("Autopilot").withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
@@ -43,6 +44,7 @@ public class AdministratorSkill extends Skill implements io.github.manasmods.man
     /** Autopilot: use it, on or off; crouch and use it, Hunt or Guard. Heat Vision: hold it to burn (see onHeld). */
     public void onPressed(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
         if (!(e instanceof ServerPlayer p) || key < 0) return;
+        if (mode == 2) { com.breachprotocol.career.SkullKing.toggle(p); return; }   // the change, and back
         if (mode == 1) {
             if (p.isShiftKeyDown()) com.breachprotocol.career.HeatVision.eyes(p);     // crouch-use: the eyes glow (or stop)
             else com.breachprotocol.career.HeatVision.holding(p, tier(instance));
@@ -59,11 +61,11 @@ public class AdministratorSkill extends Skill implements io.github.manasmods.man
 
     /** Let go: they stop. */
     public void onRelease(ManasSkillInstance instance, LivingEntity e, int key, int mode, int held) {
-        if (e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.release(p);
+        if (mode == 1 && e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.release(p);
     }
 
     public void onHeldStop(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
-        if (e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.release(p);
+        if (mode == 1 && e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.release(p);
     }
 
     // ---------------------------------------------------------------- the heat, on Manas Reborn's choice wheel (as Spirit Envoy's spirits are)
