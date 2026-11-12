@@ -355,7 +355,7 @@ box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,s
 
 // ---------- controls
 let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true,spread=true,openNow=1;
-const shot=/^#shot-(\d)$/.exec(location.hash);if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}
+const shot=/^#shot-(\d)$/.exec(location.hash);if(shot&&+shot[1]>=6){window.FEET=true}if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2,0.4,1.4][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}
 const el=renderer.domElement;
 el.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)});
 el.addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-drag.x)*0.008;pitch=Math.max(-0.1,Math.min(1.3,pitch+(e.clientY-drag.y)*0.006));drag={x:e.clientX,y:e.clientY}});
@@ -374,8 +374,10 @@ let t0=performance.now();
 function frame(now){
   const t=(now-t0)/1000;
   if(spin&&!drag)yaw+=0.004;
-  camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dist,24+Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist);
-  camera.lookAt(0,24,0);
+  const ty=window.FEET?3:24, dd=window.FEET?45:dist;
+  camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dd,ty+Math.sin(pitch)*dd,Math.cos(yaw)*Math.cos(pitch)*dd);
+  camera.lookAt(0,ty,0);
+  if(window.FEET){ground.visible=false;embers.visible=false;wingL.root.visible=wingR.root.visible=false}
   // breathing, the hunch heaving, wings, the heart's glow
   const br=Math.sin(t*1.6);
   chest.scale.set(1+br*0.012,1+br*0.01,1+br*0.02);
