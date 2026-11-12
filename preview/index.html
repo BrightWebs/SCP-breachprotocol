@@ -41,7 +41,7 @@
     <button id="bScale">Beside a player</button>
   </div>
   <div class="row" id="moves">
-    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button><button data-m="gallop">Run on all fours</button><button data-m="hover">Rise (hover)</button><button data-m="fly">Fly</button>
+    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button><button data-m="gallop">Run on all fours</button><button data-m="hover">Rise (hover)</button><button data-m="fly">Fly</button><button data-m="prowl">Crouch-walk (prowl)</button><button data-m="sit">Crouch still (sit)</button>
     <button data-m="swing">Swing / punch</button><button data-m="bow">Draw bow</button><button data-m="block">Shield up</button><button data-m="eat">Eat</button>
   </div>
   <div class="row" id="items">
@@ -452,7 +452,7 @@ function applyOff(obj,id,basePos,baseQ){const o=off(id);
   obj.quaternion.copy(baseQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rx*Math.PI/180,o.ry*Math.PI/180,o.rz*Math.PI/180)));
   obj.position.copy(basePos).add(new THREE.Vector3(o.px,o.py,o.pz))}
 // ---------- what's in its hands, and how it moves
-let move='idle',held='sword',heldR=null,heldL=null,WING=null,GROUND=false;
+let sitK=0,FDT=0.016,move='idle',held='sword',heldR=null,heldL=null,WING=null,GROUND=false;
 const ITEM_SCALE=1.3;
 function hold(id){
   for(const h of[heldR,heldL])if(h)h.parent.remove(h);
@@ -496,16 +496,17 @@ let tLast=null, bodyYaw=0, turning=false;
 function tailPhysics(t){
   let dt=tLast==null?0:Math.min(0.05,t-tLast);tLast=t;
   const yaw0=king.rotation.y, pitch0=rig.rotation.x;   // the body's turn and its tilt, as the world sees them
-  const restP0=move==='fly'?-1.35:move==='gallop'?-0.35:-0.7;
-  const sway=move==='walk'||move==='run'||move==='gallop'?Math.sin(t*(move==='walk'?5.2:9)*0.5)*0.12:Math.sin(t*0.9)*0.05;
-  if(dt===0){for(let i=0;i<TN;i++){tY[i]=yaw0;tP[i]=pitch0+restP0+0.05*i}}
+  const restP0=move==='fly'?-1.35:move==='gallop'?-0.35:move==='prowl'?-0.55:-0.7*(1-sitK)-0.3*sitK;
+  const restYaw=0.17*sitK;
+  const sway=move==='prowl'?Math.sin(t*1.6)*0.22:move==='walk'||move==='run'||move==='gallop'?Math.sin(t*(move==='walk'?5.2:9)*0.5)*0.12:Math.sin(t*0.9)*0.05*(1-sitK);
+  if(dt===0){let cy=yaw0,cp=pitch0;for(let i=0;i<TN;i++){cy+=restYaw;cp+=i==0?restP0:(i>13?0.05+0.12*sitK:0.05*(1-sitK));tY[i]=cy;tP[i]=cp}}
   let parentY=yaw0, parentP=pitch0;
   const steps=4,h=dt/steps;
   for(let n=0;n<steps;n++){parentY=yaw0;parentP=pitch0;
     for(let i=0;i<TN;i++){
       const K=120-90*(i/TN), D=2*Math.sqrt(K)*0.32;            // stiff at the root, loose at the tip: a whip
-      const wantY=parentY+(i==0?sway:sway*0.15*Math.sin(t*2-i*0.5));
-      const wantP=parentP+(i==0?restP0:0.05);
+      const wantY=parentY+restYaw+(i==0?sway:sway*0.15*Math.sin(t*2-i*0.5))+(i==TN-1?Math.sin(t*1.3)*0.25*sitK:0);
+      const wantP=parentP+(i==0?restP0:(i>13?0.05+0.12*sitK:0.05*(1-sitK)));
       tVY[i]+=(K*(wantY-tY[i])-D*tVY[i])*h;tY[i]+=tVY[i]*h;
       tVP[i]+=(K*(wantP-tP[i])-D*tVP[i])*h;tP[i]+=tVP[i]*h;
       // a spine only bends so far
@@ -582,6 +583,33 @@ function animate(t){
   // the shield stays upright and faces forward, held out in front of the fist, whatever the arm's doing
   if(heldL){king.updateMatrixWorld(true);const gq=new THREE.Quaternion();armL.grip.getWorldQuaternion(gq);const kq=new THREE.Quaternion();king.getWorldQuaternion(kq);
     const bq=gq.invert().multiply(kq);applyOff(heldL,'shield',new THREE.Vector3(-1,2,5.5).applyQuaternion(bq),bq);}
+  // ---- crouching, moving: a prowl, the way a lion walks. Low, the shoulders rolling, one foot at a time (hind, then the
+  // fore on that side, then the other hind, the other fore), the head slung low and forward
+  if(move==='prowl'){const g=t*3.2;
+    const flex=Math.sin(g*2)*0.04;
+    spine.rotation.x=0.98+flex;chest.rotation.x=0.5;chest.rotation.y=Math.sin(g)*0.07;chest.rotation.z=Math.sin(g)*0.04;
+    neck.rotation.x=-1.0+Math.sin(g*2)*0.03;head.rotation.x=-0.25;head.rotation.y=-Math.sin(g)*0.08;
+    const tiltB=spine.rotation.x+chest.rotation.x;
+    for(const[lg,o]of[[L,0],[Rg,Math.PI]]){const p=g+o, sw=Math.sin(p);
+      lg.thigh.rotation.x=-0.8-sw*0.42;lg.shin.rotation.x=1.05+Math.max(0,Math.cos(p))*0.85;
+      lg.foot.rotation.x=-(lg.thigh.rotation.x+lg.shin.rotation.x)+Math.max(0,-sw)*0.3}
+    for(const[ar,o]of[[A,Math.PI/2],[B,Math.PI*1.5]]){const p=g+o, sw=Math.sin(p);
+      ar.upper.rotation.set(-tiltB-sw*0.45+0.3,0,ar.side*-0.08);ar.fore.rotation.x=-0.45-Math.max(0,Math.cos(p))*0.95}
+    king.position.y=-30;GROUND=true;WING={o:0,beat:0,amp:1,tilt:0};}
+  // ---- crouching, still: it sits down. Cross-legged, one fist on its knee, its chin on the other; the tail curled
+  // round beside it to the front, like a cat's. It settles into it (and rises out of it) instead of snapping
+  sitK+=((move==='sit'?1:0)-sitK)*Math.min(1,FDT*2.2);
+  if(sitK>0.002){const k=sitK*sitK*(3-2*sitK);
+    const lr=(o,x,y,z)=>{o.rotation.x+=(x-o.rotation.x)*k;o.rotation.y+=(y-o.rotation.y)*k;o.rotation.z+=(z-o.rotation.z)*k};
+    const br=Math.sin(t*1.6);
+    lr(spine,0.35,0,0);lr(chest,0.25+br*0.015,-0.12,0);lr(neck,0,0,0);lr(head,-0.3+Math.sin(t*0.5)*0.03,0.08,0);
+    lr(L.thigh,-1.753,0,0.376);lr(L.shin,-0.198,0.138,-2.274);lr(L.foot,1.826,0.663,-0.531);
+    lr(Rg.thigh,-1.857,0,-0.382);lr(Rg.shin,0.049,0,1.897);lr(Rg.foot,1.68,-0.305,0.251);
+    lr(A.upper,1.097,-0.871,1.879);lr(A.fore,-2.038,0,0);
+    lr(B.upper,-1.3,0.348,0.8);lr(B.fore,-1.374,0,0);
+    jaw.rotation.x+=(0.05-jaw.rotation.x)*k;
+    king.position.y=-30-21*k;
+    if(k>0.5){GROUND=false;WING={o:0,beat:0,amp:1,tilt:0}}}
   return spd;
 }
 // ---------- the placement panel
@@ -606,7 +634,7 @@ drawRows();
 // ---------- controls
 let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true,spread=true,openNow=1;
 const shot=/^#shot-(\d)$/.exec(location.hash);if(shot&&+shot[1]>=6){window.FEET=true}if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2,0.4,1.4][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}
-const ps=/^#pose-([a-z]+)-([a-z]+)$/.exec(location.hash);if(ps){move=ps[1];held=ps[2];hold(held);spin=false;flap=false;spread=false;openNow=0;yaw=0.9;document.querySelector('.panel').style.display='none';window.FT=true}
+const ps=/^#pose-([a-z]+)-([a-z]+)$/.exec(location.hash);if(ps){move=ps[1];held=ps[2];hold(held);spin=false;flap=false;spread=false;openNow=0;yaw=(location.hash.includes("sit")?0.5:0.9);document.querySelector('.panel').style.display='none';window.FT=true}
 const el=renderer.domElement;
 el.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)});
 el.addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-drag.x)*0.008;pitch=Math.max(-0.1,Math.min(1.3,pitch+(e.clientY-drag.y)*0.006));drag={x:e.clientX,y:e.clientY}});
@@ -625,6 +653,7 @@ addEventListener('resize',()=>{renderer.setSize(W(),H());camera.aspect=W()/H();c
 let t0=performance.now();
 function frame(now){
   const t=window.FT?((window.FTk=(window.FTk||0)+1),1.3+(location.hash.includes('swing')?0.25:0)):(now-t0)/1000;
+  FDT=window.FT?1:Math.min(0.05,Math.max(0.001,(t-(window._lt||t))||0.016));window._lt=t;
   if(spin&&!drag)yaw+=0.004;
   const ty=window.FEET?3:rig.position.y, dd=window.FEET?45:dist;
   camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dd,ty+Math.sin(pitch)*dd,Math.cos(yaw)*Math.cos(pitch)*dd);
