@@ -21,12 +21,13 @@ jobs:
       - name: Fetch and print matching files (nothing is kept)
         run: |
           set -e
+          curl -s "https://api.modrinth.com/v2/search?query=${{ inputs.slug }}&limit=8" | python3 -c "import json,sys;[print('HIT',h['slug'],h['title'],h.get('versions',[])[-3:],h.get('categories')) for h in json.load(sys.stdin)['hits']]" || true
           curl -s "https://api.modrinth.com/v2/project/${{ inputs.slug }}/version" > v.json
           python3 - <<'PY'
           import json
           v=json.load(open('v.json'))
           for x in v[:12]: print(x['version_number'], x['loaders'], x['game_versions'][:3], x['files'][0]['filename'])
-          f=[x for x in v if 'forge' in x['loaders']] or v
+          f=[x for x in v if 'neoforge' in x['loaders'] and '1.21.1' in x['game_versions']] or [x for x in v if 'forge' in x['loaders']] or v
           open('url','w').write(f[0]['files'][0]['url'])
           print('USING', f[0]['files'][0]['filename'])
           PY
