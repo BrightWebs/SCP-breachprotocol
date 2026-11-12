@@ -32,7 +32,12 @@ jobs:
           PY
           curl -sL "$(cat url)" -o mod.jar
           mkdir x && cd x && unzip -q ../mod.jar
-          if [ -n "${{ inputs.file }}" ]; then echo "== ${{ inputs.file }} =="; sed -n "${{ inputs.ranges }}" "${{ inputs.file }}" | cat -n; exit 0; fi
+          if [ -n "${{ inputs.file }}" ]; then
+            for c in ${{ inputs.file }}; do
+              case "$c" in *.class) echo "== javap $c =="; javap -p -s -cp . "${c%.class}" | head -400 ;; *) echo "== $c =="; sed -n "${{ inputs.ranges }}" "$c" | cat -n ;; esac
+            done
+            exit 0
+          fi
           echo "== matching files =="
           find . -type f | grep -iE "${{ inputs.grep }}" | head -200
           echo "== contents =="
