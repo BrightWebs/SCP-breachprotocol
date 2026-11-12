@@ -320,6 +320,8 @@ for(const sd of[1,-1]){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:so
 // down the back; spread, they fan wide.
 const SPREAD=[1.0,0.35,-0.25,-0.85,-1.4], FOLD=[-1.05,-1.2,-1.32,-1.44,-1.55], FLEN=[24,32,36,32,26];
 function wing(side){
+  // a real wing's skeleton along the top edge (arm, forearm, hand, one long finger), and the feathers hanging DOWN
+  // from it in overlapping rows, the way a bird's do: short ones by the body, the long flight feathers at the hand
   const root=pivot(chest,side*4.5,CH-2.5,-CD/2-0.8);
   box(root,4,4,4,0,0,0,M.boneD);
   const upper=pivot(root,0,0,0);
@@ -330,52 +332,50 @@ function wing(side){
   box(fore,FL,2.4,2.4,side*FL/2,0,0.6,M.bone);box(fore,FL,1.6,1.6,side*FL/2,0,-0.8,M.boneD); // radius and ulna
   const wrist=pivot(fore,side*FL,0,0);
   box(wrist,4,4,3.4,0,0,0,M.boneD);
-  const hook=pivot(wrist,0,1.6,0,0,0,side*0.3);box(hook,1.6,4,1.6,0,2,0,M.horn);const hook2=pivot(hook,0,4,0,0,0,side*-1.1);box(hook2,1.2,3,1.2,0,1.5,0,M.horn); // the claw
-  const fingers=[],feathers=[],flames=[];
-  FLEN.forEach((len,i)=>{
-    const f=pivot(wrist,0,0,-0.3*i);
-    const segs=[];let p=f,t=2.2;
-    for(let k=0;k<3;k++){
-      const l=len/3;
-      box(p,l+0.6,t,t,side*l/2,0,0,k==2?M.horn:M.bone);
-      if(k<2)box(p,2.2+t*0.4,t+0.9,t+0.9,side*l,0,0,M.boneD);
-      // feathers along this bone, reaching down to the next finger
-      const nPer=k==0?2:3;
-      for(let q=0;q<nPer;q++){
-        const at=l*(0.2+0.8*q/nPer);
-        const r=k*l+at;                                  // distance out along the finger
-        const gap=i<FLEN.length-1?(SPREAD[i]-SPREAD[i+1]):0.55;
-        const flen=Math.max(7,Math.min(24,r*gap*1.25+5));
-        const fp=pivot(p,side*at,0,-0.4-i*0.12-q*0.04,0,0,side*-1.45);
-        const m=new THREE.Mesh(new THREE.PlaneGeometry(flen,4.6),M.feather);m.position.x=side*flen/2;fp.add(m);
-        feathers.push(fp);
-        if((q+k+i)%2==0){const fl=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
-          fl.position.set(side*flen,0,0.2);fp.add(fl);flames.push(fl)}
-      }
-      segs.push(p);
-      if(k<2){p=pivot(p,side*l,0,0,0,0,side*-0.16);}           // each joint bends it on, like a scythe
-      t*=0.75;
-    }
-    fingers.push(f);
-  });
-  return {root,upper,fore,wrist,fingers,feathers,flames,side};
+  const hook=pivot(wrist,0,1.6,0,0,0,side*0.3);box(hook,1.6,4,1.6,0,2,0,M.horn);const hook2=pivot(hook,0,4,0,0,0,side*-1.1);box(hook2,1.2,3,1.2,0,1.5,0,M.horn); // the thumb claw
+  const HL=11,DL=9;
+  const hand=pivot(wrist,0,0,0);
+  box(hand,HL,2.4,2.2,side*HL/2,0,0,M.bone);box(hand,2.8,3,3,side*HL,0,0,M.boneD);          // the hand
+  const digit=pivot(hand,side*HL,0,0,0,0,side*-0.12);
+  box(digit,DL,1.8,1.8,side*DL/2,0,0,M.bone);box(digit,3,1.4,1.4,side*(DL+1),0,0,M.horn);   // the long finger, a horn tip
+  const feathers=[],flames=[];
+  // one feather: on bone b (0 arm, 1 forearm, 2 hand, 3 finger), at x along it, this long; pointing at angle a when
+  // spread (absolute, in the wing's plane: -PI/2 straight down, toward 0 out along the wing); z: which layer
+  const feather=(bone,b,x,len,a,z,w,fire)=>{
+    const fp=pivot(bone,side*x,-0.6,z,0,0,0);fp.userData={b,a,fold:-1.5-x*0.004-b*0.03};
+    const m=new THREE.Mesh(new THREE.PlaneGeometry(len,w),M.feather);m.position.x=side*len/2;fp.add(m);feathers.push(fp);
+    if(fire){const fl=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+      fl.position.set(side*len,0,0.2);fp.add(fl);flames.push(fl)}};
+  // tertials, along the arm
+  for(let i=0;i<4;i++)feather(upper,0,2+i*3.2,11+i*1.2,-1.72+i*0.03,-0.9-i*0.02,4.6,i%2==1);
+  // secondaries, along the forearm
+  for(let i=0;i<6;i++)feather(fore,1,1+i*2.8,16+i*1.3,-1.62+i*0.035,-0.9-i*0.02,5,i%2==0);
+  // primaries, from the hand and the finger: the longest, fanning out toward the tip
+  for(let i=0;i<5;i++)feather(hand,2,1+i*2.4,25+i*2.2,-1.4+i*0.16,-1.1-i*0.03,5.2,true);
+  for(let i=0;i<4;i++)feather(digit,3,1+i*2.6,33-i*1.5,-0.62+i*0.13,-1.3-i*0.03,5.2,true);
+  // coverts: a short row over the roots of the long ones, so no bare gap shows under the bones
+  for(let i=0;i<4;i++)feather(upper,0,1.5+i*3,6.5,-1.66,-0.3,4.2,false);
+  for(let i=0;i<5;i++)feather(fore,1,1+i*3.2,8,-1.58,-0.3,4.4,false);
+  for(let i=0;i<4;i++)feather(hand,2,1+i*2.8,10,-1.25+i*0.1,-0.4,4.4,false);
+  return {root,upper,fore,wrist,hand,digit,feathers,flames,side};
 }
 // open: 0 folded down the back, 1 spread wide
 function poseWing(w,open,beat,amp=1,tilt=0,fly=false){
   const s=w.side;
-  const flapY=fly?beat*0.75:0, inPlane=fly?0:1;   // flying flat out, the beat is up and down across the body (like a bird's); upright, it's within the wing
-  // on the upstroke the fingers half close (the feathers slip through the air); on the downstroke they open wide and push
+  const flapY=fly?beat*0.75:0, inPlane=fly?0:1;
   const o=open*(1-0.3*Math.max(0,-beat)*Math.min(1,amp-0.5));
   w.root.rotation.set(0.1*open+0.45*(1-open)+tilt,s*(1.35-1.2*open-beat*0.18*amp*open*inPlane+flapY),-s*0.12*(1-open));
-  const ua=-1.45+0.85*o+beat*0.25*o*amp*inPlane;               // humerus: hanging down, or out and down; beating with it
-  const fa=1.25+0.1*o;                                  // the forearm's own lift above the humerus...
-  const absFore=ua+fa+ (1.4-0.25)*o*0+0;               // (kept simple: absolute forearm angle)
+  const ua=-1.45+1.0*o+beat*0.25*o*amp*inPlane;                  // the arm: hanging down, or out and a little up
   w.upper.rotation.z=s*ua;
-  w.fore.rotation.z=s*(1.9*o+2.75*(1-o)+beat*0.1*o);             // folded: the forearm doubled up beside the arm
-  const foreAbs=ua+(1.9*o+2.75*(1-o));
-  // feathers: fanned across the gaps when spread; lying along their fingers when folded
-  for(const fp of w.feathers)fp.rotation.z=s*(-1.45*o-0.12*(1-o));
-  w.fingers.forEach((f,i)=>{const want=SPREAD[i]*o+FOLD[i]*(1-o)-beat*0.12*o*(i/4);f.rotation.z=s*(want-foreAbs)});
+  const fr=1.9*o+2.75*(1-o)+beat*0.1*o-0.55*o;
+  w.fore.rotation.z=s*fr;
+  const foreAbs=ua+fr;
+  const handAbs=0.3*o-1.35*(1-o)-beat*0.12*o;                    // the hand: out along the line, or down the back
+  w.hand.rotation.z=s*(handAbs-foreAbs);
+  const digitAbs=handAbs-0.12;
+  const abs=[ua,foreAbs,handAbs,digitAbs];
+  // every feather points where it should, whatever its bone's doing: spread, the fan; folded, all hanging straight down
+  for(const fp of w.feathers){const u=fp.userData;const want=u.a*o+u.fold*(1-o)-beat*0.08*o*(u.b/3);fp.rotation.z=s*(want-abs[u.b])}
 }
 const wingL=wing(1),wingR=wing(-1);
 king.position.y=-30;
