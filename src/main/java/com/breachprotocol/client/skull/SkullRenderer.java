@@ -109,6 +109,9 @@ public final class SkullRenderer {
         boolean growing = s[0] == 30 && f < 1, shrinking = s[0] == 32;
         float reveal = shrinking ? f : Mth.clamp(f * 1.15F, 0, 1);
         if (f >= 0.5F || shrinking) event.setCanceled(true);
+        // yourself, in first person (some other pass drawing you): that's the first-person view's to draw, from the skull
+        Minecraft mc0 = Minecraft.getInstance();
+        if (p == mc0.player && mc0.options.getCameraType().isFirstPerson() && !(mc0.screen != null && pt == 1.0F) && f >= 0.5F) return;
         MultiBufferSource buf = event.getMultiBufferSource();
         boolean real = buf == Minecraft.getInstance().renderBuffers().bufferSource();
         try {
@@ -118,6 +121,9 @@ public final class SkullRenderer {
             BreachProtocol.LOGGER.debug("Skull King: {}", t.toString());
         }
     }
+
+    /** Where the camera is, from the feet (first person). */
+    private static final Vector3f FP_CAM = new Vector3f();
 
     /** First person: you see out of the skull, and looking down, the body you're in. */
     @SubscribeEvent
@@ -136,6 +142,7 @@ public final class SkullRenderer {
         ps.pushPose();
         ps.translate(Mth.lerp(pt, p.xOld, p.getX()) - cam.x, Mth.lerp(pt, p.yOld, p.getY()) - cam.y, Mth.lerp(pt, p.zOld, p.getZ()) - cam.z);
         MultiBufferSource.BufferSource buf = mc.renderBuffers().bufferSource();
+        FP_CAM.set((float) (cam.x - Mth.lerp(pt, p.xOld, p.getX())), (float) (cam.y - Mth.lerp(pt, p.yOld, p.getY())), (float) (cam.z - Mth.lerp(pt, p.zOld, p.getZ())));
         try {
             draw(p, RIGS.computeIfAbsent(p.getId(), k -> new Rig()), pt, ps, buf, mc.getEntityRenderDispatcher().getPackedLightCoords(p, pt), reveal, true, true);
         } catch (Throwable t) {
@@ -471,6 +478,13 @@ public final class SkullRenderer {
                 // assembling: each piece swells into place in its turn, feet first
                 float grow = reveal >= 1 ? 1 : Mth.clamp((reveal * (N + 24) - part.order) / 24F, 0, 1);
                 if (grow <= 0) continue;
+                if (fp && part.kind == Kind.BOX) {
+                    // nothing right up against your eyes: any bone within reach of the camera isn't drawn, so you
+                    // never find yourself looking at the inside of a box, whatever pose you're in
+                    Vector3f c = E.transformPosition(en.getValue().transformPosition(new Vector3f(part.x, part.y, part.z)));
+                    float rad = 0.5F * (float) Math.sqrt(part.w * part.w + part.h * part.h + part.d * part.d) * S * 1.2F;
+                    if (c.distance(FP_CAM.x - shift.x, FP_CAM.y - shift.y, FP_CAM.z - shift.z) < rad + 0.35F * scale / 1.75F) continue;
+                }
                 Matrix4f M = new Matrix4f(B4).mul(en.getValue());
                 switch (part.kind) {
                     case BOX, PLANE, OCTA -> {
