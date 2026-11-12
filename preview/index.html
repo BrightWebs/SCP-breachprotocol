@@ -31,7 +31,7 @@
     <button id="bSpin" class="on">Turn</button>
     <button id="bScale">Beside a player</button>
   </div>
-  <div class="parts">Horned skull, tusked jaw · gold crown, violet stones · ribcage round an ember heart · bone shoulders · clawed fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
+  <div class="parts">Horned skull, tusked jaw · glowing gold crown, red stones, fire at its heart · ribcage round an ember heart · bone shoulders · clawed fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
 </div>
 <div class="hint">drag to turn · scroll to zoom · Minecraft scale: 1 block = 16 px</div>
 
@@ -144,7 +144,8 @@ function bone(parent,len,thick,m=M.bone,knob=M.boneD){
   box(parent,thick+1.4,thick*0.9,thick+0.6,0,-thick*0.45,0,knob);
   box(parent,thick+1.2,thick*0.9,thick+0.6,0,-len+thick*0.45,0,knob);
 }
-const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0x6a4a08,emissiveIntensity:.6}),gem:mat(gemT,{emissive:0x7a2aff,emissiveIntensity:1}),
+const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0xb07810,emissiveIntensity:.75}),
+  ruby:mat(tex(4,4,g=>{g.fillStyle='#e01020';g.fillRect(0,0,4,4);g.fillStyle='#ff9090';g.fillRect(1,1,1,1);g.fillStyle='#800010';g.fillRect(2,3,2,1)}),{emissive:0xff1020,emissiveIntensity:1.2}),gem:mat(gemT,{emissive:0x7a2aff,emissiveIntensity:1}),
   face:mat(skullFaceT),jaw:mat(jawT),ember:new THREE.MeshBasicMaterial({map:emberT}),
   crack:mat(crackT,{emissive:0xff3a10,emissiveMap:crackMaskT,emissiveIntensity:1.2}),
   horn:mat(hornT),muzzle:mat(muzzleT),dark:new THREE.MeshLambertMaterial({color:0x14060e}),
@@ -154,34 +155,37 @@ const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0x6a4a08,
   veins:new THREE.MeshBasicMaterial({map:veinsT,side:THREE.DoubleSide,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.85})};
 
 const king=new THREE.Group();scene.add(king);
-// ---- legs: short and heavy, toes and claws forward
+// ---- legs: longer now (thigh and shin), heavy; the feet flat on the ground, four toes forward
+const THIGH=10, SHIN=10, HIP_Y=22.6;
 function leg(side){
-  const hip=pivot(king,side*4.5,14,0);
-  const thigh=pivot(hip,0,0,0,-0.25,0,side*-0.06);
-  bone(thigh,7.5,4);
-  box(thigh,4,3,2,0,-7.2,2.2,M.boneD);                 // kneecap
-  const shin=pivot(thigh,0,-7.5,0,0.35,0,0);
-  box(shin,2,6.5,2,-1.1,-3.2,0,M.bone);box(shin,1.6,6.5,1.6,1.2,-3.2,-0.4,M.boneD); // tibia, fibula
-  box(shin,4.6,2,4.6,0,-6.6,0,M.boneD);                 // ankle
-  const foot=pivot(shin,0,-7.2,0,-0.1,0,0);
-  box(foot,4.4,2,3.6,0,-0.2,0.4,M.boneD);                // the ankle's knot of bones
-  box(foot,2.2,1.8,3,0,-0.6,-2.4,M.bone);                // heel spur, back
-  // four toes, splayed: a long bone each, two knuckled joints, a black claw
-  [[-2.4,-0.32],[-0.8,-0.1],[0.8,0.1],[2.4,0.32]].forEach(([x,ang],i)=>{
-    const t=pivot(foot,x*0.6,-0.6,1.6,0,ang,0);
-    const L1=i==0||i==3?3.2:4;
-    box(t,1.5,1.4,L1,0,0,L1/2,M.bone);                   // metatarsal
-    box(t,1.9,1.7,1.6,0,0,L1,M.boneD);                    // knuckle
-    const t2=pivot(t,0,0,L1,0.25,0,0);
-    box(t2,1.3,1.2,2.4,0,0,1.3,M.bone);                   // toe bone
-    const c=pivot(t2,0,0,2.6,0.55,0,0);
-    box(c,1.1,1,2,0,-0.2,0.9,M.horn);                     // claw, curving into the ground
+  const hip=pivot(king,side*4.5,HIP_Y,0);
+  const tx=-0.12, sx=0.18;                                // a slight bend at the knee
+  const thigh=pivot(hip,0,0,0,tx,0,side*-0.04);
+  bone(thigh,THIGH,4);
+  box(thigh,3.6,3,1.6,0,-THIGH+0.4,2.2,M.boneD);          // kneecap
+  const shin=pivot(thigh,0,-THIGH,0,sx,0,side*0.04);
+  box(shin,2.2,SHIN-1,2.2,-1.1,-SHIN/2,0.3,M.bone);box(shin,1.6,SHIN-1,1.6,1.2,-SHIN/2,-0.5,M.boneD); // tibia, fibula
+  box(shin,4.6,2,4.4,0,-SHIN+0.6,0,M.boneD);               // ankle
+  // the foot, set level with the ground whatever the knee's doing
+  const foot=pivot(shin,0,-SHIN,0,-(tx+sx),0,0);
+  const G=-2.3;                                            // the ground, below the ankle
+  box(foot,5.4,1.8,4.2,0,G+0.9,1.2,M.boneD);               // the foot's bones
+  box(foot,2.6,1.6,2.6,0,G+0.8,-1.8,M.bone);               // heel
+  box(foot,1.4,1.2,2.2,0,G+0.6,-3.6,M.horn);               // heel spur
+  [[-2.1,-0.28,3.6],[-0.7,-0.09,4.4],[0.7,0.09,4.4],[2.1,0.28,3.6]].forEach(([x,ang,L])=>{
+    const t=pivot(foot,x,G+0.7,3,0,ang,0);
+    box(t,1.5,1.4,L,0,0,L/2,M.bone);                       // toe bone, along the ground
+    box(t,1.9,1.7,1.5,0,0.15,L,M.boneD);                   // knuckle
+    const t2=pivot(t,0,0,L+0.4,0,0,0);
+    box(t2,1.3,1.2,2.2,0,0,1.1,M.bone);                    // the last bone
+    const c=pivot(t2,0,0.2,2.1,0.6,0,0);
+    box(c,1.1,1,2.2,0,-0.1,1,M.horn);                       // a black claw, curving down into the ground
   });
   return hip;
 }
 const legL=leg(1),legR=leg(-1);
 // ---- pelvis and the spine, hunched forward
-const pelvis=pivot(king,0,15,0);
+const pelvis=pivot(king,0,HIP_Y+1,0);
 box(pelvis,12,4,7,0,0.5,0,M.bone);
 box(pelvis,4,5,4,6,1.5,-0.5,M.boneD);box(pelvis,4,5,4,-6,1.5,-0.5,M.boneD); // the hip wings
 const spine=pivot(pelvis,0,2.5,-1,0.14,0,0);
@@ -200,7 +204,7 @@ for(let k=0;k<6;k++){
 }
 box(chest,CW+1,3,CD+1,0,CH+0.5,0,M.crack);                 // the yoke of the shoulders, cracked and burning
 const heart=box(chest,5,5,5,0,8,0,M.ember);
-heartLight.position.set(0,26,4);
+heartLight.position.set(0,34,4);
 // ---- arms: huge shoulders, long arms, fists near the ground
 function arm(side){
   const sh=pivot(chest,side*14.5,CH-1,0.5);
@@ -246,8 +250,16 @@ const crown=pivot(head,0,9.4,0);
 box(crown,13,2,12,0,0,0,M.gold);
 const spikeH=[3,5,7,5,3];
 spikeH.forEach((h,i)=>{const x=(i-2)*2.8;box(crown,1.6,h,1.2,x,1+h/2,5.6,M.gold);box(crown,1.2,h*0.7,1.2,x,1+h*0.35,-5.6,M.gold)});
-box(crown,1.6,1.6,0.8,0,0.2,6.3,M.gem);box(crown,1.2,1.2,0.8,-4.2,0.2,6.3,M.gem);box(crown,1.2,1.2,0.8,4.2,0.2,6.3,M.gem);
-const halo=box(crown,2.2,2.2,2.2,0,11,1,M.gem);
+// the two side stones glow red; between them, at the middle, the crown is on fire, and it burns inside the band
+box(crown,1.6,1.6,0.8,-4.2,0.2,6.3,M.ruby);box(crown,1.6,1.6,0.8,4.2,0.2,6.3,M.ruby);
+box(crown,1.2,1.2,0.8,-6.3,0.2,3,M.ruby);box(crown,1.2,1.2,0.8,6.3,0.2,3,M.ruby);
+const crownFire=[];
+function fireAt(x,y,z,size){const f=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+  f.position.set(x,y,z);f.userData={x,y,z,size,ph:R()*6};crown.add(f);crownFire.push(f);return f}
+for(let k=0;k<5;k++)fireAt((k-2)*0.6,1.5+k%2*0.4,6.1,2.8);           // at the front, between the red stones
+for(let k=0;k<9;k++)fireAt((R()-.5)*8,1.6,(R()-.5)*8,3.4);          // within the band
+const crownLight=new THREE.PointLight(0xff4a1a,1.4,30);crown.add(crownLight);crownLight.position.set(0,4,3);
+const halo=box(crown,2.2,2.2,2.2,0,11,1,M.ruby);
 // flames in the eye sockets
 const eyeFlames=[];
 for(const sd of[1,-1]){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:soulTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -374,7 +386,7 @@ let t0=performance.now();
 function frame(now){
   const t=(now-t0)/1000;
   if(spin&&!drag)yaw+=0.004;
-  const ty=window.FEET?3:24, dd=window.FEET?45:dist;
+  const ty=window.FEET?3:30, dd=window.FEET?45:dist;
   camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dd,ty+Math.sin(pitch)*dd,Math.cos(yaw)*Math.cos(pitch)*dd);
   camera.lookAt(0,ty,0);
   if(window.FEET){ground.visible=false;embers.visible=false;wingL.root.visible=wingR.root.visible=false}
@@ -390,6 +402,8 @@ function frame(now){
   poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat);
   for(const w of[wingL,wingR])w.flames.forEach((fl,i)=>{const k=0.6+Math.sin(t*8+i*1.7)*0.25+Math.sin(t*13+i)*0.1;fl.scale.set(2.6*k,4.2*k,1);fl.material.opacity=0.6+openNow*0.4});
   halo.rotation.y=t*1.5;halo.position.y=11+Math.sin(t*2)*0.6;
+  for(const f of crownFire){const u=f.userData,k=0.75+Math.sin(t*9+u.ph)*0.2+Math.sin(t*15+u.ph*2)*0.08;f.scale.set(u.size*0.55*k,u.size*k,1);f.position.y=u.y+u.size*0.4*k}
+  crownLight.intensity=1.2+Math.sin(t*11)*0.25;M.ruby.emissiveIntensity=1.1+Math.sin(t*3)*0.3;
   for(const e of eyeFlames){const k=0.8+Math.sin(t*9+e.position.x)*0.2;e.scale.set(2.2*k,4.2*k,1)}
   const pulse=0.75+Math.sin(t*3.1)*0.25+Math.sin(t*7.3)*0.08;
   heartLight.intensity=1.2*pulse;M.ember.color.setScalar(0.8+pulse*0.2);
