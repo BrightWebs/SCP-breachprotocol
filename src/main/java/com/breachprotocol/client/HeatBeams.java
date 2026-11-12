@@ -50,7 +50,11 @@ public final class HeatBeams {
             if (!(e instanceof Player p) || p.isInvisible()) continue;
             Integer beaming = FlightState.HEAT.get(id);
             int tier = beaming == null ? 0 : Math.max(0, Math.min(4, beaming));
-            Vec3 eye = p.getEyePosition(pt), dir = p.getViewVector(pt);
+            // from where the body is actually drawn this frame (the renderer works from xOld, not xo; at speed the two
+            // are a whole tick apart, which left the glow trailing behind the face)
+            Vec3 eye = new Vec3(net.minecraft.util.Mth.lerp(pt, p.xOld, p.getX()), net.minecraft.util.Mth.lerp(pt, p.yOld, p.getY()) + p.getEyeHeight(),
+                    net.minecraft.util.Mth.lerp(pt, p.zOld, p.getZ()));
+            Vec3 dir = p.getViewVector(pt);
             boolean me = p == mc.player && mc.options.getCameraType().isFirstPerson();
             Vec3 side = new Vec3(-dir.z, 0, dir.x);
             side = side.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : side.normalize();
