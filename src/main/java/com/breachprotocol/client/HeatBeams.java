@@ -91,16 +91,19 @@ public final class HeatBeams {
             if (!me && !king) {
                 for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
                     glow(m, vc, ey, cam, king ? 0.06F : 0.03F, 1F, king ? 0.88F : 0.75F, king ? 1F : 0.6F, 1F);                        // the lit pixel
-                    glow(m, vc, ey, cam, (king ? 0.16F : 0.08F) + tier * 0.015F, cr, cg, cb, 0.55F);    // its bloom
+                    glow(m, vc, ey, cam, (king ? 0.16F : 0.11F) + tier * 0.02F, cr, cg, cb, 0.65F);    // its bloom
                 }
             }
             // in first person the beams come from just below your view, so they don't fill your sight
-            Vec3 sL = me && sock == null ? eye.add(dir.scale(0.6)).add(side.scale(0.12)).subtract(up.scale(0.12)) : eyeL;
-            Vec3 sR = me && sock == null ? eye.add(dir.scale(0.6)).subtract(side.scale(0.12)).subtract(up.scale(0.12)) : eyeR;
+            // in first person they start right at your eyes (just under and either side of the view, a hair ahead),
+            // threads there and swelling as they go, so they read as coming out of you
+            Vec3 sL = me ? eye.add(dir.scale(0.2)).add(side.scale(0.055)).subtract(up.scale(0.045)) : eyeL;
+            Vec3 sR = me ? eye.add(dir.scale(0.2)).subtract(side.scale(0.055)).subtract(up.scale(0.045)) : eyeR;
+            float s0 = me ? 0.04F : 0.45F;     // how thick at the eye, of the full width
             for (Vec3 s : new Vec3[]{sL, sR}) {
-                beam(m, vc, s, end, cam, w * 3.2F, cr, cg, cb, 0.35F);   // the glow round it
-                beam(m, vc, s, end, cam, w, kr, kg, kb, 0.95F);         // the core
-                if (tier >= 3 || king) beam(m, vc, s, end, cam, w * 0.35F, 1F, king ? 0.88F : 1F, king ? 1F : 0.9F, 1F);
+                beam(m, vc, s, end, cam, w * 3.2F * s0, w * 3.2F, cr, cg, cb, 0.35F);   // the glow round it
+                beam(m, vc, s, end, cam, w * s0, w, kr, kg, kb, 0.95F);                 // the core
+                beam(m, vc, s, end, cam, w * 0.35F * s0, w * 0.35F, 1F, king ? 0.88F : 1F, king ? 1F : 0.85F, 1F);   // the white-hot heart
             }
             glow(m, vc, end, cam, 0.25F + tier * 0.18F, 1F, king ? 0.13F : 0.3F, king ? 0.88F : 0.05F, 0.8F);
         }
@@ -109,13 +112,26 @@ public final class HeatBeams {
     }
 
     /** A flat ribbon from a to b, turned to face the camera. */
-    private static void beam(Matrix4f m, VertexConsumer vc, Vec3 a, Vec3 b, Vec3 cam, float w, float r, float g, float bl, float al) {
+    /**
+     * A beam from a to b, thickening from w0 to w1: in short pieces, each turned to face the camera on its own (one
+     * flat ribbon twists edge-on near the eye), more of them near the start where it's closest.
+     */
+    private static void beam(Matrix4f m, VertexConsumer vc, Vec3 a, Vec3 b, Vec3 cam, float w0, float w1, float r, float g, float bl, float al) {
         Vec3 d = b.subtract(a);
-        Vec3 view = a.add(b).scale(0.5).subtract(cam);
-        Vec3 n = d.cross(view);
-        if (n.lengthSqr() < 1e-8) return;
-        n = n.normalize().scale(w);
-        quad(m, vc, a.add(n), a.subtract(n), b.subtract(n), b.add(n), r, g, bl, al);
+        if (d.lengthSqr() < 1e-6) return;
+        int N = 14;
+        Vec3 prevP = null, prevN = null;
+        for (int i = 0; i <= N; i++) {
+            float t = (i / (float) N) * (i / (float) N);
+            Vec3 p = a.add(d.scale(t));
+            Vec3 n = d.cross(p.subtract(cam));
+            if (n.lengthSqr() < 1e-10) n = d.cross(new Vec3(0, 1, 0));
+            if (n.lengthSqr() < 1e-10) n = new Vec3(1, 0, 0);
+            float w = w0 + (w1 - w0) * (float) Math.sqrt(t);
+            n = n.normalize().scale(w);
+            if (prevP != null) quad(m, vc, prevP.add(prevN), prevP.subtract(prevN), p.subtract(n), p.add(n), r, g, bl, al);
+            prevP = p; prevN = n;
+        }
     }
 
     /** A bright square facing the camera. */
