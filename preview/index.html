@@ -40,8 +40,8 @@
     <button id="bScale">Beside a player</button>
   </div>
   <div class="row" id="moves">
-    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button>
-    <button data-m="swing">Swing</button><button data-m="bow">Draw bow</button><button data-m="block">Shield up</button><button data-m="eat">Eat</button>
+    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button><button data-m="gallop">Run on all fours</button><button data-m="hover">Rise (hover)</button><button data-m="fly">Fly</button>
+    <button data-m="swing">Swing / punch</button><button data-m="bow">Draw bow</button><button data-m="block">Shield up</button><button data-m="eat">Eat</button>
   </div>
   <div class="row" id="items">
     <button data-i="none">Empty hands</button><button data-i="sword" class="on">Sword</button><button data-i="pick">Pickaxe</button>
@@ -199,7 +199,8 @@ function itemModel(id){
   const art={sword:SWORD,pick:PICK,axe:AXE,torch:TORCH,bow:BOW,phone:PHONE}[id];
   return sprite(art,pal);
 }
-const king=new THREE.Group();scene.add(king);
+const rig=new THREE.Group();scene.add(rig);rig.position.y=30;   // turned about the body's middle when it flies
+const king=new THREE.Group();rig.add(king);king.position.y=-30;
 // ---- legs: longer now (thigh and shin), heavy; the feet flat on the ground, four toes forward
 const THIGH=10, SHIN=10, HIP_Y=22.6;
 function leg(side){
@@ -360,10 +361,12 @@ function wing(side){
   return {root,upper,fore,wrist,fingers,feathers,flames,side};
 }
 // open: 0 folded down the back, 1 spread wide
-function poseWing(w,open,beat){
-  const s=w.side,o=open;
-  w.root.rotation.set(0.1*o+0.45*(1-o),s*(1.35-1.2*o),-s*0.12*(1-o));   // folded: laid along the back, tips swept back
-  const ua=-1.45+0.85*o+beat*0.25*o;                   // humerus: hanging down, or out and down
+function poseWing(w,open,beat,amp=1,tilt=0){
+  const s=w.side;
+  // on the upstroke the fingers half close (the feathers slip through the air); on the downstroke they open wide and push
+  const o=open*(1-0.3*Math.max(0,-beat)*Math.min(1,amp-0.5));
+  w.root.rotation.set(0.1*open+0.45*(1-open)+tilt,s*(1.35-1.2*open-beat*0.18*amp*open),-s*0.12*(1-open));
+  const ua=-1.45+0.85*o+beat*0.25*o*amp;               // humerus: hanging down, or out and down; beating with it
   const fa=1.25+0.1*o;                                  // the forearm's own lift above the humerus...
   const absFore=ua+fa+ (1.4-0.25)*o*0+0;               // (kept simple: absolute forearm angle)
   w.upper.rotation.z=s*ua;
@@ -374,7 +377,7 @@ function poseWing(w,open,beat){
   w.fingers.forEach((f,i)=>{const want=SPREAD[i]*o+FOLD[i]*(1-o)-beat*0.12*o*(i/4);f.rotation.z=s*(want-foreAbs)});
 }
 const wingL=wing(1),wingR=wing(-1);
-king.position.y=0;
+king.position.y=-30;
 
 // ---------- the burning ground: cracked obsidian, magma veins, flames, embers
 const ground=new THREE.Group();scene.add(ground);
@@ -423,7 +426,7 @@ function applyOff(obj,id,basePos,baseQ){const o=off(id);
   obj.quaternion.copy(baseQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rx*Math.PI/180,o.ry*Math.PI/180,o.rz*Math.PI/180)));
   obj.position.copy(basePos).add(new THREE.Vector3(o.px,o.py,o.pz))}
 // ---------- what's in its hands, and how it moves
-let move='idle',held='sword',heldR=null,heldL=null;
+let move='idle',held='sword',heldR=null,heldL=null,WING=null;
 const ITEM_SCALE=1.3;
 function hold(id){
   for(const h of[heldR,heldL])if(h)h.parent.remove(h);
@@ -439,7 +442,7 @@ function hold(id){
     // tools and weapons: handle bottom-left, head top-right; held forward and a little up, the flat facing out
     let ax=V(0,-s25,c25),ay=V(0,s65,c65),handle=V(-6.5,-6.5,0);
     if(main==='torch'||main==='phone'){ax=V(1,0,0);ay=V(0,0.6,0.8);handle=main==='torch'?V(0.5,-4.5,0):V(-2,-2,0)}
-    if(main==='bow'){ax=V(0,0.707,0.707);ay=V(0,0.707,-0.707);handle=V(-2.5,-1.5,0)}
+    if(main==='bow'){ax=V(0,0.707,0.707);ay=V(0,-0.707,0.707);handle=V(-2,2,0)}   // limbs up and down when aimed, the string toward you
     if(main==='block'){ax=V(1,0,0);ay=V(0,1,0);handle=V(0,6,-2)}
     const az=new THREE.Vector3().crossVectors(ax,ay);
     const m=new THREE.Matrix4().makeBasis(ax,ay,az);
@@ -461,6 +464,7 @@ function setOn(sel,v){document.querySelectorAll(sel+' button').forEach(x=>x.clas
 
 // one step of the pose, every frame
 function animate(t){
+  neck.rotation.x=0.1;
   const L=legL,Rg=legR,A=armL,B=armR;
   let leg=0,armSwing=0,lean=0,bob=0,spd=0;
   if(move==='walk'){spd=5.2;leg=0.55;armSwing=0.45;lean=0.05;bob=0.6}
@@ -474,7 +478,7 @@ function animate(t){
     lg.shin.rotation.x=lg.sx+lift*1.3;
     lg.foot.rotation.x=-(lg.thigh.rotation.x+lg.shin.rotation.x);
   }
-  king.position.y=Math.abs(Math.sin(ph))*bob*(spd?1:0);
+  king.position.y=-30+Math.abs(Math.sin(ph))*bob*(spd?1:0);
   spine.rotation.x=0.14+lean;
   // arms: swinging against the legs; held poses over the top
   const restA=-0.3, restB=-0.3;
@@ -482,7 +486,35 @@ function animate(t){
   B.upper.rotation.set(restB-Math.sin(ph)*armSwing*(spd?1:0)-lean,0,-0.14);
   A.fore.rotation.x=-0.15-(move==='run'?0.9:0);B.fore.rotation.x=-0.15-(move==='run'?0.9:0);
   if(!spd){A.upper.rotation.x+=Math.sin(t*0.8)*0.05;B.upper.rotation.x-=Math.sin(t*0.8)*0.05}
-  if(move==='swing'){const k=(t%1.1)/1.1;const a=k<0.35?-2.6*(k/0.35):-2.6+3.0*Math.min(1,(k-0.35)/0.2);B.upper.rotation.x=a;B.upper.rotation.z=-0.14+(k<0.55?0.3:0);B.fore.rotation.x=-0.4}
+  WING=null;
+  // no weapon: both fists, one after the other
+  if(move==='swing'&&(held==='none'||held==='block'&&false)){const k=(t*3.2)%2;const which=k<1?B:A;const other=k<1?A:B;const u=k%1;const thrust=u<0.35?u/0.35:1-(u-0.35)/0.65;
+    which.upper.rotation.set(-0.35-1.25*thrust,0,which.side*-0.1);which.fore.rotation.x=-0.6+0.55*thrust;other.upper.rotation.set(-0.7,0,other.side*-0.18);other.fore.rotation.x=-1.0;
+    chest.rotation.y=(k<1?1:-1)*0.22*thrust;spine.rotation.x=0.22;}
+  else chest.rotation.y=0;
+  // flat out, on all fours like an animal: the fists are front feet, the back near level, the head up
+  if(move==='gallop'){const g=t*7.5;
+    spine.rotation.x=0.85;chest.rotation.x=0.45;neck.rotation.x=-0.75;head.rotation.x=-0.5;
+    const hind=Math.sin(g),fore=Math.sin(g+Math.PI*0.85);
+    for(const[lg,o]of[[L,0],[Rg,0.35]]){const sw=Math.sin(g+o);lg.thigh.rotation.x=-0.75-sw*0.75;lg.shin.rotation.x=0.9+Math.max(0,Math.cos(g+o))*0.8;lg.foot.rotation.x=-(lg.thigh.rotation.x+lg.shin.rotation.x)+0.4}
+    for(const[ar,o]of[[A,0],[B,0.3]]){const sw=Math.sin(g+Math.PI*0.85+o);ar.upper.rotation.set(-0.75-sw*0.75,0,ar.side*-0.08);ar.fore.rotation.x=-0.1-Math.max(0,-Math.cos(g+Math.PI*0.85+o))*0.9}
+    king.position.y=-30-9+Math.abs(Math.sin(g))*2.2;
+    WING={o:0,beat:0,amp:1,tilt:0};}
+  // rising (hovering up): upright, legs hanging, the wings beating down hard to push it up
+  if(move==='hover'){const f=t*3.4;const beat=Math.sin(f-0.35*Math.sin(f));
+    rig.position.y=30+18+beat*-1.6+Math.sin(t*0.5)*2;rig.rotation.x=0;
+    for(const lg of[L,Rg]){lg.thigh.rotation.x=0.15+Math.sin(t*1.3+lg.hip.position.x)*0.06;lg.shin.rotation.x=0.45;lg.foot.rotation.x=0.35}
+    A.upper.rotation.set(-0.15,0,0.45);B.upper.rotation.set(-0.15,0,-0.45);A.fore.rotation.x=B.fore.rotation.x=-0.25;
+    WING={o:1,beat,amp:2.6,tilt:0.55};}
+  // flying: laid out flat like a superhero, a fist out in front, legs straight back, the wings driving down
+  else if(move==='fly'){const f=t*2.8;const beat=Math.sin(f-0.35*Math.sin(f));
+    rig.position.y=30+26+beat*-1.2;rig.rotation.x=1.35;
+    spine.rotation.x=0;chest.rotation.x=0;neck.rotation.x=-0.6;head.rotation.x=-0.45;
+    for(const lg of[L,Rg]){lg.thigh.rotation.x=0.05;lg.shin.rotation.x=0.12;lg.foot.rotation.x=0.6}
+    B.upper.rotation.set(-2.9,0,-0.05);B.fore.rotation.x=0;A.upper.rotation.set(-0.15,0,0.12);A.fore.rotation.x=-0.2;
+    WING={o:1,beat,amp:2.2,tilt:-0.35};}
+  else{rig.rotation.x=0;if(move!=='hover')rig.position.y=30;}
+  if(move==='swing'&&held!=='none'){const k=(t%1.1)/1.1;const a=k<0.35?-2.6*(k/0.35):-2.6+3.0*Math.min(1,(k-0.35)/0.2);B.upper.rotation.x=a;B.upper.rotation.z=-0.14+(k<0.55?0.3:0);B.fore.rotation.x=-0.4}
   if(move==='bow'){B.upper.rotation.set(-1.55,0.15,-0.1);B.fore.rotation.x=-0.05;A.upper.rotation.set(-1.45,-0.5,0.2);A.fore.rotation.x=-0.7-Math.sin(t*1.5)*0.15}
   if(move==='block'){A.upper.rotation.set(-1.1,0.5,0.1);A.fore.rotation.x=-0.9;B.upper.rotation.x=-0.35}
   if(move==='eat'){B.upper.rotation.set(-1.3+Math.sin(t*14)*0.08,-0.5,0);B.fore.rotation.x=-1.1}
@@ -544,8 +576,8 @@ function frame(now){
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
   const spd=animate(t);
   openNow+=((spread?1:0)-openNow)*0.04;
-  const beat=flap&&spread?Math.sin(t*2.4):0;
-  poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat);
+  if(WING){openNow+=(WING.o-openNow)*0.12;poseWing(wingL,openNow,WING.beat,WING.amp,WING.tilt);poseWing(wingR,openNow,WING.beat,WING.amp,WING.tilt)}
+  else{const beat=flap&&spread?Math.sin(t*2.4):0;poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat)}
   for(const w of[wingL,wingR])w.flames.forEach((fl,i)=>{const k=0.6+Math.sin(t*8+i*1.7)*0.25+Math.sin(t*13+i)*0.1;fl.scale.set(2.6*k,4.2*k,1);fl.material.opacity=0.6+openNow*0.4});
   halo.rotation.y=t*1.5;diamond.rotation.y=Math.sin(t*0.8)*0.25;M.gem.emissiveIntensity=1+Math.sin(t*2.2)*0.25;halo.position.y=11+Math.sin(t*2)*0.6;
   for(const f of crownFire){const u=f.userData,k=0.75+Math.sin(t*9+u.ph)*0.2+Math.sin(t*15+u.ph*2)*0.08;f.scale.set(u.size*0.55*k,u.size*k,1);f.position.y=u.y+u.size*0.4*k}
