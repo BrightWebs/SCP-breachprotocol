@@ -68,6 +68,8 @@ public final class SkullModel {
     public static final int TAIL = 18;
     /** Everything that hangs off the head (not drawn in first person: you're looking out of it). */
     public final java.util.Set<Node> headNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    /** Everything on the wings (their feathers hang loose: they don't decide where the ground is). */
+    public final java.util.Set<Node> wingNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     // ------------------------------------------------------------------ building
 
@@ -234,7 +236,10 @@ public final class SkullModel {
         // ---- the wings: bare bone, black feathers burning at their ends
         for (int i = 0; i < 2; i++) wings[i] = wing(i == 0 ? 1 : -1);
         mark(head);
+        for (Wing w : wings) markWing(w.root);
     }
+
+    private void markWing(Node n) { wingNodes.add(n); for (Node k : n.kids) markWing(k); }
 
     private void mark(Node n) { headNodes.add(n); for (Node k : n.kids) mark(k); }
 

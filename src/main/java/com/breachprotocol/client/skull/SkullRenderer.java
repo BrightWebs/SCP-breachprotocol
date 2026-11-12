@@ -357,15 +357,18 @@ public final class SkullRenderer {
         } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
         if (move == GALLOP || move == PROWL || sitK > 0.02F) {
-            // on the ground, not in it: whatever's lowest (a foot, a fist, the knees and seat when it sits) rests on it
+            // on the ground, never in it: every corner of every bone (not the loose feathers) is checked, and the
+            // lowest one rests exactly on top of the ground, legs crossed, tail, paws and all
             float low = Float.MAX_VALUE;
             Vector3f v = new Vector3f();
-            for (SkullModel.Leg lg : m.legs) {
-                for (float[] q : new float[][]{{0, -2.4F, 1.5F}, {0, -2.4F, 6}, {0, -2.3F, 9}, {0, -1.7F, -3.6F}}) low = Math.min(low, mats.get(lg.foot).transformPosition(v.set(q[0], q[1], q[2])).y);
-                if (sitK > 0.02F) low = Math.min(low, mats.get(lg.shin).transformPosition(v.set(0, 0, 0)).y - 2.4F);
+            for (Map.Entry<Node, Matrix4f> en : mats.entrySet()) {
+                if (m.wingNodes.contains(en.getKey())) continue;
+                for (Part part : en.getKey().parts) {
+                    if (part.kind != Kind.BOX) continue;
+                    Matrix4f pm = new Matrix4f(en.getValue()).translate(part.x, part.y, part.z).rotateXYZ(part.rx, part.ry, part.rz);
+                    for (int c = 0; c < 8; c++) low = Math.min(low, pm.transformPosition(v.set((c & 4) != 0 ? part.w / 2 : -part.w / 2, (c & 2) != 0 ? part.h / 2 : -part.h / 2, (c & 1) != 0 ? part.d / 2 : -part.d / 2)).y);
+                }
             }
-            if (move != PROWL || true) for (SkullModel.Arm ar : m.arms) for (float z : new float[]{-4, 4}) low = Math.min(low, mats.get(ar.hand).transformPosition(v.set(0, -6, z)).y);
-            if (sitK > 0.02F) low = Math.min(low, mats.get(m.pelvis).transformPosition(v.set(0, -1.5F, 0)).y);
             mats.clear();
             rootM.translateLocal(0, -low, 0);
             walk(m.root, rootM, mats);
@@ -555,38 +558,23 @@ public final class SkullRenderer {
     private static float wrap(float a) { return (float) Mth.wrapDegrees(a * Mth.RAD_TO_DEG) * Mth.DEG_TO_RAD; }
 
     /**
-     * The tail, animated (not simulated, so it can't shake or fold through anything): its shape is set by what the
-     * body's doing, eased smoothly from one to the next. Turning, it swings out the other way, more toward the tip,
-     * and comes back as the turn ends; a slow wave runs down it, quicker on the move; fast, it lifts and streams out
-     * level behind; flying, it trails straight back; sitting, it curls round beside the legs to the front, its tip
-     * flicking.
+     * The tail, as it first was: drooping back from the pelvis (lifted level in a gallop, straight back in flight),
+     * a slow sway running down it, livelier on the move. Sitting, it curls round beside the legs to the front.
+     * The pose it's in eases to the next, so nothing jumps.
      */
     private static void tail(Rig rig, float dt, float yawNow, float pitch0, float restP, float sway, double dx, double dy, double dz, float t, float sitK) {
-        int TN = SkullModel.TAIL;
-        if (!rig.tailSet) { rig.lastYaw = yawNow; rig.restNow = restP; rig.tailSet = true; }
-        if (dt > 0) {
-            float rate = Mth.clamp(wrap(yawNow - rig.lastYaw) / dt, -4, 4);
-            rig.lastYaw = yawNow;
-            float e = 1 - (float) Math.exp(-3.5 * dt);
-            rig.turn += (rate - rig.turn) * e;
-            double sp = Math.sqrt(dx * dx + dz * dz) * 20;
-            rig.drag += ((float) Mth.clamp((sp - 3) / 14, 0, 0.75) - rig.drag) * e;
-            rig.restNow += (restP - rig.restNow) * (1 - (float) Math.exp(-4 * dt));
-            rig.swayNow += (sway - rig.swayNow) * e;
-        }
-        float swing = Mth.clamp(rig.turn * 0.09F, -0.25F, 0.25F);
-        for (int i = 0; i < TN; i++) {
-            float k = i / (float) TN;
+        if (!rig.tailSet) { rig.restNow = restP; rig.tailSet = true; }
+        if (dt > 0) rig.restNow += (restP - rig.restNow) * (1 - (float) Math.exp(-4 * dt));
+        boolean moving = Math.sqrt(dx * dx + dz * dz) > 0.03;
+        for (int i = 0; i < SkullModel.TAIL; i++) {
             Node v = rig.model.tail.get(i);
-            float wave = Mth.sin(t * 2.2F - i * 0.42F) * rig.swayNow * (0.25F + 0.75F * k) * 0.35F;
-            v.ry = (i == 0 ? rig.swayNow * 0.5F : 0) + wave - swing * (0.3F + 0.7F * k) * (i == 0 ? 1.5F : 1) + 0.17F * sitK
-                    + (i == TN - 1 ? Mth.sin(t * 1.3F) * 0.25F * sitK : 0);
-            float droop = i == 0 ? rig.restNow + (-rig.restNow - 0.05F) * rig.drag : (i > 13 ? 0.05F + 0.12F * sitK : 0.05F * (1 - sitK)) * (1 - rig.drag);
-            v.rx = droop + Mth.sin(t * 1.7F - i * 0.3F) * 0.012F;
+            float base = i == 0 ? rig.restNow : (i > 13 ? 0.05F + 0.12F * sitK : 0.05F * (1 - sitK));
+            v.rx = base + (i == 0 ? 0 : Mth.sin(t * 1.4F - i * 0.35F) * 0.03F);
+            v.ry = Mth.sin(t * 1.1F - i * 0.4F) * (0.05F + i * 0.004F) * (moving ? 1.6F : 1) * (1 - sitK) + 0.17F * sitK
+                    + (i == SkullModel.TAIL - 1 ? Mth.sin(t * 1.3F) * 0.25F * sitK : 0);
             v.rz = 0;
         }
     }
-
 
     // ================================================================== drawing it
 
