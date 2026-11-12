@@ -76,7 +76,7 @@ public final class SkullRenderer {
         // in the air a moment (a step down, a stride at speed) isn't flying; a jump is
         float airT; boolean jumped;
         // flight: speed and its change, the turn, the bank; the flaps (how many left, where in one, how hard)
-        float speedS, accS, flyYaw, turnS, bank, flapPh, flapAmp, cruiseT, climbK, climbCyc;
+        float speedS, accS, flyYaw, turnS, bank, flapPh, flapAmp, cruiseT, climbK, climbCyc, headS, diveS, burstCool;
         int flapsLeft; boolean hard, flyInit;
     }
 
@@ -188,6 +188,10 @@ public final class SkullRenderer {
 
         float bodyYaw = move == FLY ? Mth.rotLerp(pt, p.yRotO, p.getYRot()) : Mth.rotLerp(pt, p.yBodyRotO, p.yBodyRot);
         if (move == CLIMB) bodyYaw = wallYaw(p, bodyYaw);
+        // flying, it holds a steady line: the way it's heading, smoothed (not every twitch of the view)
+        float flyBeat = 0;
+        if (move == FLY) { flyBeat = flight(rig, p, dt, dx, dy, dz, pt, real && !gui); bodyYaw = rig.headS; }
+        else rig.flyInit = false;
         float headYaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
         float net = Mth.clamp(Mth.wrapDegrees(headYaw - bodyYaw), -70, 70) * Mth.DEG_TO_RAD;
         float pitch = Mth.clamp(Mth.lerp(pt, p.xRotO, p.getXRot()), -60, 60) * Mth.DEG_TO_RAD;
@@ -272,10 +276,9 @@ public final class SkullRenderer {
             lift = 0;
         } else if (move == FLY) {
             // laid out flat like a superhero, a fist out in front, legs straight back, the wings driving up and down
-            float b = flight(rig, p, dt, dx, dy, dz, pt, real && !gui);
-            rigLiftPx = b * -1.2F;
-            float dive = (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, h)), -1.0, 1.0);
-            rigTilt = 1.35F + dive * 0.6F;
+            float b = flyBeat;
+            rigLiftPx = b * -0.5F;
+            rigTilt = 1.35F + rig.diveS * 0.55F;
             spine.rx = 0; chest.rx = 0; neck.rx = -0.6F; head.rx = -0.45F;
             for (SkullModel.Leg lg : m.legs) { lg.thigh.rx = 0.05F; lg.shin.rx = 0.12F; lg.foot.rx = 0.6F; }
             main.upper.rot(-2.9, 0, main.side * 0.05); main.fore.rx = 0;
@@ -366,7 +369,7 @@ public final class SkullRenderer {
         float k = 1 - (float) Math.pow(1 - 0.12, dt * 60);
         rig.open += (wingO - rig.open) * k;
         // banking into a turn: the outer wing lifts, the inner one straightens and drops
-        float bankUp = move == FLY ? rig.bank * 0.55F : 0;
+        float bankUp = move == FLY ? rig.bank * 0.45F : 0;
         poseWing(m.wings[0], rig.open, beat, amp, tilt, wingFly, bankUp);
         poseWing(m.wings[1], rig.open, beat, amp, tilt, wingFly, -bankUp);
 
@@ -524,33 +527,53 @@ public final class SkullRenderer {
      * turn. Returns the beat (-1..1) this frame.
      */
     private static float flight(Rig rig, Player p, float dt, double dx, double dy, double dz, float pt, boolean real) {
-        float yaw = Mth.rotLerp(pt, p.yRotO, p.getYRot()) * Mth.DEG_TO_RAD;
-        if (!rig.flyInit) { rig.flyYaw = yaw; rig.flyInit = true; rig.flapsLeft = 2; rig.hard = true; }
+        double hz = Math.sqrt(dx * dx + dz * dz);
+        float look = Mth.rotLerp(pt, p.yRotO, p.getYRot());
+        // where it's heading: along its path when it's really moving, else where it's looking
+        float want = hz > 0.12 ? (float) Math.toDegrees(Math.atan2(-dx, dz)) : look;
+        if (!rig.flyInit) {
+            rig.flyInit = true; rig.headS = want; rig.flyYaw = want; rig.turnS = 0; rig.bank = 0;
+            rig.diveS = 0; rig.flapsLeft = 2; rig.hard = true; rig.flapPh = 0; rig.burstCool = 0;
+            rig.speedS = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * 20; rig.accS = 0;
+        }
         if (dt <= 0) return Mth.sin(rig.flapPh) * rig.flapAmp;
+        // the heading eases round (about a fifth of a second), so the body never snaps or zig-zags
+        rig.headS += Mth.wrapDegrees(want - rig.headS) * (1 - (float) Math.exp(-5 * dt));
+        // the turn it's making, from the smoothed heading, and the bank into it: gentle, and none for small wobbles
+        float rate = Mth.wrapDegrees(rig.headS - rig.flyYaw) * Mth.DEG_TO_RAD / dt;
+        rig.flyYaw = rig.headS;
+        rig.turnS += (Mth.clamp(rate, -3, 3) - rig.turnS) * (1 - (float) Math.exp(-2.5 * dt));
+        float tr = Math.abs(rig.turnS) < 0.35F ? 0 : rig.turnS - Math.copySign(0.35F, rig.turnS);
+        rig.bank += (Mth.clamp(tr * 0.3F, -0.5F, 0.5F) - rig.bank) * (1 - (float) Math.exp(-2 * dt));
+        boolean turning = Math.abs(rig.turnS) > 0.5F;
+        // climbing and diving, smoothed too
+        float dive = (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, hz)), -1.0, 1.0);
+        rig.diveS += (dive - rig.diveS) * (1 - (float) Math.exp(-2.5 * dt));
+        // its speed, and whether it's really picking up
         float speed = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * 20;
-        float e = 1 - (float) Math.exp(-3 * dt);
+        float e = 1 - (float) Math.exp(-2 * dt);
         float was = rig.speedS;
         rig.speedS += (speed - rig.speedS) * e;
         rig.accS += ((rig.speedS - was) / dt - rig.accS) * e;
-        float rate = wrap(yaw - rig.flyYaw) / dt;
-        rig.flyYaw = yaw;
-        rig.turnS += (Mth.clamp(rate, -4, 4) - rig.turnS) * (1 - (float) Math.exp(-4 * dt));
-        boolean turning = Math.abs(rig.turnS) > 0.5F;
-        rig.bank += (Mth.clamp(rig.turnS * 0.35F, -0.7F, 0.7F) - rig.bank) * (1 - (float) Math.exp(-3 * dt));
-        // speeding up: three hard beats
-        if (rig.accS > 5 && rig.flapsLeft == 0) { rig.flapsLeft = 3; rig.hard = true; }
-        // holding speed: two, now and then (not mid-turn)
+        rig.burstCool = Math.max(0, rig.burstCool - dt);
         rig.cruiseT += dt;
-        if (rig.flapsLeft == 0 && !turning && rig.cruiseT > 3.5F + (p.getId() % 7) * 0.2F) { rig.flapsLeft = 2; rig.hard = false; rig.cruiseT = 0; }
+        // speeding up hard: three strong beats (and not again for a moment)
+        if (rig.accS > 8 && rig.flapsLeft == 0 && rig.burstCool <= 0) { rig.flapsLeft = 3; rig.hard = true; rig.burstCool = 2.5F; rig.cruiseT = 0; }
+        // holding its speed: two easy beats, every few seconds, never mid-turn
+        if (rig.flapsLeft == 0 && !turning && rig.cruiseT > 4.5F) { rig.flapsLeft = 2; rig.hard = false; rig.cruiseT = 0; }
         if (rig.flapsLeft > 0) {
             boolean start = rig.flapPh == 0;
-            rig.flapPh += dt * Mth.TWO_PI * (rig.hard ? 2.4F : 1.6F);
-            rig.flapAmp += (1 - rig.flapAmp) * Math.min(1, dt * 10);
+            rig.flapPh += dt * Mth.TWO_PI * (rig.hard ? 2.0F : 1.3F);
+            rig.flapAmp += (1 - rig.flapAmp) * Math.min(1, dt * 6);
             if (start && rig.hard && real) ring(p, dx, dy, dz);
-            if (rig.flapPh >= Mth.TWO_PI) { rig.flapPh = rig.flapsLeft > 1 ? 1e-4F : 0; rig.flapsLeft--; if (rig.flapsLeft > 0 && rig.hard && real) ring(p, dx, dy, dz); }
+            if (rig.flapPh >= Mth.TWO_PI) {
+                rig.flapsLeft--;
+                rig.flapPh = rig.flapsLeft > 0 ? rig.flapPh - Mth.TWO_PI + 1e-4F : 0;
+                if (rig.flapsLeft > 0 && rig.hard && real) ring(p, dx, dy, dz);
+            }
         } else {
             // gliding: the wings held out, still
-            rig.flapAmp += (0 - rig.flapAmp) * Math.min(1, dt * 4);
+            rig.flapAmp += (0 - rig.flapAmp) * Math.min(1, dt * 3);
             rig.flapPh = 0;
         }
         return Mth.sin(rig.flapPh) * rig.flapAmp;
