@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Skull King: model preview</title>
+<style>
+  html,body{margin:0;height:100%;background:#07040a;color:#e8dcff;font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  #view{position:fixed;inset:0}
+  .panel{position:fixed;left:16px;top:16px;max-width:340px;background:rgba(18,8,26,.82);border:1px solid #4a2a66;padding:14px 16px;border-radius:6px;backdrop-filter:blur(4px)}
+  h1{font-size:15px;letter-spacing:.14em;margin:0 0 4px;color:#f0d8ff}
+  p{font-size:12px;line-height:1.5;margin:6px 0;color:#bca8d8}
+  .row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  button{font:inherit;font-size:12px;background:#22102e;color:#e8dcff;border:1px solid #5a3480;padding:6px 10px;border-radius:4px;cursor:pointer}
+  button.on{background:#5a2a86;border-color:#c79bff;color:#fff}
+  button:hover{border-color:#c79bff}
+  .hint{position:fixed;right:16px;bottom:14px;font-size:11px;color:#8a76a8}
+  .parts{font-size:11px;color:#a894c4;margin-top:8px;line-height:1.6}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div class="panel">
+  <h1>THE SKULL KING</h1>
+  <p>The Administrator's wrath form: the whole body bone, the crown on the skull, broader and heavier, burning wings on the back. Underneath, the ground it stands on burns.</p>
+  <div class="row">
+    <button id="bForm" class="on">Skull King</button>
+    <button id="bGround" class="on">Burning ground</button>
+    <button id="bWings" class="on">Wings beat</button>
+    <button id="bSpin" class="on">Turn</button>
+    <button id="bScale">Beside a player</button>
+  </div>
+  <div class="parts">Skull &amp; jaw · gold crown, violet gems · ribcage round an ember heart · bone pauldrons · clawed hands · skeletal wings, ember membrane · cracked obsidian ground, magma veins, flames</div>
+</div>
+<div class="hint">drag to turn · scroll to zoom · Minecraft scale: 1 block = 16 px</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+const W = () => innerWidth, H = () => innerHeight;
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(W(),H());
+document.getElementById('view').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x07040a, 0.0035);
+const camera = new THREE.PerspectiveCamera(40, W()/H(), 1, 2000);
+scene.add(new THREE.AmbientLight(0x6a5a80, 0.55));
+const key = new THREE.DirectionalLight(0xffe8ff, 0.7); key.position.set(60,120,80); scene.add(key);
+const fireLight = new THREE.PointLight(0xff5a1a, 1.6, 140); fireLight.position.set(0,6,0); scene.add(fireLight);
+const heartLight = new THREE.PointLight(0xff3a10, 1.2, 40); scene.add(heartLight);
+
+// ---------- pixel textures, drawn here (Minecraft-style: 16 px a block, nearest-neighbour)
+function tex(w,h,draw){
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const g=c.getContext('2d'); draw(g,w,h);
+  const t=new THREE.CanvasTexture(c); t.magFilter=THREE.NearestFilter; t.minFilter=THREE.NearestFilter; return t;
+}
+const rnd=(a)=>{let s=a;return()=>{s=(s*16807)%2147483647;return s/2147483647}};
+function speckle(g,w,h,base,spots,r){g.fillStyle=base;g.fillRect(0,0,w,h);for(let i=0;i<w*h*0.35;i++){g.fillStyle=spots[Math.floor(r()*spots.length)];g.fillRect(Math.floor(r()*w),Math.floor(r()*h),1,1)}}
+const R=rnd(7);
+const boneT=tex(16,16,(g,w,h)=>{speckle(g,w,h,'#d9d0bc',['#c9bfa8','#e8e0cc','#bfb39a','#d0c6ae'],R);g.fillStyle='#a89a80';g.fillRect(0,7,16,1)});
+const boneDarkT=tex(16,16,(g,w,h)=>speckle(g,w,h,'#b8ab90',['#a39478','#c6b99e','#988a70'],R));
+const goldT=tex(16,16,(g,w,h)=>{speckle(g,w,h,'#e8b830',['#f8d860','#c89418','#ffe890'],R);g.fillStyle='#a87808';g.fillRect(0,15,16,1)});
+const gemT=tex(4,4,(g)=>{g.fillStyle='#9a3cff';g.fillRect(0,0,4,4);g.fillStyle='#e0b8ff';g.fillRect(1,1,1,1);g.fillStyle='#5a1a9a';g.fillRect(2,3,2,1)});
+// the skull's face: sockets lit from inside, the nose's hollow, the brow
+const skullFaceT=tex(16,16,(g,w,h)=>{speckle(g,w,h,'#ddd4c0',['#cbc1aa','#ebe4d2','#c2b69c'],R);
+  g.fillStyle='#b5a88c';g.fillRect(2,4,12,1);
+  g.fillStyle='#120610';g.fillRect(2,5,5,5);g.fillRect(9,5,5,5);
+  g.fillStyle='#ff3df0';g.fillRect(4,7,2,2);g.fillRect(10,7,2,2);
+  g.fillStyle='#ffd0ff';g.fillRect(4,7,1,1);g.fillRect(10,7,1,1);
+  g.fillStyle='#160810';g.fillRect(7,11,2,2);g.fillRect(7,10,2,1);
+  g.fillStyle='#a3967a';g.fillRect(3,14,10,1)});
+const jawT=tex(16,8,(g,w,h)=>{speckle(g,w,h,'#d2c8b2',['#c0b59c','#e2dac6'],R);g.fillStyle='#f4efe2';for(let x=2;x<14;x+=2)g.fillRect(x,0,1,2);g.fillStyle='#2a1018';g.fillRect(1,2,14,1)});
+// ribs over the dark inside, the heart's glow showing between them
+const ribT=tex(16,16,(g,w,h)=>{g.fillStyle='#1a0610';g.fillRect(0,0,w,h);
+  for(let y=1;y<16;y+=3){g.fillStyle='#d9d0bc';g.fillRect(0,y,16,2);g.fillStyle='#b8ab90';g.fillRect(0,y+1,16,1)}
+  g.fillStyle='#d9d0bc';g.fillRect(7,0,2,16);
+  g.fillStyle='#ff5a1a';g.fillRect(5,6,1,1);g.fillRect(10,9,1,1);g.fillStyle='#ff9a3a';g.fillRect(4,12,1,1)});
+const emberT=tex(8,8,(g)=>{speckle(g,8,8,'#ff4a10',['#ff8a20','#ffd040','#d02a08'],R)});
+const membraneT=tex(32,32,(g,w,h)=>{const gr=g.createLinearGradient(0,0,0,h);gr.addColorStop(0,'#3a0814');gr.addColorStop(1,'#120208');g.fillStyle=gr;g.fillRect(0,0,w,h);
+  for(let i=0;i<60;i++){g.fillStyle=i%3?'#5a1020':'#ff5a1a';g.fillRect(Math.floor(R()*w),Math.floor(R()*h),1,1)}
+  g.fillStyle='#ff6a1a';for(let x=0;x<w;x++)if(R()<.6)g.fillRect(x,h-1-Math.floor(R()*2),1,1)});
+
+
+const crackT=tex(16,16,(g,w,h)=>{speckle(g,w,h,'#d4cab4',['#c4b8a0','#e2dac6','#b8ab90'],R);
+  let x=3,y=0;g.fillStyle='#2a0a08';for(let k=0;k<22;k++){g.fillRect(x,y,1,1);x+=Math.round(R()*2-1);y+=1;if(y>15){x=10;y=0}}
+  g.fillStyle='#ff6a1a';x=3;y=0;const r2=rnd(11);for(let k=0;k<22;k++){if(r2()<.5)g.fillRect(x,y,1,1);x+=Math.round(r2()*2-1);y+=1;if(y>15){x=10;y=0}}});
+const crackMaskT=tex(16,16,(g,w,h)=>{g.fillStyle='#000';g.fillRect(0,0,w,h);let x=3,y=0;const r2=rnd(11);g.fillStyle='#fff';for(let k=0;k<22;k++){if(r2()<.5)g.fillRect(x,y,1,1);x+=Math.round(r2()*2-1);y+=1;if(y>15){x=10;y=0}}});
+const hornT=tex(8,8,(g,w,h)=>{speckle(g,w,h,'#3a2a30',['#4a3840','#2a1c22','#5a4650'],R);g.fillStyle='#6a5660';g.fillRect(0,2,8,1);g.fillRect(0,5,8,1)});
+const muzzleT=tex(16,8,(g,w,h)=>{speckle(g,w,h,'#d8cfba',['#c8bea6','#e6dfcc'],R);g.fillStyle='#160810';g.fillRect(6,0,4,3);g.fillStyle='#2a1018';g.fillRect(1,5,14,1);g.fillStyle='#f6f0e2';for(let x=1;x<15;x+=2)g.fillRect(x,6,1,2);g.fillStyle='#f6f0e2';g.fillRect(2,6,1,2);g.fillRect(13,6,1,2)});
+const soulTex=tex(8,16,(g)=>{g.fillStyle='#ff20e0';g.fillRect(2,7,4,9);g.fillStyle='#ff80ff';g.fillRect(3,3,2,10);g.fillStyle='#ffe0ff';g.fillRect(3,10,2,4);g.fillStyle='#c010ff';g.fillRect(1,11,1,4);g.fillRect(6,10,1,5)});
+const membrane2T=tex(64,64,(g,w,h)=>{const gr=g.createLinearGradient(0,0,w,h);gr.addColorStop(0,'#4a0a18');gr.addColorStop(.6,'#22040c');gr.addColorStop(1,'#0e0206');g.fillStyle=gr;g.fillRect(0,0,w,h);
+  for(let k=0;k<14;k++){let x=R()*w,y=R()*h,a=R()*6.28;g.strokeStyle='rgba(120,20,30,.7)';g.beginPath();g.moveTo(x,y);for(let s=0;s<20;s++){a+=(R()-.5)*.8;x+=Math.cos(a)*2;y+=Math.sin(a)*2;g.lineTo(x,y)}g.stroke()}
+  for(let i=0;i<120;i++){g.fillStyle=i%4?'rgba(90,10,24,.8)':'rgba(255,90,30,.9)';g.fillRect(Math.floor(R()*w),Math.floor(R()*h),1,1)}});
+membrane2T.wrapS=membrane2T.wrapT=THREE.RepeatWrapping;membrane2T.repeat.set(0.03,0.03);
+const veinsT=tex(64,64,(g,w,h)=>{g.fillStyle='#000';g.fillRect(0,0,w,h);for(let k=0;k<18;k++){let x=R()*w,y=R()*h,a=R()*6.28;g.strokeStyle='rgba(255,90,20,1)';g.lineWidth=1;g.beginPath();g.moveTo(x,y);for(let s=0;s<24;s++){a+=(R()-.5)*.9;x+=Math.cos(a)*2;y+=Math.sin(a)*2;g.lineTo(x,y)}g.stroke()}});
+veinsT.wrapS=veinsT.wrapT=THREE.RepeatWrapping;veinsT.repeat.set(0.03,0.03);
+function mat(t,o={}){return new THREE.MeshLambertMaterial(Object.assign({map:t},o))}
+// ---------- building boxes the way Minecraft models are: pixel units, pivots
+function box(parent,w,h,d,x,y,z,m){
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),Array.isArray(m)?m:[m,m,m,m,m,m]);
+  mesh.position.set(x,y,z);parent.add(mesh);return mesh;
+}
+function pivot(parent,x,y,z,rx=0,ry=0,rz=0){const o=new THREE.Group();o.position.set(x,y,z);o.rotation.set(rx,ry,rz);parent.add(o);return o}
+// a long bone: knobbed at both ends, the shaft between (along -y from the pivot)
+function bone(parent,len,thick,m=M.bone,knob=M.boneD){
+  box(parent,thick,len-thick,thick*0.8,0,-len/2,0,m);
+  box(parent,thick+1.4,thick*0.9,thick+0.6,0,-thick*0.45,0,knob);
+  box(parent,thick+1.2,thick*0.9,thick+0.6,0,-len+thick*0.45,0,knob);
+}
+const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT),gem:mat(gemT,{emissive:0x7a2aff,emissiveIntensity:1}),
+  face:mat(skullFaceT),jaw:mat(jawT),ember:new THREE.MeshBasicMaterial({map:emberT}),
+  crack:mat(crackT,{emissive:0xff3a10,emissiveMap:crackMaskT,emissiveIntensity:1.2}),
+  horn:mat(hornT),muzzle:mat(muzzleT),dark:new THREE.MeshLambertMaterial({color:0x14060e}),
+  membrane:new THREE.MeshLambertMaterial({map:membrane2T,side:THREE.DoubleSide,transparent:true,opacity:.9,emissive:0x3a0610,emissiveIntensity:.6}),
+  veins:new THREE.MeshBasicMaterial({map:veinsT,side:THREE.DoubleSide,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.85})};
+
+const king=new THREE.Group();scene.add(king);
+// ---- legs: short and heavy, toes and claws forward
+function leg(side){
+  const hip=pivot(king,side*4.5,14,0);
+  const thigh=pivot(hip,0,0,0,-0.25,0,side*-0.06);
+  bone(thigh,7.5,4);
+  box(thigh,4,3,2,0,-7.2,2.2,M.boneD);                 // kneecap
+  const shin=pivot(thigh,0,-7.5,0,0.35,0,0);
+  box(shin,2,6.5,2,-1.1,-3.2,0,M.bone);box(shin,1.6,6.5,1.6,1.2,-3.2,-0.4,M.boneD); // tibia, fibula
+  box(shin,4.6,2,4.6,0,-6.6,0,M.boneD);                 // ankle
+  const foot=pivot(shin,0,-7.2,0,-0.1,0,0);
+  box(foot,6,2,5,0,-0.4,1.6,M.bone);                    // the foot's bones, reaching forward
+  for(const t of[-2.2,0,2.2]){box(foot,1.4,1.4,3,t,-0.6,5.2,M.bone);const c=box(foot,1,1.2,1.6,t,-0.8,7.2,M.horn);c.rotation.x=0.5}
+  box(foot,2.4,1.6,2,0,-0.4,-1.8,M.boneD);              // heel
+  return hip;
+}
+const legL=leg(1),legR=leg(-1);
+// ---- pelvis and the spine, hunched forward
+const pelvis=pivot(king,0,15,0);
+box(pelvis,12,4,7,0,0.5,0,M.bone);
+box(pelvis,4,5,4,6,1.5,-0.5,M.boneD);box(pelvis,4,5,4,-6,1.5,-0.5,M.boneD); // the hip wings
+const spine=pivot(pelvis,0,2.5,-1,0.38,0,0);
+for(let k=0;k<4;k++){box(spine,3.2,1.6,3.2,0,k*2.1+0.8,0,M.bone);box(spine,1.2,1.2,2.2,0,k*2.1+0.8,-2.2,M.boneD)}
+// ---- the ribcage: broad as a troll's, bars with gaps, an ember heart inside
+const chest=pivot(spine,0,8.2,0,0.32,0,0);
+const CW=23,CH=16,CD=13;
+box(chest,4,CH,4,0,CH/2,-CD/2+1.5,M.boneD);               // the backbone up through it
+box(chest,3.4,CH-3,2,0,CH/2,CD/2-0.6,M.bone);             // sternum
+for(let k=0;k<6;k++){
+  const y=2+k*2.4, wk=CW-(k<2?6:k<4?2:0)-(k==5?3:0);
+  box(chest,wk,1.5,1.6,0,y,CD/2-0.6,M.bone);              // front of the rib
+  box(chest,1.6,1.5,CD,wk/2-0.8,y,0,M.bone);              // its sides
+  box(chest,1.6,1.5,CD,-wk/2+0.8,y,0,M.bone);
+  box(chest,wk,1.5,1.6,0,y,-CD/2+0.8,M.boneD);            // and back
+}
+box(chest,CW+1,3,CD+1,0,CH+0.5,0,M.crack);                 // the yoke of the shoulders, cracked and burning
+const heart=box(chest,5,5,5,0,8,0,M.ember);
+heartLight.position.set(0,26,4);
+// ---- arms: huge shoulders, long arms, fists near the ground
+function arm(side){
+  const sh=pivot(chest,side*14.5,CH-1,0.5);
+  // the shoulder: a great rounded boss of bone, spiked
+  box(sh,11,10,11,side*0.5,1.5,0,M.crack);
+  box(sh,9,2,9,side*0.5,7,0,M.bone);
+  for(const[z,h]of[[-3,5],[0,7],[3,5]]){const sp=box(sh,1.8,h,1.8,side*2,8+h/2-1,z,M.horn);sp.rotation.z=-side*0.4;sp.rotation.x=z*0.08}
+  const upper=pivot(sh,side*1.5,-3,0,-0.7+0.15,0,side*-0.12);   // hangs straight despite the hunch
+  bone(upper,14,6);
+  const fore=pivot(upper,0,-14,0,-0.15,0,side*0.05);
+  box(fore,3,13,3,-1.6,-6.5,0,M.bone);box(fore,2.6,13,2.6,1.7,-6.5,-0.3,M.boneD);   // radius, ulna
+  box(fore,8,3,7,0,-12.6,0,M.boneD);                          // the wrist
+  // the fist: knuckles, finger bones curled under, a claw on each
+  const hand=pivot(fore,0,-14,0);
+  box(hand,9,6,8,0,-3,0,M.bone);
+  for(const x of[-3,-1,1,3]){box(hand,1.8,2,1.8,x,-6.5,3.2,M.boneD);const c=box(hand,1.2,2.4,1.2,x,-7.6,3.6,M.horn);c.rotation.x=-0.5}
+  const th=box(hand,2,4,2,side*-4.8,-3.5,2.4,M.boneD);th.rotation.z=side*0.4;
+  return {sh,upper};
+}
+const armL=arm(1),armR=arm(-1);
+// ---- the head: low between the shoulders, thrust forward. A horned skull, crowned, cracked with fire.
+const neck=pivot(chest,0,CH-2,CD/2-1,-0.35,0,0);
+box(neck,3,4,3,0,1.5,0.5,M.boneD);
+const head=pivot(neck,0,4,2.5,-0.25,0,0);
+const skull=box(head,12,9,11,0,4.5,0,[M.bone,M.bone,M.crack,M.boneD,M.face,M.bone]);
+box(head,14,2.5,3,0,6.6,5.2,M.boneD);                         // the heavy brow
+box(head,8,4,4,0,1.2,6.5,[M.bone,M.bone,M.bone,M.boneD,M.muzzle,M.bone]);   // the muzzle, teeth bared
+const jaw=pivot(head,0,0.5,-2,0.18,0,0);
+box(jaw,11,2.5,10,0,-1.2,4.5,[M.boneD,M.boneD,M.boneD,M.boneD,M.jaw,M.boneD]);
+for(const sd of[1,-1]){                                      // tusks, up from the jaw like the troll's
+  const t=pivot(jaw,sd*4.6,-0.5,8.5,-0.3,0,sd*-0.3);
+  box(t,1.6,4,1.6,0,2,0,M.horn);const t2=pivot(t,0,4,0,-0.5,0,sd*0.2);box(t2,1.2,3,1.2,0,1.5,0,M.horn);
+}
+// horns sweeping back from the temples, ridged, darkening to the tips
+for(const sd of[1,-1]){
+  let p=pivot(head,sd*5.6,7.5,0.5,0,0,sd*-0.9);
+  const segs=[[3.2,4,-0.35],[2.8,4,-0.45],[2.3,3.6,-0.5],[1.8,3.2,-0.5],[1.2,3,-0.4]];
+  for(const[th,len,bend]of segs){box(p,th,len,th,0,len/2,0,M.horn);p=pivot(p,0,len,0,bend,0,sd*0.12)}
+}
+// the crown: a gold circlet sat on the horned skull, its spikes uneven, violet stones, one floating above
+const crown=pivot(head,0,9.4,0);
+box(crown,13,2,12,0,0,0,M.gold);
+const spikeH=[3,5,7,5,3];
+spikeH.forEach((h,i)=>{const x=(i-2)*2.8;box(crown,1.6,h,1.2,x,1+h/2,5.6,M.gold);box(crown,1.2,h*0.7,1.2,x,1+h*0.35,-5.6,M.gold)});
+box(crown,1.6,1.6,0.8,0,0.2,6.3,M.gem);box(crown,1.2,1.2,0.8,-4.2,0.2,6.3,M.gem);box(crown,1.2,1.2,0.8,4.2,0.2,6.3,M.gem);
+const halo=box(crown,2.2,2.2,2.2,0,11,1,M.gem);
+// flames in the eye sockets
+const eyeFlames=[];
+for(const sd of[1,-1]){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:soulTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+  s.position.set(sd*2.9,6,6.2);head.add(s);eyeFlames.push(s)}
+
+// ---- the wings: dragon-like, a bone arm and four long fingers, a ragged burning membrane between
+function wing(side){
+  const root=pivot(chest,side*5,CH-3,-CD/2-0.5);
+  const base=pivot(root,0,0,0);                                  // turned by the flap
+  const WX=13,WY=5.2;                                           // the wrist, out and up from the shoulder
+  bone(pivot(base,0,0,0,0,0,Math.atan2(side*WX,-WY)),14,3.2);   // humerus
+  const wrist=pivot(base,side*WX,WY,0);
+  box(wrist,3.6,3.6,3.6,0,0,0,M.boneD);
+  const hook=pivot(wrist,0,1.5,0,0,0,side*-0.5);box(hook,1.4,4,1.4,0,2,0,M.horn);   // the wrist claw
+  const fingers=[{len:30,phi:1.05},{len:38,phi:0.45},{len:36,phi:-0.15},{len:28,phi:-0.75}];
+  for(const f of fingers){
+    const g=pivot(wrist,0,0,0,0,0,Math.atan2(side*Math.cos(f.phi),-Math.sin(f.phi)));
+    let p=g,t=2.0;
+    for(let k=0;k<3;k++){const l=f.len/3;box(p,t,l+0.4,t,0,-l/2,0,k==2?M.horn:M.bone);if(k<2)box(p,t+0.8,1.4,t+0.8,0,-l,0,M.boneD);p=pivot(p,0,-l,0);t*=0.75}
+    f.tip=[side*Math.cos(f.phi)*f.len,Math.sin(f.phi)*f.len];
+  }
+  // the membrane, in the wrist's plane: from the shoulder up to the wrist, out to each fingertip, scalloped and torn between
+  const shape=new THREE.Shape();
+  const back=[-side*WX,-WY];
+  const tail=[back[0]+side*5,back[1]-20];
+  shape.moveTo(back[0],back[1]);
+  shape.lineTo(0,0);
+  shape.lineTo(fingers[0].tip[0]*0.5,fingers[0].tip[1]*0.5);
+  fingers.forEach((f,i)=>{
+    shape.lineTo(f.tip[0],f.tip[1]);
+    const nx=fingers[i+1]?fingers[i+1].tip:tail;
+    const mx=(f.tip[0]+nx[0])/2,my=(f.tip[1]+nx[1])/2;
+    const dip=i==fingers.length-1?0.8:0.6;
+    shape.lineTo(f.tip[0]*0.8+mx*0.2,f.tip[1]*0.8+my*0.2-0.8);
+    shape.lineTo(mx*dip+side*1.4,my*dip-0.6);
+    shape.lineTo(mx*dip-side*0.6,my*dip+1.2);                  // a tear
+    shape.lineTo(mx*(dip+0.06),my*(dip+0.06));
+    shape.lineTo(nx[0]*0.8+mx*0.2,nx[1]*0.8+my*0.2+0.6);
+  });
+  shape.lineTo(tail[0],tail[1]);
+  shape.lineTo(back[0],back[1]);
+  const geo=new THREE.ShapeGeometry(shape);
+  const mem=new THREE.Mesh(geo,M.membrane);mem.position.z=-0.4;wrist.add(mem);
+  const veins=new THREE.Mesh(geo,M.veins);veins.position.z=-0.7;wrist.add(veins);
+  return {root,base,wrist};
+}
+const wingL=wing(1),wingR=wing(-1);
+king.position.y=0;
+
+// ---------- the burning ground: cracked obsidian, magma veins, flames, embers
+const ground=new THREE.Group();scene.add(ground);
+const G=128;
+const groundTex=tex(G,G,(g,w,h)=>{
+  speckle(g,w,h,'#140a14',['#1e1020','#0c060c','#26142a','#180c18'],R);
+  // veins: random walks of magma
+  for(let k=0;k<26;k++){let x=R()*w,y=R()*h,a=R()*Math.PI*2;
+    for(let s=0;s<40;s++){a+=(R()-.5)*1.1;x+=Math.cos(a)*1.4;y+=Math.sin(a)*1.4;
+      g.fillStyle=s%5?'#ff5a12':'#ffc040';g.fillRect(Math.floor(x),Math.floor(y),1,1);
+      if(R()<.4){g.fillStyle='#a8200a';g.fillRect(Math.floor(x)+1,Math.floor(y),1,1)}}}
+  // fade to the edge: a circle of it
+  const gr=g.createRadialGradient(w/2,h/2,w*0.28,w/2,h/2,w*0.5);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(7,4,10,1)');
+  g.fillStyle=gr;g.fillRect(0,0,w,h)});
+const glowTex=tex(G,G,(g,w,h)=>{const gr=g.createRadialGradient(w/2,h/2,2,w/2,h/2,w/2);gr.addColorStop(0,'rgba(255,90,20,.55)');gr.addColorStop(.6,'rgba(255,60,10,.18)');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,w,h)});
+glowTex.magFilter=THREE.LinearFilter;
+const disc=new THREE.Mesh(new THREE.PlaneGeometry(128,128),new THREE.MeshLambertMaterial({map:groundTex,emissive:0xff4a10,emissiveMap:groundTex,emissiveIntensity:.7}));
+disc.rotation.x=-Math.PI/2;ground.add(disc);
+const glow=new THREE.Mesh(new THREE.PlaneGeometry(120,120),new THREE.MeshBasicMaterial({map:glowTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+glow.rotation.x=-Math.PI/2;glow.position.y=0.2;ground.add(glow);
+// cracked blocks pushed up here and there
+for(let i=0;i<14;i++){const a=R()*Math.PI*2,r=18+R()*34;const b=box(ground,8+R()*6,1+R()*3,8+R()*6,Math.cos(a)*r,0.8,Math.sin(a)*r,mat(groundTex,{emissive:0xff4a10,emissiveMap:groundTex,emissiveIntensity:.6}));b.rotation.y=R()*3;b.rotation.x=(R()-.5)*.25}
+// flames: little sprites that rise and fade
+const flameTex=tex(8,16,(g)=>{g.fillStyle='#ff4a10';g.fillRect(2,6,4,10);g.fillStyle='#ff9a20';g.fillRect(3,3,2,10);g.fillStyle='#ffe060';g.fillRect(3,9,2,5);g.fillStyle='#ff6a10';g.fillRect(1,11,1,4);g.fillRect(6,10,1,5)});
+const flames=[];
+for(let i=0;i<70;i++){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+  s.userData={a:R()*Math.PI*2,r:6+R()*52,t:R(),sp:.4+R()*.8,size:3+R()*4};ground.add(s);flames.push(s)}
+// embers drifting up off it
+const emberGeo=new THREE.BufferGeometry();const EN=260;const ep=new Float32Array(EN*3);const ed=[];
+for(let i=0;i<EN;i++){ed.push({a:R()*Math.PI*2,r:R()*60,y:R()*80,sp:.15+R()*.4});}
+emberGeo.setAttribute('position',new THREE.BufferAttribute(ep,3));
+const embers=new THREE.Points(emberGeo,new THREE.PointsMaterial({color:0xff8a30,size:1.4,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false}));scene.add(embers);
+// a plain grass block floor beyond it, for scale
+const floor=new THREE.Mesh(new THREE.PlaneGeometry(1200,1200),new THREE.MeshLambertMaterial({color:0x14101a}));floor.rotation.x=-Math.PI/2;floor.position.y=-0.2;scene.add(floor);
+// a plain player beside it, for comparison (hidden until asked)
+const steve=new THREE.Group();scene.add(steve);steve.visible=false;steve.position.set(30,0,0);
+const sk=mat(tex(4,4,g=>{g.fillStyle='#c8946a';g.fillRect(0,0,4,4)})),sh=mat(tex(4,4,g=>{g.fillStyle='#2a8aa8';g.fillRect(0,0,4,4)})),pa=mat(tex(4,4,g=>{g.fillStyle='#3a3a8a';g.fillRect(0,0,4,4)}));
+box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,sh);box(steve,4,12,4,-6,18,0,sh);box(steve,4,12,4,2,6,0,pa);box(steve,4,12,4,-2,6,0,pa);
+
+// ---------- controls
+let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true;
+const shot=/^#shot-(\d)$/.exec(location.hash);if(shot){yaw=[0.6,2.4,-0.9,3.14][+shot[1]]||0;spin=false;document.querySelector('.panel').style.display='none'}
+const el=renderer.domElement;
+el.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)});
+el.addEventListener('pointermove',e=>{if(!drag)return;yaw-=(e.clientX-drag.x)*0.008;pitch=Math.max(-0.1,Math.min(1.3,pitch+(e.clientY-drag.y)*0.006));drag={x:e.clientX,y:e.clientY}});
+el.addEventListener('pointerup',()=>drag=null);
+el.addEventListener('wheel',e=>{dist=Math.max(60,Math.min(400,dist*(1+Math.sign(e.deltaY)*0.1)));e.preventDefault()},{passive:false});
+function toggle(id,fn){const b=document.getElementById(id);b.addEventListener('click',()=>{b.classList.toggle('on');fn(b.classList.contains('on'))})}
+toggle('bForm',v=>king.visible=v);
+toggle('bGround',v=>{ground.visible=v;embers.visible=v;fireLight.visible=v});
+toggle('bWings',v=>flap=v);
+toggle('bSpin',v=>spin=v);
+toggle('bScale',v=>steve.visible=v);
+addEventListener('resize',()=>{renderer.setSize(W(),H());camera.aspect=W()/H();camera.updateProjectionMatrix()});
+
+let t0=performance.now();
+function frame(now){
+  const t=(now-t0)/1000;
+  if(spin&&!drag)yaw+=0.004;
+  camera.position.set(Math.sin(yaw)*Math.cos(pitch)*dist,24+Math.sin(pitch)*dist,Math.cos(yaw)*Math.cos(pitch)*dist);
+  camera.lookAt(0,24,0);
+  // breathing, the hunch heaving, wings, the heart's glow
+  const br=Math.sin(t*1.6);
+  chest.scale.set(1+br*0.012,1+br*0.01,1+br*0.02);
+  chest.rotation.x=0.32+br*0.02;
+  head.rotation.x=-0.25+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
+  jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
+  armL.upper.rotation.x=-0.55+Math.sin(t*0.8)*0.05;armR.upper.rotation.x=-0.55-Math.sin(t*0.8)*0.05;
+  const f=flap?Math.sin(t*1.9):0.3;
+  wingL.base.rotation.y=-0.25-f*0.35;wingR.base.rotation.y=0.25+f*0.35;
+  wingL.base.rotation.z=-0.1+f*0.12;wingR.base.rotation.z=0.1-f*0.12;
+  halo.rotation.y=t*1.5;halo.position.y=11+Math.sin(t*2)*0.6;
+  for(const e of eyeFlames){const k=0.8+Math.sin(t*9+e.position.x)*0.2;e.scale.set(2.2*k,4.2*k,1)}
+  const pulse=0.75+Math.sin(t*3.1)*0.25+Math.sin(t*7.3)*0.08;
+  heartLight.intensity=1.2*pulse;M.ember.color.setScalar(0.8+pulse*0.2);
+  fireLight.intensity=1.4+Math.sin(t*5)*0.2+Math.sin(t*11.7)*0.15;
+  disc.material.emissiveIntensity=0.55+Math.sin(t*2.3)*0.15;
+  for(const s of flames){const u=s.userData;u.t=(u.t+0.008*u.sp)%1;const r=u.r;s.position.set(Math.cos(u.a)*r,u.t*u.size*3,Math.sin(u.a)*r);
+    const k=Math.sin(u.t*Math.PI);s.scale.set(u.size*0.6*k,u.size*1.4*k,1);s.material.opacity=k}
+  for(let i=0;i<EN;i++){const d=ed[i];d.y+=d.sp;d.a+=0.004;if(d.y>90){d.y=0;d.r=R()*60}ep[i*3]=Math.cos(d.a)*d.r;ep[i*3+1]=d.y;ep[i*3+2]=Math.sin(d.a)*d.r}
+  emberGeo.attributes.position.needsUpdate=true;
+  renderer.render(scene,camera);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
