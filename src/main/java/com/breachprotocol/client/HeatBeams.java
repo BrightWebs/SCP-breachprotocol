@@ -53,9 +53,12 @@ public final class HeatBeams {
             side = side.lengthSqr() < 1e-4 ? new Vec3(1, 0, 0) : side.normalize();
             Vec3 up = side.cross(dir).normalize();
             // the eyes: just in front of the face, a little apart
-            // on the skin: the eyes are the face's 3rd and 6th columns, 5th and 6th rows (a pixel is 1/16 of a block)
-            Vec3 face = eye.add(dir.scale(0.255)).add(up.scale(0.0625));
-            Vec3 eyeL = face.add(side.scale(0.094)), eyeR = face.subtract(side.scale(0.094));
+            // on the skin: the eyes are the face's 3rd and 6th columns, 5th and 6th rows. The player model is drawn at
+            // 15/16 scale, so a skin pixel is 0.0586 blocks; the head turns about the neck, 0.214 below the eye height.
+            final double PX = 0.9375 / 16;
+            Vec3 neck = eye.subtract(0, 0.214, 0);
+            Vec3 face = neck.add(up.scale(3 * PX)).add(dir.scale(4 * PX + 0.012));
+            Vec3 eyeL = face.add(side.scale(1.5 * PX)), eyeR = face.subtract(side.scale(1.5 * PX));
             // where it lands (below 80% it stops at the first block)
             double range = RANGE[tier];
             Vec3 end = eye.add(dir.scale(range));
@@ -66,7 +69,7 @@ public final class HeatBeams {
             float w = WIDTH[tier] * flick;
             if (!me) {
                 for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
-                    glow(m, vc, ey, cam, 0.035F, 1F, 0.75F, 0.6F, 1F);                       // the lit pixel
+                    glow(m, vc, ey, cam, 0.03F, 1F, 0.75F, 0.6F, 1F);                        // the lit pixel
                     glow(m, vc, ey, cam, 0.08F + tier * 0.015F, 1F, 0.12F, 0.05F, 0.55F);    // its bloom
                 }
             }
