@@ -156,6 +156,9 @@ function burningFeather(){return tex(48,16,(g,w,h)=>{
 const burnT=burningFeather();
 const burnMaskT=tex(48,16,(g,w,h)=>{g.fillStyle='#000';g.fillRect(0,0,w,h);const gr=g.createLinearGradient(w*0.68,0,w,0);gr.addColorStop(0,'#000');gr.addColorStop(1,'#fff');g.fillStyle=gr;g.fillRect(0,0,w,h)});
 const featherT=featherTex(false),featherDT=featherTex(true);
+// solid feathers: built of blocks, so they have thickness. The vane black with a violet sheen; the end burning
+const vaneT=tex(16,16,(g,w,h)=>{speckle(g,w,h,'#140f1a',['#1c1526','#100c14','#2a1e3a','#20182c'],R);g.fillStyle='#3a2656';for(let x=0;x<w;x+=3)g.fillRect(x,0,1,1),g.fillRect(x+1,h-1,1,1)});
+const vaneBurnT=tex(16,16,(g,w,h)=>{const gr=g.createLinearGradient(0,0,w,0);gr.addColorStop(0,'#3a140c');gr.addColorStop(.5,'#e0501a');gr.addColorStop(1,'#ffd060');g.fillStyle=gr;g.fillRect(0,0,w,h);for(let i=0;i<40;i++){g.fillStyle=R()<.5?'#ff8a20':'#a02a0a';g.fillRect(Math.floor(R()*w),Math.floor(R()*h),1,1)}});
 // ---------- building boxes the way Minecraft models are: pixel units, pivots
 function box(parent,w,h,d,x,y,z,m){
   const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),Array.isArray(m)?m:[m,m,m,m,m,m]);
@@ -174,6 +177,8 @@ const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0xb07810,
   crack:mat(crackT,{emissive:0xff3a10,emissiveMap:crackMaskT,emissiveIntensity:1.2}),
   horn:mat(hornT),muzzle:mat(muzzleT),dark:new THREE.MeshLambertMaterial({color:0x14060e}),
   membrane:new THREE.MeshLambertMaterial({map:membrane2T,side:THREE.DoubleSide,transparent:true,opacity:.9,emissive:0x3a0610,emissiveIntensity:.6}),
+  vane:new THREE.MeshLambertMaterial({map:vaneT}),
+  vaneBurn:new THREE.MeshLambertMaterial({map:vaneBurnT,emissive:0xff6a20,emissiveMap:vaneBurnT,emissiveIntensity:1}),
   feather:new THREE.MeshLambertMaterial({map:burnT,side:THREE.DoubleSide,alphaTest:.5,emissive:0xff5a10,emissiveMap:burnMaskT,emissiveIntensity:1}),
   featherD:new THREE.MeshLambertMaterial({map:featherDT,side:THREE.DoubleSide,alphaTest:.5}),
   veins:new THREE.MeshBasicMaterial({map:veinsT,side:THREE.DoubleSide,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.85})};
@@ -234,6 +239,13 @@ const legL=leg(1),legR=leg(-1);
 const pelvis=pivot(king,0,HIP_Y+1,0);
 box(pelvis,12,4,7,0,0.5,0,M.bone);
 box(pelvis,4,5,4,6,1.5,-0.5,M.boneD);box(pelvis,4,5,4,-6,1.5,-0.5,M.boneD); // the hip wings
+// ---- the tail: a long whip of vertebrae, back from the pelvis, drooping and curling up at its end, a bone blade at the tip
+const tail=[];{let p=pivot(pelvis,0,0,-3.5,-0.7,0,0);const N=18;
+  for(let i=0;i<N;i++){const k=i/N,t=3.4-2.3*k,L=2.7;
+    box(p,t,t,L,0,0,-L/2,M.bone);box(p,t+0.9,t+0.6,0.9,0,0,-0.2,M.boneD);
+    if(i%2==0&&i<N-2)box(p,0.8,1.2+t*0.5,0.9,0,t/2+0.5,-L/2,M.horn);
+    tail.push(p);const q=pivot(p,0,0,-L,0.05,0,0);p=q}
+  const blade=p;box(blade,0.8,3.2,4.2,0,0,-1.6,M.horn);box(blade,0.8,1.6,2.4,0,0,-4.4,M.horn);box(blade,1.4,1.4,1.4,0,0,0,M.boneD);tail.push(blade)}
 const spine=pivot(pelvis,0,2.5,-1,0.14,0,0);
 for(let k=0;k<4;k++){box(spine,3.2,1.6,3.2,0,k*2.1+0.8,0,M.bone);box(spine,1.2,1.2,2.2,0,k*2.1+0.8,-2.2,M.boneD)}
 // ---- the ribcage: broad as a troll's, bars with gaps, an ember heart inside
@@ -343,7 +355,11 @@ function wing(side){
   // spread (absolute, in the wing's plane: -PI/2 straight down, toward 0 out along the wing); z: which layer
   const feather=(bone,b,x,len,a,z,w,fire)=>{
     const fp=pivot(bone,side*x,-0.6,z,0,0,0);fp.userData={b,a,fold:-1.5-x*0.004-b*0.03};
-    const m=new THREE.Mesh(new THREE.PlaneGeometry(len,w),M.feather);m.position.x=side*len/2;fp.add(m);feathers.push(fp);
+    // the shaft, then the vane in blocks: narrow at the root, full in the middle, narrowing to a burning tip
+    box(fp,len*0.9,0.9,1.4,side*len*0.45,0,0,M.horn);
+    const segs=[[0,0.22,0.55,M.vane],[0.22,0.72,1,M.vane],[0.72,0.9,0.72,M.vaneBurn],[0.9,1,0.38,M.vaneBurn]];
+    for(const[a0,a1,k,mm]of segs){const l=(a1-a0)*len;box(fp,l,w*k,0.8,side*(a0*len+l/2),0,0,mm)}
+    feathers.push(fp);
     if(fire){const fl=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
       fl.position.set(side*len,0,0.2);fp.add(fl);flames.push(fl)}};
   // tertials, along the arm
@@ -583,6 +599,7 @@ function frame(now){
   head.rotation.x=-0.2+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
   const spd=animate(t);
+  tail.forEach((p,i)=>{if(i==tail.length-1)return;const base=i==0?(move==='fly'?-1.35:move==='gallop'?-0.35:-0.7):0.05;p.rotation.x=base+Math.sin(t*1.4-i*0.35)*0.03*(i?1:0);p.rotation.y=Math.sin(t*1.1-i*0.4)*(0.05+i*0.004)*(spd?1.6:1)});
   if(GROUND){king.updateMatrixWorld(true);let low=1e9;const v=new THREE.Vector3();
     for(const lg of[legL,legR]){v.set(0,-2.4,1.5);lg.foot.localToWorld(v);low=Math.min(low,v.y);v.set(0,-2.4,6);lg.foot.localToWorld(v);low=Math.min(low,v.y)}
     for(const ar of[armL,armR]){for(const z of[-4,4]){v.set(0,-6,z);ar.hand.localToWorld(v);low=Math.min(low,v.y)}}
