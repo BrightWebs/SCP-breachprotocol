@@ -146,10 +146,13 @@ public class CommandScreen extends Screen {
         // the list
         List<Powers.Power> all = Powers.ALL;
         if (selected.isEmpty() || Powers.get(selected) == null) { Powers.Power s0 = PowerKeys.slot(0); selected = s0 != null ? s0.id() : all.get(0).id(); }
-        int rowH = Math.max(12, Math.min(15, (h - 4) / all.size()));
-        for (int i = 0; i < all.size(); i++) {
+        // a list that scrolls (the wheel, over it) when there are more powers than fit
+        int rowH = 14, fit = Math.max(1, h / rowH);
+        powScroll = Math.max(0, Math.min(powScroll, Math.max(0, all.size() - fit)));
+        listX = x; listY = y; listW = lw; listH = h;
+        for (int i = powScroll; i < all.size() && i < powScroll + fit; i++) {
             Powers.Power p = all.get(i);
-            int ry = y + i * rowH;
+            int ry = y + (i - powScroll) * rowH;
             boolean own = dom >= p.minLevel(), on = p.id().equals(selected), hov = in(mx, my, x, ry, lw, rowH);
             int col = 0xFF000000 | p.colour();
             if (on) g.fill(x, ry, x + lw, ry + rowH, col & 0x40FFFFFF | 0x40000000);
@@ -162,6 +165,13 @@ public class CommandScreen extends Screen {
             else if (!own) small(g, "Ω", x + lw - 10, ry + (rowH - 6) / 2, DIM);
             final String id = p.id();
             hits.add(new Hit(x, ry, lw, rowH, () -> selected = id));
+        }
+        if (all.size() > fit) {
+            int th = Math.max(10, h * fit / all.size()), ty = y + (h - th) * powScroll / Math.max(1, all.size() - fit);
+            g.fill(x + lw + 2, y, x + lw + 3, y + h, 0x20FFFFFF);
+            g.fill(x + lw + 1, ty, x + lw + 4, ty + th, 0x80C8A0FF);
+            if (powScroll > 0) small(g, "▲", x + lw - 10, y - 7, DIM);
+            if (powScroll < all.size() - fit) small(g, "▼", x + lw - 10, y + h + 1, DIM);
         }
         g.fill(x + lw + 6, y, x + lw + 7, y + h, LINE);
         // the detail
@@ -262,7 +272,8 @@ public class CommandScreen extends Screen {
 
     // ---------------------------------------------------------------- targets
 
-    private static int scroll;
+    private static int scroll, powScroll;
+    private int listX, listY, listW, listH;
     private static String query = "";
 
     private static CompoundTag tgt() { return t().getCompound("tgt"); }
@@ -470,6 +481,7 @@ public class CommandScreen extends Screen {
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
         Powers.Power p = Powers.get(selected);
         if (tab == 2) { scroll = Math.max(0, scroll - (int) Math.signum(sy) * (Screen.hasShiftDown() ? 5 : 1)); return true; }
+        if (tab == 1 && mx >= listX && mx < listX + listW + 6 && my >= listY && my < listY + listH) { powScroll = Math.max(0, powScroll - (int) Math.signum(sy)); return true; }
         if (tab == 1 && p != null && p.rMax() > 0) { PowerKeys.setRange(p, PowerKeys.range(p) + (sy > 0 ? 1 : -1) * PowerKeys.step(p)); return true; }
         return super.mouseScrolled(mx, my, sx, sy);
     }

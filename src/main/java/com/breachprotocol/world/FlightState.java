@@ -37,6 +37,22 @@ public final class FlightState {
     /** Who has taken SCP-Ω's other shape, the Skull King: {state (30 changing, 31 changed, 32 changing back), the game time it began}. */
     public static final java.util.Map<Integer, long[]> SKULL = new ConcurrentHashMap<>();
 
+    /** Is this player wholly in True Form (the Skull King)? Either side. */
+    public static boolean trueForm(Player p) {
+        if (p == null) return false;
+        if (!p.level().isClientSide) return p instanceof net.minecraft.server.level.ServerPlayer sp && com.breachprotocol.career.SkullKing.whole(sp);
+        long[] s = SKULL.get(p.getId());
+        return s != null && (s[0] == 31 || s[0] == 30 && p.level().getGameTime() - s[1] >= 70);
+    }
+
+    /** In True Form, against a wall it can climb: anything solid beside it, above its feet, not flying. */
+    public static boolean clinging(Player p) {
+        if (p.getAbilities().flying || p.isSpectator() || p.isPassenger() || p.isInWater() || !trueForm(p)) return false;
+        net.minecraft.world.phys.AABB bb = p.getBoundingBox();
+        bb = new net.minecraft.world.phys.AABB(bb.minX - 0.12, bb.minY + 0.3, bb.minZ - 0.12, bb.maxX + 0.12, bb.maxY - 0.1, bb.maxZ + 0.12);
+        return !p.level().noCollision(p, bb);
+    }
+
     public static boolean lying(Player p) {
         if (!p.level().isClientSide) return LYING.contains(p.getUUID()) && p.getAbilities().flying && !p.isPassenger();
         if (p.getUUID().equals(localId)) return localLying;

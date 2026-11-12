@@ -426,7 +426,7 @@ public final class SuperFlight {
         return FlightState.NINJA.contains(p.getId()) && !p.getAbilities().flying && new Vec3(p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo).length() > 3.8;
     }
 
-    static boolean wallRunning(Player p) {
+    public static boolean wallRunning(Player p) {
         if (p == Minecraft.getInstance().player) return wallRun;
         double dy = p.getY() - p.yo, dh = new Vec3(p.getX() - p.xo, 0, p.getZ() - p.zo).length();
         return FlightState.NINJA.contains(p.getId()) && !p.onGround() && dy > 0.3 && dh < 0.35;

@@ -73,6 +73,11 @@ public final class SkullRenderer {
         // the tail: each vertebra's direction in the world (turn, tilt) and how fast it's swinging
         boolean tailSet;
         float lastYaw, drag, turn, restNow, swayNow, sitK, cyc;
+        // in the air a moment (a step down, a stride at speed) isn't flying; a jump is
+        float airT; boolean jumped;
+        // flight: speed and its change, the turn, the bank; the flaps (how many left, where in one, how hard)
+        float speedS, accS, flyYaw, turnS, bank, flapPh, flapAmp, cruiseT, climbK, climbCyc;
+        int flapsLeft; boolean hard, flyInit;
     }
 
     private static final Map<Integer, Rig> RIGS = new HashMap<>();
@@ -149,7 +154,7 @@ public final class SkullRenderer {
 
     // ================================================================== moving it
 
-    private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3, PROWL = 4;
+    private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3, PROWL = 4, CLIMB = 5;
 
     private static void draw(Player p, Rig rig, float pt, PoseStack ps, MultiBufferSource buf, int light, float reveal, boolean real, boolean fp) {
         Minecraft mc = Minecraft.getInstance();
@@ -166,14 +171,23 @@ public final class SkullRenderer {
         boolean lying = st == 2 || p.isFallFlying();
         boolean flying = st == 1 || !p.onGround() && p.getAbilities().flying && !p.isInWater();
         // from the third running gear up (a block and a half a tick), down on all fours
-        int move = lying ? FLY : flying ? HOVER : p.onGround() && (h > 1.2 || st == 6) ? GALLOP : IDLE;
+        if (!gui) {
+            if (p.onGround() || flying || lying) { rig.airT = 0; rig.jumped = false; }
+            else { if (rig.airT == 0 && dy > 0.15) rig.jumped = true; rig.airT += dt; }
+        }
+        // stepping down a block, or a stride at speed, it's still on its feet
+        boolean grounded = p.onGround() || !flying && !lying && !rig.jumped && rig.airT < 0.6F && !p.isInWater();
+        // against a wall: climbing (walk into it; crouch holds on) or running straight up it
+        boolean climbing = !flying && !lying && !p.onGround() && (FlightState.clinging(p) || com.breachprotocol.client.SuperFlight.wallRunning(p));
+        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : grounded && (h > 1.2 || st == 6) ? GALLOP : IDLE;
         // crouching: moving, a lion's prowl; still, it sits down
-        boolean crouch = p.isCrouching() && p.onGround() && move == IDLE;
+        boolean crouch = p.isCrouching() && grounded && move == IDLE;
         if (crouch && h > 0.015) move = PROWL;
         if (!gui) rig.sitK += ((crouch && move != PROWL ? 1 : 0) - rig.sitK) * Math.min(1, dt * 2.2F);
         float sitK = rig.sitK;
 
         float bodyYaw = move == FLY ? Mth.rotLerp(pt, p.yRotO, p.getYRot()) : Mth.rotLerp(pt, p.yBodyRotO, p.yBodyRot);
+        if (move == CLIMB) bodyYaw = wallYaw(p, bodyYaw);
         float headYaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
         float net = Mth.clamp(Mth.wrapDegrees(headYaw - bodyYaw), -70, 70) * Mth.DEG_TO_RAD;
         float pitch = Mth.clamp(Mth.lerp(pt, p.xRotO, p.getXRot()), -60, 60) * Mth.DEG_TO_RAD;
@@ -219,7 +233,9 @@ public final class SkullRenderer {
         if (amt < 0.05F) { A.upper.rx += Mth.sin(t * 0.8F) * 0.05F; B.upper.rx -= Mth.sin(t * 0.8F) * 0.05F; }
         chest.ry = 0;
 
-        float wingO = p.onGround() ? 0 : 0.6F, beat = p.onGround() ? 0 : Mth.sin(t * 2.4F) * 0.6F, amp = 1, tilt = 0;
+        // wings open only for a real jump or a real fall
+        boolean airborne = !grounded;
+        float wingO = airborne ? 0.6F : 0, beat = airborne ? Mth.sin(t * 2.4F) * 0.6F : 0, amp = 1, tilt = 0;
         boolean wingFly = false;
         float rigLiftPx = 0, rigTilt = 0;
 
@@ -256,7 +272,7 @@ public final class SkullRenderer {
             lift = 0;
         } else if (move == FLY) {
             // laid out flat like a superhero, a fist out in front, legs straight back, the wings driving up and down
-            float fq = t * 2.8F, b = Mth.sin(fq - 0.35F * Mth.sin(fq));
+            float b = flight(rig, p, dt, dx, dy, dz, pt, real && !gui);
             rigLiftPx = b * -1.2F;
             float dive = (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, h)), -1.0, 1.0);
             rigTilt = 1.35F + dive * 0.6F;
@@ -264,7 +280,7 @@ public final class SkullRenderer {
             for (SkullModel.Leg lg : m.legs) { lg.thigh.rx = 0.05F; lg.shin.rx = 0.12F; lg.foot.rx = 0.6F; }
             main.upper.rot(-2.9, 0, main.side * 0.05); main.fore.rx = 0;
             off.upper.rot(-0.15, 0, off.side * 0.12); off.fore.rx = -0.2F;
-            wingO = 1; beat = b; amp = 2.2F; tilt = -0.15F; wingFly = true;
+            wingO = 1; beat = b; amp = rig.hard ? 2.8F : 2.2F; tilt = -0.15F; wingFly = true;
             lift = 0;
         }
 
@@ -313,6 +329,21 @@ public final class SkullRenderer {
         }
 
         float dropPx = 0;
+        if (!gui) rig.climbK += ((move == CLIMB ? 1 : 0) - rig.climbK) * Math.min(1, dt * 6);
+        if (move == CLIMB) {
+            // up the wall on all fours, the claws out: each hand and foot grabs, holds while it pulls, lets go and reaches
+            if (!gui) rig.climbCyc += dt * (float) Mth.clamp(Math.abs(dy) * 20 / 2.5, 0, 3);
+            dropPx = prowl(m, rig.climbCyc);
+            wingO = 0; beat = 0; lift = 0;
+        }
+        for (int i = 0; i < 2; i++) {
+            SkullModel.Arm ar = m.arms[i];
+            float u = ((rig.climbCyc + (i == 0 ? 0.25F : 0.75F)) % 1 + 1) % 1;
+            boolean grip = u < 0.62F;
+            float ck = rig.climbK;
+            ar.claws.sx = ar.claws.sy = ar.claws.sz = ck;
+            ar.claws.rx = grip ? 0.9F : 0.1F;
+        }
         if (move == PROWL) {
             if (!gui) rig.cyc += dt * 0.85F;
             dropPx = prowl(m, rig.cyc);
@@ -334,8 +365,10 @@ public final class SkullRenderer {
         // ---- the wings
         float k = 1 - (float) Math.pow(1 - 0.12, dt * 60);
         rig.open += (wingO - rig.open) * k;
-        poseWing(m.wings[0], rig.open, beat, amp, tilt, wingFly);
-        poseWing(m.wings[1], rig.open, beat, amp, tilt, wingFly);
+        // banking into a turn: the outer wing lifts, the inner one straightens and drops
+        float bankUp = move == FLY ? rig.bank * 0.55F : 0;
+        poseWing(m.wings[0], rig.open, beat, amp, tilt, wingFly, bankUp);
+        poseWing(m.wings[1], rig.open, beat, amp, tilt, wingFly, -bankUp);
 
         // ---- the crown's fire, the halo turning, the gem swaying
         m.halo.ry = t * 1.5F; m.halo.y = 11 + Mth.sin(t * 2) * 0.6F;
@@ -351,9 +384,13 @@ public final class SkullRenderer {
         float S = 0.85F / 16F * scale / 1.75F;
         Map<Node, Matrix4f> mats = new IdentityHashMap<>();
         Matrix4f rootM = new Matrix4f();
-        if (move == FLY) {
+        if (move == CLIMB) {
+            // laid against the wall, belly to it, head up: the wall is the ground it crawls on
+            float w = p.getBbWidth() / 2F / S;
+            rootM.translate(0, 0.35F * p.getBbHeight() / S, w).rotateX(-Mth.HALF_PI).translate(0, -dropPx, 0);
+        } else if (move == FLY) {
             // about the middle of the body, at the middle of the (low) box the flier has
-            rootM.translate(0, p.getBbHeight() / 2F / S, 0).rotateX(rigTilt).translate(0, -30 + rigLiftPx, 0);
+            rootM.translate(0, p.getBbHeight() / 2F / S, 0).rotateZ(rig.bank).rotateX(rigTilt).translate(0, -30 + rigLiftPx, 0);
         } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
         if (move == GALLOP || move == PROWL || sitK > 0.02F) {
@@ -383,7 +420,7 @@ public final class SkullRenderer {
             // in first person you look out of its head: the body's laid out so the skull's where your eyes are
             Vector3f ho = E.transformPosition(mats.get(m.head).transformPosition(new Vector3f()));
             Vector3f up = E.transformDirection(new Vector3f(0, 6.9F, 3));
-            shift.set(-ho.x - up.x, (p.getEyeHeight() - ho.y - up.y) * (move == PROWL ? 0 : 1 - sitK), -ho.z - up.z);
+            shift.set(-ho.x - up.x, p.getEyeHeight() - ho.y - up.y, -ho.z - up.z);
             ps.pushPose();
             ps.translate(shift.x, shift.y, shift.z);
         }
@@ -467,6 +504,79 @@ public final class SkullRenderer {
         for (Node k : n.kids) walk(k, m, out);
     }
 
+    /** Climbing: it faces the wall it's on (the side of it that's solid nearest to where it was facing). */
+    private static float wallYaw(Player p, float yaw) {
+        float best = yaw, bestD = 999;
+        for (int d = 0; d < 4; d++) {
+            float wy = d * 90F;      // 0 south (+z), 90 west (-x), 180 north (-z), 270 east (+x)
+            double ox = -Mth.sin(wy * Mth.DEG_TO_RAD) * 0.2, oz = Mth.cos(wy * Mth.DEG_TO_RAD) * 0.2;
+            var bb = p.getBoundingBox().deflate(0.02, 0.3, 0.02).move(ox, 0.1, oz);
+            if (p.level().noCollision(p, bb)) continue;
+            float diff = Math.abs(Mth.wrapDegrees(wy - yaw));
+            if (diff < bestD) { bestD = diff; best = yaw + Mth.wrapDegrees(wy - yaw); }
+        }
+        return best;
+    }
+
+    /**
+     * Flight: it glides, and flaps in bursts. A few hard beats whenever it speeds up (each sending a ring of air
+     * off it), a couple now and then to hold its speed, none at all through a turn: it banks instead, rolling into the
+     * turn. Returns the beat (-1..1) this frame.
+     */
+    private static float flight(Rig rig, Player p, float dt, double dx, double dy, double dz, float pt, boolean real) {
+        float yaw = Mth.rotLerp(pt, p.yRotO, p.getYRot()) * Mth.DEG_TO_RAD;
+        if (!rig.flyInit) { rig.flyYaw = yaw; rig.flyInit = true; rig.flapsLeft = 2; rig.hard = true; }
+        if (dt <= 0) return Mth.sin(rig.flapPh) * rig.flapAmp;
+        float speed = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * 20;
+        float e = 1 - (float) Math.exp(-3 * dt);
+        float was = rig.speedS;
+        rig.speedS += (speed - rig.speedS) * e;
+        rig.accS += ((rig.speedS - was) / dt - rig.accS) * e;
+        float rate = wrap(yaw - rig.flyYaw) / dt;
+        rig.flyYaw = yaw;
+        rig.turnS += (Mth.clamp(rate, -4, 4) - rig.turnS) * (1 - (float) Math.exp(-4 * dt));
+        boolean turning = Math.abs(rig.turnS) > 0.5F;
+        rig.bank += (Mth.clamp(rig.turnS * 0.35F, -0.7F, 0.7F) - rig.bank) * (1 - (float) Math.exp(-3 * dt));
+        // speeding up: three hard beats
+        if (rig.accS > 5 && rig.flapsLeft == 0) { rig.flapsLeft = 3; rig.hard = true; }
+        // holding speed: two, now and then (not mid-turn)
+        rig.cruiseT += dt;
+        if (rig.flapsLeft == 0 && !turning && rig.cruiseT > 3.5F + (p.getId() % 7) * 0.2F) { rig.flapsLeft = 2; rig.hard = false; rig.cruiseT = 0; }
+        if (rig.flapsLeft > 0) {
+            boolean start = rig.flapPh == 0;
+            rig.flapPh += dt * Mth.TWO_PI * (rig.hard ? 2.4F : 1.6F);
+            rig.flapAmp += (1 - rig.flapAmp) * Math.min(1, dt * 10);
+            if (start && rig.hard && real) ring(p, dx, dy, dz);
+            if (rig.flapPh >= Mth.TWO_PI) { rig.flapPh = rig.flapsLeft > 1 ? 1e-4F : 0; rig.flapsLeft--; if (rig.flapsLeft > 0 && rig.hard && real) ring(p, dx, dy, dz); }
+        } else {
+            // gliding: the wings held out, still
+            rig.flapAmp += (0 - rig.flapAmp) * Math.min(1, dt * 4);
+            rig.flapPh = 0;
+        }
+        return Mth.sin(rig.flapPh) * rig.flapAmp;
+    }
+
+    /** A hard beat at speed: a ring of air thrown off round it, and the clap of the wings. */
+    private static void ring(Player p, double dx, double dy, double dz) {
+        var l = p.level();
+        Vec3 dir = new Vec3(dx, dy, dz);
+        if (dir.lengthSqr() < 1e-4) dir = p.getLookAngle();
+        dir = dir.normalize();
+        Vec3 a = dir.cross(new Vec3(0, 1, 0));
+        if (a.lengthSqr() < 1e-4) a = new Vec3(1, 0, 0);
+        a = a.normalize();
+        Vec3 b = a.cross(dir).normalize();
+        Vec3 c = p.position().add(0, p.getBbHeight() / 2, 0).subtract(dir.scale(0.8));
+        double r = 1.2 * p.getScale() / 1.75;
+        for (int i = 0; i < 28; i++) {
+            double ang = i * Mth.TWO_PI / 28;
+            Vec3 o = a.scale(Math.cos(ang)).add(b.scale(Math.sin(ang)));
+            Vec3 at = c.add(o.scale(r));
+            l.addParticle(ParticleTypes.CLOUD, at.x, at.y, at.z, o.x * 0.35, o.y * 0.35, o.z * 0.35);
+        }
+        l.playLocalSound(p.getX(), p.getY(), p.getZ(), net.minecraft.sounds.SoundEvents.ENDER_DRAGON_FLAP, net.minecraft.sounds.SoundSource.PLAYERS, 1.4F, 0.7F, false);
+    }
+
     private static void lr(Node n, float x, float y, float z, float k) { n.rx += (x - n.rx) * k; n.ry += (y - n.ry) * k; n.rz += (z - n.rz) * k; }
 
     /** Two bones from base to target, in the body's side plane (y up, z forward); angles from straight down, + swung back. */
@@ -532,12 +642,12 @@ public final class SkullRenderer {
     private static float soft(float v, float lo) { float k = 0.18F; return v > lo + k ? v : lo + k * (float) Math.exp((v - lo - k) / k); }
 
     /** A wing, folded (0) to spread (1), beating; flat out in flight the beat is up and down above the back. Never through the body. */
-    private static void poseWing(SkullModel.Wing w, float open, float beat, float amp, float tilt, boolean fly) {
+    private static void poseWing(SkullModel.Wing w, float open, float beat, float amp, float tilt, boolean fly, float up) {
         int s = w.side;
         float flapY = fly ? beat * 0.75F : 0, inPlane = fly ? 0 : 1;
         float o = open * (1 - 0.3F * Math.max(0, -beat) * Math.min(1, amp - 0.5F));
         float ry = 1.35F - 1.2F * open - beat * 0.18F * amp * open * inPlane + flapY + (fly ? 0.4F * open : 0);
-        ry = soft(ry, 0.22F);
+        ry = soft(ry + up, 0.22F);
         w.root.rot(0.1 * open + 0.45 * (1 - open) + tilt, s * ry, -s * 0.12 * (1 - open));
         float ua = -1.45F + 1.0F * o + beat * 0.25F * o * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.2F * o : 0);
         if (o > 0.5F) ua = soft(ua, -0.7F);

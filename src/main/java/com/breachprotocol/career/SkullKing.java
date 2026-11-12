@@ -230,6 +230,14 @@ public final class SkullKing {
         if (f != null && event.getNewAboutToBeSetTarget() != null) event.setCanceled(true);
     }
 
+    /** Crouched, it sits or prowls low: its eyes are down where its skull is (so first person sees from there too). */
+    @SubscribeEvent
+    public static void size(net.neoforged.neoforge.event.entity.EntityEvent.Size event) {
+        if (!(event.getEntity() instanceof net.minecraft.world.entity.player.Player p) || event.getPose() != net.minecraft.world.entity.Pose.CROUCHING) return;
+        if (!com.breachprotocol.world.FlightState.trueForm(p)) return;
+        event.setNewSize(event.getNewSize().withEyeHeight(0.79F * p.getScale()));
+    }
+
     // ================================================================== staying changed
 
     @SubscribeEvent

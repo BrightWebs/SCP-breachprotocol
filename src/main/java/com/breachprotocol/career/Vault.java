@@ -205,7 +205,7 @@ public final class Vault {
 
     public static Data data(MinecraftServer s) { return s.overworld().getDataStorage().computeIfAbsent(Data.FACTORY, "breachprotocol_vault"); }
 
-    static boolean chief(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
+    public static boolean chief(ServerPlayer p) { return Career.rank(p) == Rank.ADMINISTRATOR || Career.isAscended(p); }
 
     public static ServerLevel level(MinecraftServer s) { return s.getLevel(DIM); }
 

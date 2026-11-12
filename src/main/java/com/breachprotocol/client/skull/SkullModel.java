@@ -60,7 +60,7 @@ public final class SkullModel {
     public static final float THIGH = 10, SHIN = 10, HIP_Y = 22.6F, CW = 23, CH = 16, CD = 13;
 
     public static final class Leg { public Node hip, thigh, shin, foot; public float tx, sx; public int side; }
-    public static final class Arm { public Node sh, upper, fore, hand, grip; public int side; }
+    public static final class Arm { public Node sh, upper, fore, hand, grip, claws; public int side; }
     public static final class Wing { public Node root, upper, fore, wrist, hand, digit; public final List<Node> feathers = new ArrayList<>(); public final List<Part> flames = new ArrayList<>(); public int side; }
 
     /** The tail: its vertebrae, root first (each one's turn is set by the tail's physics), and the blade at the end. */
@@ -187,6 +187,15 @@ public final class SkullModel {
             a.hand = pivot(a.fore, 0, -14, 0);
             box(a.hand, 9, 6, 8, 0, -3, 0, B);
             a.grip = pivot(a.hand, 0, -5.2, 1.2);
+            // claws, out of the fist only when it climbs (scaled to nothing otherwise)
+            a.claws = pivot(a.hand, 0, -5.4, 3.4);
+            a.claws.sx = a.claws.sy = a.claws.sz = 0;
+            for (int c = 0; c < 4; c++) {
+                Node cl = pivot(a.claws, -3.3 + c * 2.2, 0, 0, 0.45, 0, 0);
+                box(cl, 1.2, 1.1, 2.6, 0, 0, 1.2, H);
+                Node tip = pivot(cl, 0, 0, 2.5, 0.7, 0, 0);
+                box(tip, 0.9, 0.9, 1.8, 0, -0.1, 0.8, H);
+            }
             arms[i] = a;
         }
         // ---- the head: a horned skull, crowned
@@ -235,7 +244,7 @@ public final class SkullModel {
         box(halo, 2.2, 2.2, 2.2, 0, 0, 0, Mat.GEM);
         // ---- the wings: bare bone, black feathers burning at their ends
         for (int i = 0; i < 2; i++) wings[i] = wing(i == 0 ? 1 : -1);
-        mark(head);
+        mark(neck);
         for (Wing w : wings) markWing(w.root);
     }
 
