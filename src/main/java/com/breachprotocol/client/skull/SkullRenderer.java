@@ -204,8 +204,8 @@ public final class SkullRenderer {
         boolean grounded = p.onGround() || !flying && !lying && !rig.jumped && rig.airT < 0.6F && !p.isInWater();
         // against a wall: climbing (walk into it; crouch holds on) or running straight up it
         boolean climbing = !flying && !lying && !p.onGround() && (FlightState.clinging(p) || com.breachprotocol.client.SuperFlight.wallRunning(p));
-        // sprinting (or the third running gear and up): down on all fours
-        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : grounded && (p.isSprinting() && h > 0.05 || h > 1.2 || st == 6) ? GALLOP : IDLE;
+        // running: on two legs through the first and second gears; from the third (a block and a half a tick) up, on all fours
+        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : grounded && (h > 1.3 || st == 6) ? GALLOP : IDLE;
         // crouching: moving, a lion's prowl; still, it sits down
         boolean crouch = p.isCrouching() && grounded && move == IDLE;
         if (crouch && h > 0.015) move = PROWL;
