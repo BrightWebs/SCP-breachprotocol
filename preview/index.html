@@ -539,25 +539,25 @@ function foot(u,stride,lift,duty){
   return [stride*(-0.5+e),lift*Math.sin(Math.PI*k)];
 }
 function prowl(t,L,Rg,A,B){
-  const DROP=3, cyc=t*0.62, duty=0.68;
+  const DROP=2.5, cyc=t*0.85, duty=0.62;
   const bob=Math.sin(cyc*Math.PI*4)*0.35;
   king.position.y=-30-DROP+bob;GROUND=false;
   const ground=DROP-bob;                              // the ground, in the body's own frame
   // the back near level, shoulders rolling with the step, head low and forward
-  spine.rotation.x=0.82;chest.rotation.x=0.36;chest.rotation.y=Math.sin(cyc*Math.PI*2)*0.06;chest.rotation.z=Math.sin(cyc*Math.PI*2)*0.03;
-  neck.rotation.x=-0.8;head.rotation.x=-0.25+Math.sin(cyc*Math.PI*4)*0.02;head.rotation.y=-Math.sin(cyc*Math.PI*2)*0.07;
+  spine.rotation.x=0.98+Math.sin(cyc*Math.PI*4+0.6)*0.03;chest.rotation.x=0.42;   // the back long and level, a lion's, flexing a little with each stepchest.rotation.y=Math.sin(cyc*Math.PI*2)*0.06;chest.rotation.z=Math.sin(cyc*Math.PI*2)*0.03;
+  neck.rotation.x=-0.95;head.rotation.x=-0.2+Math.sin(cyc*Math.PI*4)*0.02;head.rotation.y=-Math.sin(cyc*Math.PI*2)*0.07;
   king.updateMatrixWorld(true);
   // back legs: thigh 10, shin 10, the ankle 3.5 up (on its toes)
-  for(const[lg,ph]of[[L,0],[Rg,0.5]]){const u=((cyc+ph)%1+1)%1;const[fz,fy]=foot(u,13,5,duty);
+  for(const[lg,ph]of[[L,0],[Rg,0.5]]){const u=((cyc+ph)%1+1)%1;const[fz,fy]=foot(u,16,5,duty);
     const hip={y:lg.hip.position.y,z:lg.hip.position.z};
-    const r=ik2(hip,{y:ground+5.2+fy,z:1.5+fz},10,10,0,true);
+    const r=ik2(hip,{y:ground+5.2+fy,z:-4.5+fz},10,10,0,true);   // the back feet set behind the hips
     lg.thigh.rotation.set(r[0],0,lg.side*-0.06);lg.shin.rotation.set(r[1],0,0);
     // the foot: on its toes when down, toes curled as it swings
     const toe=u<duty?0.35:0.35+0.5*Math.sin(Math.PI*(u-duty)/(1-duty));
     lg.foot.rotation.set(toe-r[2],0,0);}
   // front legs: arm 14, forearm and fist 20, from the shoulder as the tilted chest holds it
   const pitch=spine.rotation.x+chest.rotation.x;
-  for(const[ar,ph]of[[A,0.25],[B,0.75]]){const u=((cyc+ph)%1+1)%1;const[fz,fy]=foot(u,13,5.5,duty);
+  for(const[ar,ph]of[[A,0.25],[B,0.75]]){const u=((cyc+ph)%1+1)%1;const[fz,fy]=foot(u,16,5.5,duty);
     ar.upper.getWorldPosition(_v);king.worldToLocal(_v);
     const r=ik2({y:_v.y,z:_v.z},{y:ground+fy+0.3,z:_v.z+1+fz},14,20,pitch,false);
     ar.upper.rotation.set(r[0],0,ar.side*-0.06);ar.fore.rotation.set(r[1],0,0);}
