@@ -408,16 +408,25 @@ function hold(id){
   const main=id==='shield'?'sword':id;
   heldR=itemModel(main);
   if(heldR){
-    // held the way the game holds it: the handle in the fist, the head forward and up
-    const flat=main!=='block';
-    heldR.scale.setScalar(ITEM_SCALE*(flat?1:0.75));
-    if(flat){heldR.rotation.set(-Math.PI/2+0.35,Math.PI/2,0);heldR.position.set(0,-1,4.5)}
-    if(main==='torch'||main==='phone'){heldR.rotation.set(0,Math.PI/2,0);heldR.position.set(0,2,1.5)}
-    if(main==='bow'){heldR.rotation.set(0,Math.PI/2,0.8);heldR.position.set(0,-1,1)}
-    if(!flat){heldR.position.set(0,-4,2.5)}
+    // held the way the game holds it: the handle in the fist. Each sprite's axes are laid onto the hand's
+    // (x out to the side, y up the arm, z forward), and the handle pixel put at the grip.
+    const S=ITEM_SCALE;
+    const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+    const c25=Math.cos(25*Math.PI/180),s25=Math.sin(25*Math.PI/180),c65=Math.cos(65*Math.PI/180),s65=Math.sin(65*Math.PI/180);
+    // tools and weapons: handle bottom-left, head top-right; held forward and a little up, the flat facing out
+    let ax=V(0,-s25,c25),ay=V(0,s65,c65),handle=V(-6.5,-6.5,0);
+    if(main==='torch'||main==='phone'){ax=V(1,0,0);ay=V(0,0.6,0.8);handle=main==='torch'?V(0.5,-4.5,0):V(-2,-2,0)}
+    if(main==='bow'){ax=V(0,0.707,0.707);ay=V(0,0.707,-0.707);handle=V(-2.5,-1.5,0)}
+    if(main==='block'){ax=V(1,0,0);ay=V(0,1,0);handle=V(0,6,-2)}
+    const az=new THREE.Vector3().crossVectors(ax,ay);
+    const m=new THREE.Matrix4().makeBasis(ax,ay,az);
+    heldR.quaternion.setFromRotationMatrix(m);
+    heldR.scale.setScalar(main==='block'?S*0.6:S);
+    const h=handle.clone().multiplyScalar(main==='block'?S*0.6:S).applyQuaternion(heldR.quaternion);
+    heldR.position.copy(h.negate());
     armR.grip.add(heldR);
   }
-  if(id==='shield'){heldL=itemModel('shield');heldL.scale.setScalar(ITEM_SCALE);heldL.position.set(-0.5,-1,6);heldL.rotation.set(0,0,0);armL.grip.add(heldL)}
+  if(id==='shield'){heldL=itemModel('shield');heldL.scale.setScalar(ITEM_SCALE);armL.grip.add(heldL)}
 }
 hold('sword');
 document.querySelectorAll('#moves button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#moves button').forEach(x=>x.classList.remove('on'));b.classList.add('on');move=b.dataset.m;
@@ -452,6 +461,9 @@ function animate(t){
   if(move==='bow'){B.upper.rotation.set(-1.55,0.15,-0.1);B.fore.rotation.x=-0.05;A.upper.rotation.set(-1.45,-0.5,0.2);A.fore.rotation.x=-0.7-Math.sin(t*1.5)*0.15}
   if(move==='block'){A.upper.rotation.set(-1.1,0.5,0.1);A.fore.rotation.x=-0.9;B.upper.rotation.x=-0.35}
   if(move==='eat'){B.upper.rotation.set(-1.3+Math.sin(t*14)*0.08,-0.5,0);B.fore.rotation.x=-1.1}
+  // the shield stays upright and faces forward, held out in front of the fist, whatever the arm's doing
+  if(heldL){king.updateMatrixWorld(true);const gq=new THREE.Quaternion();armL.grip.getWorldQuaternion(gq);const kq=new THREE.Quaternion();king.getWorldQuaternion(kq);
+    heldL.quaternion.copy(gq.invert().multiply(kq));heldL.position.copy(new THREE.Vector3(-1,2,5.5).applyQuaternion(heldL.quaternion));}
   return spd;
 }
 // ---------- controls
