@@ -65,10 +65,11 @@ public final class HeatVision {
 
     public static boolean on(Player p) { return ON.containsKey(p.getUUID()); }
 
-    /** The skill used: on, it goes off; off, the strengths come up to choose from. */
+    /** The skill used: on or off (at the strength last chosen). Crouching: the strengths, to choose from. */
     public static void pressed(ServerPlayer p, boolean crouching) {
-        if (on(p) && !crouching) off(p);
-        else pick(p);
+        if (crouching || !on(p) && !LAST.containsKey(p.getUUID())) { pick(p); return; }
+        if (on(p)) off(p);
+        else start(p, LAST.get(p.getUUID()));
     }
 
     /** The strength picker on the player's screen. */

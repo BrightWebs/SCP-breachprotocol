@@ -66,10 +66,20 @@ public final class Autopilot {
 
     /** "toggle" or "toggle:mode" (the Administrator skill's mode: 0 Hunt, 1 Guard), from the skill or the phone. */
     public static void action(ServerPlayer p, String a) {
+        // crouch-use: Hunt and Guard, one to the other (remembered; on the fly if it's running)
+        if (a.equals("switch")) {
+            int m = p.getPersistentData().getInt("bp_auto_mode") == 0 ? 1 : 0;
+            p.getPersistentData().putInt("bp_auto_mode", m);
+            State st = ON.get(p.getUUID());
+            if (st != null) { st.mode = m; st.target = null; }
+            p.displayClientMessage(Component.literal(m == 0 ? "AUTOPILOT: HUNT  ·  anything you've marked hostile" : "AUTOPILOT: GUARD  ·  only what comes for you").withStyle(m == 0 ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.AQUA), true);
+            p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.UI_BUTTON_CLICK.value(), SoundSource.PLAYERS, 0.5F, m == 0 ? 1.2F : 0.9F);
+            return;
+        }
         if (!a.startsWith("toggle")) return;
-        int mode = a.startsWith("toggle:") ? ("1".equals(a.substring(7)) ? 1 : 0) : 0;
+        int mode = a.startsWith("toggle:") ? ("1".equals(a.substring(7)) ? 1 : 0) : p.getPersistentData().getInt("bp_auto_mode");
         State had = ON.get(p.getUUID());
-        if (had != null && had.mode == mode) { stop(p, "Autopilot off. You have yourself back."); return; }
+        if (had != null) { stop(p, "Autopilot off. You have yourself back."); return; }
         if (!Vault.chief(p)) { p.displayClientMessage(Component.literal("Only the Administrator's body fights by itself.").withStyle(ChatFormatting.GRAY), true); return; }
         State st = had != null ? had : new State();
         st.mode = mode;

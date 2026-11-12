@@ -21,15 +21,14 @@ public class AdministratorSkill extends Skill {
 
     public ResourceLocation getSkillIcon() { return ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "textures/skill/administrator.png"); }
 
-    public int getModes(ManasSkillInstance instance) { return 3; }
+    public int getModes(ManasSkillInstance instance) { return 2; }
 
-    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return reverse ? (mode + 2) % 3 : (mode + 1) % 3; }
+    public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return mode == 0 ? 1 : 0; }
 
-    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "hunt" : mode == 1 ? "guard" : "heat_vision"; }
+    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "autopilot" : "heat_vision"; }
 
     public Component getModeName(ManasSkillInstance instance, int mode) {
-        if (mode == 2) return Component.literal("Heat Vision").withStyle(ChatFormatting.RED);
-        return Component.literal(mode == 0 ? "Autopilot: Hunt" : "Autopilot: Guard").withStyle(mode == 0 ? ChatFormatting.LIGHT_PURPLE : ChatFormatting.AQUA);
+        return mode == 1 ? Component.literal("Heat Vision").withStyle(ChatFormatting.RED) : Component.literal("Autopilot").withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 
     public double getManaCost(LivingEntity e, ManasSkillInstance instance, int mode) { return 0; }
@@ -43,7 +42,8 @@ public class AdministratorSkill extends Skill {
 
     public void onPressed(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
         if (!(e instanceof ServerPlayer p) || key < 0) return;
-        if (mode == 2) com.breachprotocol.career.HeatVision.pressed(p, p.isShiftKeyDown());
-        else com.breachprotocol.career.Autopilot.action(p, "toggle:" + mode);
+        // use it: on or off. Crouch and use it: Autopilot switches Hunt / Guard; Heat Vision brings up its strengths
+        if (mode == 1) com.breachprotocol.career.HeatVision.pressed(p, p.isShiftKeyDown());
+        else com.breachprotocol.career.Autopilot.action(p, p.isShiftKeyDown() ? "switch" : "toggle");
     }
 }
