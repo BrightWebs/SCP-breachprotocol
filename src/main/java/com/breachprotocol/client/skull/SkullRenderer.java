@@ -71,9 +71,8 @@ public final class SkullRenderer {
         long lastFrame = -1;
         float lastT;
         // the tail: each vertebra's direction in the world (turn, tilt) and how fast it's swinging
-        final float[] tY = new float[SkullModel.TAIL], tP = new float[SkullModel.TAIL], tVY = new float[SkullModel.TAIL], tVP = new float[SkullModel.TAIL];
         boolean tailSet;
-        float yawAcc, lastYaw, drag, trailP, acc, sitK, cyc;
+        float lastYaw, drag, turn, restNow, swayNow, sitK, cyc;
     }
 
     private static final Map<Integer, Rig> RIGS = new HashMap<>();
@@ -179,6 +178,10 @@ public final class SkullRenderer {
         float net = Mth.clamp(Mth.wrapDegrees(headYaw - bodyYaw), -70, 70) * Mth.DEG_TO_RAD;
         float pitch = Mth.clamp(Mth.lerp(pt, p.xRotO, p.getXRot()), -60, 60) * Mth.DEG_TO_RAD;
 
+        // every joint back to its rest first, so no pose (the sit's crossed legs, say) is left behind in the next one
+        for (SkullModel.Leg lg : m.legs) { lg.thigh.rot(lg.tx, 0, lg.side * -0.04); lg.shin.rot(lg.sx, 0, lg.side * 0.04); lg.foot.rot(-(lg.tx + lg.sx), 0, 0); }
+        for (SkullModel.Arm ar : m.arms) { ar.upper.rot(-0.3, 0, ar.side * -0.14); ar.fore.rot(-0.15, 0, ar.side * 0.05); }
+        m.jaw.rot(0.18, 0, 0);
         // ---- the resting body: breathing, the jaw working, the head turning about
         Node chest = m.chest, head = m.head, neck = m.neck, spine = m.spine;
         float br = Mth.sin(t * 1.6F);
@@ -353,12 +356,16 @@ public final class SkullRenderer {
             rootM.translate(0, p.getBbHeight() / 2F / S, 0).rotateX(rigTilt).translate(0, -30 + rigLiftPx, 0);
         } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
-        if (move == GALLOP) {
-            // stand on whichever's lowest, fist or foot
+        if (move == GALLOP || move == PROWL || sitK > 0.02F) {
+            // on the ground, not in it: whatever's lowest (a foot, a fist, the knees and seat when it sits) rests on it
             float low = Float.MAX_VALUE;
             Vector3f v = new Vector3f();
-            for (SkullModel.Leg lg : m.legs) for (float z : new float[]{1.5F, 6}) low = Math.min(low, mats.get(lg.foot).transformPosition(v.set(0, -2.4F, z)).y);
-            for (SkullModel.Arm ar : m.arms) for (float z : new float[]{-4, 4}) low = Math.min(low, mats.get(ar.hand).transformPosition(v.set(0, -6, z)).y);
+            for (SkullModel.Leg lg : m.legs) {
+                for (float[] q : new float[][]{{0, -2.4F, 1.5F}, {0, -2.4F, 6}, {0, -2.3F, 9}, {0, -1.7F, -3.6F}}) low = Math.min(low, mats.get(lg.foot).transformPosition(v.set(q[0], q[1], q[2])).y);
+                if (sitK > 0.02F) low = Math.min(low, mats.get(lg.shin).transformPosition(v.set(0, 0, 0)).y - 2.4F);
+            }
+            if (move != PROWL || true) for (SkullModel.Arm ar : m.arms) for (float z : new float[]{-4, 4}) low = Math.min(low, mats.get(ar.hand).transformPosition(v.set(0, -6, z)).y);
+            if (sitK > 0.02F) low = Math.min(low, mats.get(m.pelvis).transformPosition(v.set(0, -1.5F, 0)).y);
             mats.clear();
             rootM.translateLocal(0, -low, 0);
             walk(m.root, rootM, mats);
@@ -546,69 +553,38 @@ public final class SkullRenderer {
     private static float wrap(float a) { return (float) Mth.wrapDegrees(a * Mth.RAD_TO_DEG) * Mth.DEG_TO_RAD; }
 
     /**
-     * The tail: every vertebra a spring hanging off the one before it, so a turn swings down it from root to tip and
-     * it follows through. Kept steady: the springs are damped enough that they settle instead of ringing, they're
-     * stepped at a fixed rate (so an uneven frame can't kick them), a joint that reaches its limit stops there instead
-     * of bouncing off it, and anything smaller than a hair's movement is let rest. Moving fast it streams out level
-     * behind (climbing it hangs, diving it lifts). It stays behind the body, clear of the back and legs.
+     * The tail, animated (not simulated, so it can't shake or fold through anything): its shape is set by what the
+     * body's doing, eased smoothly from one to the next. Turning, it swings out the other way, more toward the tip,
+     * and comes back as the turn ends; a slow wave runs down it, quicker on the move; fast, it lifts and streams out
+     * level behind; flying, it trails straight back; sitting, it curls round beside the legs to the front, its tip
+     * flicking.
      */
     private static void tail(Rig rig, float dt, float yawNow, float pitch0, float restP, float sway, double dx, double dy, double dz, float t, float sitK) {
         int TN = SkullModel.TAIL;
-        if (!rig.tailSet) { rig.yawAcc = yawNow; rig.lastYaw = yawNow; }
-        rig.yawAcc += wrap(yawNow - rig.lastYaw);
-        rig.lastYaw = yawNow;
-        float yaw0 = rig.yawAcc;
-        if (!rig.tailSet || dt > 0.5F) {
-            float cp = pitch0;
-            for (int i = 0; i < TN; i++) { cp += i == 0 ? restP : 0.05F; rig.tY[i] = yaw0; rig.tP[i] = cp; rig.tVY[i] = rig.tVP[i] = 0; }
-            rig.tailSet = true; rig.drag = 0; rig.trailP = 0; rig.acc = 0;
+        if (!rig.tailSet) { rig.lastYaw = yawNow; rig.restNow = restP; rig.tailSet = true; }
+        if (dt > 0) {
+            float rate = Mth.clamp(wrap(yawNow - rig.lastYaw) / dt, -4, 4);
+            rig.lastYaw = yawNow;
+            float e = 1 - (float) Math.exp(-3.5 * dt);
+            rig.turn += (rate - rig.turn) * e;
+            double sp = Math.sqrt(dx * dx + dz * dz) * 20;
+            rig.drag += ((float) Mth.clamp((sp - 3) / 14, 0, 0.75) - rig.drag) * e;
+            rig.restNow += (restP - rig.restNow) * (1 - (float) Math.exp(-4 * dt));
+            rig.swayNow += (sway - rig.swayNow) * e;
         }
-        if (dt <= 0) { apply(rig, yaw0, pitch0); return; }
-        // speed, and which way up or down, smoothed; standing about, none at all
-        double sp = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        float ease = 1 - (float) Math.exp(-5 * dt);
-        rig.drag += ((float) Mth.clamp((sp - 0.15) * 20 / 16, 0, 0.8) - rig.drag) * ease;
-        float wantTrail = sp > 0.15 ? (float) Math.asin(Mth.clamp(-dy / sp, -1, 1)) : 0;
-        rig.trailP += (wantTrail - rig.trailP) * ease;
-        final float STEP = 1 / 120F;
-        rig.acc = Math.min(rig.acc + dt, 0.1F);
-        while (rig.acc >= STEP) {
-            rig.acc -= STEP;
-            float parentY = yaw0, parentP = pitch0;
-            for (int i = 0; i < TN; i++) {
-                float k = i / (float) TN;
-                float K = 140 - 100 * k, D = 2 * (float) Math.sqrt(K) * 0.7F;   // a follow-through, not a wobble
-                // sitting, it curls round beside it to the front, like a cat's, the tip lifting and flicking
-                float wantY = parentY + 0.17F * sitK + (i == 0 ? sway : sway * 0.12F * Mth.sin(t * 2 - i * 0.45F)) + (i == TN - 1 ? Mth.sin(t * 1.3F) * 0.25F * sitK : 0);
-                float wantP = parentP + (i == 0 ? restP : i > 13 ? 0.05F + 0.12F * sitK : 0.05F * (1 - sitK));
-                float wd = rig.drag * (0.5F + 0.5F * k);
-                if (wd > 0) wantP += (pitch0 + rig.trailP - wantP) * wd * (i == 0 ? 0.6F : 0.35F);
-                rig.tVY[i] += (K * (wantY - rig.tY[i]) - D * rig.tVY[i]) * STEP; rig.tY[i] += rig.tVY[i] * STEP;
-                rig.tVP[i] += (K * (wantP - rig.tP[i]) - D * rig.tVP[i]) * STEP; rig.tP[i] += rig.tVP[i] * STEP;
-                // limits: stop there (no bounce)
-                float lim = i == 0 ? 0.45F : 0.22F;
-                float ry = rig.tY[i] - parentY;
-                if (Math.abs(ry) > lim) { rig.tY[i] = parentY + Math.copySign(lim, ry); rig.tVY[i] *= 0.3F; }
-                float rp = rig.tP[i] - parentP;
-                float lo = i == 0 ? Math.min(restP, -0.05F) - 0.5F : -0.28F, hi = i == 0 ? 0.1F : 0.3F;
-                if (rp < lo || rp > hi) { rig.tP[i] = parentP + Mth.clamp(rp, lo, hi); rig.tVP[i] *= 0.3F; }
-                float wy = rig.tY[i] - yaw0;
-                float wl = 1.0F + 2.4F * sitK;
-                if (Math.abs(wy) > wl) { rig.tY[i] = yaw0 + Math.copySign(wl, wy); rig.tVY[i] *= 0.3F; }
-                if (rig.tP[i] > pitch0 + 0.45F) { rig.tP[i] = pitch0 + 0.45F; rig.tVP[i] = Math.min(0, rig.tVP[i]); }
-                // at rest: rest
-                if (Math.abs(rig.tVY[i]) < 0.002F && Math.abs(wantY - rig.tY[i]) < 0.001F) rig.tVY[i] = 0;
-                if (Math.abs(rig.tVP[i]) < 0.002F && Math.abs(wantP - rig.tP[i]) < 0.001F) rig.tVP[i] = 0;
-                parentY = rig.tY[i]; parentP = rig.tP[i];
-            }
+        float swing = Mth.clamp(rig.turn * 0.09F, -0.25F, 0.25F);
+        for (int i = 0; i < TN; i++) {
+            float k = i / (float) TN;
+            Node v = rig.model.tail.get(i);
+            float wave = Mth.sin(t * 2.2F - i * 0.42F) * rig.swayNow * (0.25F + 0.75F * k) * 0.35F;
+            v.ry = (i == 0 ? rig.swayNow * 0.5F : 0) + wave - swing * (0.3F + 0.7F * k) * (i == 0 ? 1.5F : 1) + 0.17F * sitK
+                    + (i == TN - 1 ? Mth.sin(t * 1.3F) * 0.25F * sitK : 0);
+            float droop = i == 0 ? rig.restNow + (-rig.restNow - 0.05F) * rig.drag : (i > 13 ? 0.05F + 0.12F * sitK : 0.05F * (1 - sitK)) * (1 - rig.drag);
+            v.rx = droop + Mth.sin(t * 1.7F - i * 0.3F) * 0.012F;
+            v.rz = 0;
         }
-        apply(rig, yaw0, pitch0);
     }
 
-    private static void apply(Rig rig, float yaw0, float pitch0) {
-        float py = yaw0, pp = pitch0;
-        for (int i = 0; i < SkullModel.TAIL; i++) { Node v = rig.model.tail.get(i); v.ry = rig.tY[i] - py; v.rx = rig.tP[i] - pp; v.rz = 0; py = rig.tY[i]; pp = rig.tP[i]; }
-    }
 
     // ================================================================== drawing it
 
