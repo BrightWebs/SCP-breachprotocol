@@ -31,7 +31,7 @@
     <button id="bSpin" class="on">Turn</button>
     <button id="bScale">Beside a player</button>
   </div>
-  <div class="parts">Horned skull, tusked jaw · glowing gold crown, red stones, fire at its heart · ribcage round an ember heart · bone shoulders · clawed fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
+  <div class="parts">Horned skull, tusked jaw · glowing gold crown: violet diamond at the front, red stones either side, fire at its heart · ribcage round an ember heart · bone shoulders · clawed fists · four-toed clawed feet · black-feathered angel wings on bare bone, folding and spreading · cracked obsidian ground, magma veins, flames</div>
 </div>
 <div class="hint">drag to turn · scroll to zoom · Minecraft scale: 1 block = 16 px</div>
 
@@ -256,10 +256,13 @@ box(crown,1.2,1.2,0.8,-6.3,0.2,3,M.ruby);box(crown,1.2,1.2,0.8,6.3,0.2,3,M.ruby)
 const crownFire=[];
 function fireAt(x,y,z,size){const f=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
   f.position.set(x,y,z);f.userData={x,y,z,size,ph:R()*6};crown.add(f);crownFire.push(f);return f}
-for(let k=0;k<5;k++)fireAt((k-2)*0.6,1.5+k%2*0.4,6.1,2.8);           // at the front, between the red stones
+// the violet stone back at the centre front, cut like a diamond, sitting on the band
+const diamond=new THREE.Mesh(new THREE.OctahedronGeometry(1.6,0),M.gem);diamond.scale.set(1,1.35,0.7);diamond.position.set(0,0.6,6.4);crown.add(diamond);
+const setting=box(crown,2.6,0.8,0.8,0,-0.6,6.3,M.gold);   // its gold setting
+for(let k=0;k<5;k++)fireAt((k-2)*0.7,2.6+k%2*0.4,5.6,2.8);           // and the fire behind it, between the red stones
 for(let k=0;k<9;k++)fireAt((R()-.5)*8,1.6,(R()-.5)*8,3.4);          // within the band
 const crownLight=new THREE.PointLight(0xff4a1a,1.4,30);crown.add(crownLight);crownLight.position.set(0,4,3);
-const halo=box(crown,2.2,2.2,2.2,0,11,1,M.ruby);
+const halo=box(crown,2.2,2.2,2.2,0,11,1,M.gem);
 // flames in the eye sockets
 const eyeFlames=[];
 for(const sd of[1,-1]){const s=new THREE.Sprite(new THREE.SpriteMaterial({map:soulTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
@@ -401,7 +404,7 @@ function frame(now){
   const beat=flap&&spread?Math.sin(t*2.4):0;
   poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat);
   for(const w of[wingL,wingR])w.flames.forEach((fl,i)=>{const k=0.6+Math.sin(t*8+i*1.7)*0.25+Math.sin(t*13+i)*0.1;fl.scale.set(2.6*k,4.2*k,1);fl.material.opacity=0.6+openNow*0.4});
-  halo.rotation.y=t*1.5;halo.position.y=11+Math.sin(t*2)*0.6;
+  halo.rotation.y=t*1.5;diamond.rotation.y=Math.sin(t*0.8)*0.25;M.gem.emissiveIntensity=1+Math.sin(t*2.2)*0.25;halo.position.y=11+Math.sin(t*2)*0.6;
   for(const f of crownFire){const u=f.userData,k=0.75+Math.sin(t*9+u.ph)*0.2+Math.sin(t*15+u.ph*2)*0.08;f.scale.set(u.size*0.55*k,u.size*k,1);f.position.y=u.y+u.size*0.4*k}
   crownLight.intensity=1.2+Math.sin(t*11)*0.25;M.ruby.emissiveIntensity=1.1+Math.sin(t*3)*0.3;
   for(const e of eyeFlames){const k=0.8+Math.sin(t*9+e.position.x)*0.2;e.scale.set(2.2*k,4.2*k,1)}

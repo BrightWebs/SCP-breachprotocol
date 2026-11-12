@@ -13,7 +13,7 @@ jobs:
       - name: Shots
         run: |
           mkdir -p shots
-          for i in 0 2 6 7; do
+          for i in 0; do
             google-chrome --headless=new --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=1000,900 \
               --virtual-time-budget=6000 --screenshot=shots/shot$i.png "file://$PWD/preview/index.html#shot-$i" || true
           done
