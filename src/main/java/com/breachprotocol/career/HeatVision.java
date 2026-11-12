@@ -65,41 +65,34 @@ public final class HeatVision {
 
     public static boolean on(Player p) { return ON.containsKey(p.getUUID()); }
 
-    /** The skill used: on or off (at the strength last chosen). Crouching: the strengths, to choose from. */
-    public static void pressed(ServerPlayer p, boolean crouching) {
-        if (crouching || !on(p) && !LAST.containsKey(p.getUUID())) { pick(p); return; }
-        if (on(p)) off(p);
-        else start(p, LAST.get(p.getUUID()));
-    }
+    /** When each held beam was last fed (it stops a few ticks after the key's let go, whatever Manas says). */
+    private static final Map<UUID, Long> FED = new HashMap<>();
 
-    /** The strength picker on the player's screen. */
-    private static void pick(ServerPlayer p) {
-        CompoundTag t = new CompoundTag();
-        t.putBoolean("heatPick", true);
-        t.putInt("heatNow", ON.getOrDefault(p.getUUID(), -1));
-        PacketDistributor.sendToPlayer(p, new DialoguePayload(t));
-    }
-
-    /** "on:N" (0..4) or "off", from the picker. */
-    public static void action(ServerPlayer p, String a) {
-        if (a.equals("off")) { off(p); return; }
-        if (a.startsWith("on:")) try { start(p, Math.max(0, Math.min(4, Integer.parseInt(a.substring(3))))); } catch (NumberFormatException ignored) {}
-    }
-
-    private static void start(ServerPlayer p, int tier) {
+    /** The Administrator skill's key held down in Heat Vision: the beams, this tick, at the strength on the wheel. */
+    public static void holding(ServerPlayer p, int tier) {
         if (!Vault.chief(p)) return;
-        ON.put(p.getUUID(), tier);
-        LAST.put(p.getUUID(), tier);
-        PacketDistributor.sendToPlayersTrackingEntityAndSelf(p, new FlightPosePayload(p.getId(), 20 + tier));
-        p.displayClientMessage(Component.literal("HEAT VISION  ·  " + PERCENT[tier] + "%").withStyle(tier >= 3 ? ChatFormatting.RED : ChatFormatting.GOLD), true);
-        p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 0.6F, 0.6F + tier * 0.15F);
+        long now = p.serverLevel().getGameTime();
+        Long fed = FED.put(p.getUUID(), now);
+        if (fed != null && fed == now) return; // pressed and held in the same tick: once is enough
+        Integer was = ON.put(p.getUUID(), tier);
+        if (was == null || was != tier) {
+            PacketDistributor.sendToPlayersTrackingEntityAndSelf(p, new FlightPosePayload(p.getId(), 20 + tier));
+            if (was == null) p.serverLevel().playSound(null, p.blockPosition(), SoundEvents.FIRECHARGE_USE, SoundSource.PLAYERS, 0.6F, 0.6F + tier * 0.15F);
+        }
+        try { beam(p, tier); } catch (Throwable t) { BreachProtocol.LOGGER.debug("Heat vision: {}", t.toString()); }
     }
 
-    private static void off(ServerPlayer p) {
+    /** Let go. */
+    public static void release(ServerPlayer p) {
+        FED.remove(p.getUUID());
         if (ON.remove(p.getUUID()) == null) return;
         BOOMED.remove(p.getUUID());
         PacketDistributor.sendToPlayersTrackingEntityAndSelf(p, new FlightPosePayload(p.getId(), 25));
-        p.displayClientMessage(Component.literal("Heat vision off.").withStyle(ChatFormatting.GRAY), true);
+    }
+
+    /** The old picker's actions (no longer offered; kept so a stray one does nothing harmful). */
+    public static void action(ServerPlayer p, String a) {
+        if (a.equals("off")) release(p);
     }
 
     @SubscribeEvent
@@ -108,11 +101,11 @@ public final class HeatVision {
         MinecraftServer srv = event.getServer();
         for (UUID id : new ArrayList<>(ON.keySet())) {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
-            if (p == null) { ON.remove(id); continue; }
-            if (!p.isAlive() || p.isSpectator() || !Vault.chief(p)) { off(p); continue; }
-            try { beam(p, ON.get(id)); } catch (Throwable t) { BreachProtocol.LOGGER.debug("Heat vision: {}", t.toString()); }
+            if (p == null) { ON.remove(id); FED.remove(id); continue; }
+            long now = p.serverLevel().getGameTime();
+            // no longer held (the key's up, the skill switched, the player gone): it stops
+            if (now - FED.getOrDefault(id, 0L) > 3 || !p.isAlive() || p.isSpectator()) release(p);
         }
-        // players who come into view of someone already beaming see it too
         if (srv.getTickCount() % 40 == 0) for (UUID id : ON.keySet()) {
             ServerPlayer p = srv.getPlayerList().getPlayer(id);
             if (p != null) PacketDistributor.sendToPlayersTrackingEntityAndSelf(p, new FlightPosePayload(p.getId(), 20 + ON.get(id)));

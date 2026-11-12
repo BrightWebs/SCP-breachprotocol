@@ -16,7 +16,7 @@ import net.minecraft.world.entity.Mob;
  * uses everything you have, SCP powers and every Manas skill, the way Manas Reborn's bosses do. Use it again
  * to take yourself back.
  */
-public class AdministratorSkill extends Skill {
+public class AdministratorSkill extends Skill implements io.github.manasmods.manas_reborn.ability.subclass.IWheelChoice {
     public AdministratorSkill() { super(Skill.SkillType.UNIQUE); }
 
     public ResourceLocation getSkillIcon() { return ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "textures/skill/administrator.png"); }
@@ -40,10 +40,74 @@ public class AdministratorSkill extends Skill {
     /** Not something a creature (or the autopilot itself) reaches for in a fight. */
     public int getMobWeight(ManasSkillInstance instance, Mob m, int mode) { return 0; }
 
+    /** Autopilot: use it, on or off; crouch and use it, Hunt or Guard. Heat Vision: hold it to burn (see onHeld). */
     public void onPressed(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
         if (!(e instanceof ServerPlayer p) || key < 0) return;
-        // use it: on or off. Crouch and use it: Autopilot switches Hunt / Guard; Heat Vision brings up its strengths
-        if (mode == 1) com.breachprotocol.career.HeatVision.pressed(p, p.isShiftKeyDown());
+        if (mode == 1) com.breachprotocol.career.HeatVision.holding(p, tier(instance));
         else com.breachprotocol.career.Autopilot.action(p, p.isShiftKeyDown() ? "switch" : "toggle");
+    }
+
+    /** Heat Vision, for as long as the key is held: the beams come, and keep coming. */
+    public boolean onHeld(ManasSkillInstance instance, LivingEntity e, int heldTicks, int mode) {
+        if (mode != 1) return false;
+        if (e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.holding(p, tier(instance));
+        return true;
+    }
+
+    /** Let go: they stop. */
+    public void onRelease(ManasSkillInstance instance, LivingEntity e, int key, int mode, int held) {
+        if (e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.release(p);
+    }
+
+    public void onHeldStop(ManasSkillInstance instance, LivingEntity e, int key, int mode) {
+        if (e instanceof ServerPlayer p) com.breachprotocol.career.HeatVision.release(p);
+    }
+
+    // ---------------------------------------------------------------- the heat, on Manas Reborn's choice wheel (as Spirit Envoy's spirits are)
+
+    private static int tier(ManasSkillInstance instance) {
+        try { return Math.max(0, Math.min(4, instance.getOrCreateTag().getInt("heat"))); } catch (Throwable t) { return 1; }
+    }
+
+    private static final String[] NAMES = {"5%  ·  Warm Thread", "15%  ·  Burning Beam", "50%  ·  Lance", "80%  ·  Cutter", "100%  ·  Annihilation"};
+    private static final int[] COLOURS = {0xFFC070, 0xFF9040, 0xFF5A20, 0xFF2A20, 0xFF1060};
+    private static final String[][] DETAILS = {
+            {"Sets alight what it touches.", "Hurts, a little. 16 blocks."},
+            {"Real harm, twice the reach.", "The ground where it lands catches."},
+            {"Straight through every living thing in its line,", "a boom on each one. 48 blocks."},
+            {"Cuts stone and wood, boils water away,", "melts ice and snow. 64 blocks."},
+            {"Bores a tunnel through anything breakable", "and blows apart where it ends. 96 blocks."}};
+
+    public Component getWheelChoiceTitle() { return Component.literal("Heat Vision").withStyle(ChatFormatting.RED); }
+
+    public java.util.List<Component> getWheelChoices(ManasSkillInstance instance) {
+        java.util.List<Component> out = new java.util.ArrayList<>();
+        for (int i = 0; i < NAMES.length; i++) out.add(Component.literal(NAMES[i]));
+        return out;
+    }
+
+    public int getWheelChoice(ManasSkillInstance instance) { return tier(instance); }
+
+    public void setWheelChoice(ManasSkillInstance instance, LivingEntity e, int choice) {
+        try {
+            instance.getOrCreateTag().putInt("heat", Math.max(0, Math.min(4, choice)));
+            instance.markDirty();
+        } catch (Throwable ignored) {}
+        if (e instanceof ServerPlayer p)
+            p.displayClientMessage(Component.literal("HEAT VISION  ·  " + NAMES[Math.max(0, Math.min(4, choice))]).withStyle(ChatFormatting.RED), true);
+    }
+
+    public int getWheelChoiceColor(ManasSkillInstance instance, int choice) { return COLOURS[Math.max(0, Math.min(4, choice))]; }
+
+    public net.minecraft.world.item.ItemStack getWheelChoiceIcon(ManasSkillInstance instance, int choice) {
+        net.minecraft.world.item.Item[] it = {net.minecraft.world.item.Items.TORCH, net.minecraft.world.item.Items.BLAZE_POWDER, net.minecraft.world.item.Items.BLAZE_ROD,
+                net.minecraft.world.item.Items.MAGMA_CREAM, net.minecraft.world.item.Items.NETHER_STAR};
+        return new net.minecraft.world.item.ItemStack(it[Math.max(0, Math.min(4, choice))]);
+    }
+
+    public java.util.List<Component> getWheelChoiceDetails(ManasSkillInstance instance, LivingEntity e, int choice) {
+        java.util.List<Component> out = new java.util.ArrayList<>();
+        for (String l : DETAILS[Math.max(0, Math.min(4, choice))]) out.add(Component.literal(l).withStyle(ChatFormatting.GRAY));
+        return out;
     }
 }
