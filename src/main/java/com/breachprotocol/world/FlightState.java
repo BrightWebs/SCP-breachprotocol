@@ -45,11 +45,14 @@ public final class FlightState {
         return s != null && (s[0] == 31 || s[0] == 30 && p.level().getGameTime() - s[1] >= 70);
     }
 
-    /** In True Form, against a wall it can climb: anything solid beside it, above its feet, not flying. */
+    /**
+     * In True Form, holding crouch against a wall, it takes hold and climbs (walk into it to go up; just crouch to
+     * cling); without crouch, a wall's only a wall. It keeps hold until its feet are over the top.
+     */
     public static boolean clinging(Player p) {
-        if (p.getAbilities().flying || p.isSpectator() || p.isPassenger() || p.isInWater() || !trueForm(p)) return false;
+        if (!p.isShiftKeyDown() || p.getAbilities().flying || p.isSpectator() || p.isPassenger() || p.isInWater() || !trueForm(p)) return false;
         net.minecraft.world.phys.AABB bb = p.getBoundingBox();
-        bb = new net.minecraft.world.phys.AABB(bb.minX - 0.12, bb.minY + 0.3, bb.minZ - 0.12, bb.maxX + 0.12, bb.maxY - 0.1, bb.maxZ + 0.12);
+        bb = new net.minecraft.world.phys.AABB(bb.minX - 0.12, bb.minY + 0.05, bb.minZ - 0.12, bb.maxX + 0.12, bb.maxY - 0.1, bb.maxZ + 0.12);
         return !p.level().noCollision(p, bb);
     }
 

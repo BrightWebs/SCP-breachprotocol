@@ -152,6 +152,31 @@ public final class SkullRenderer {
         if (p != null && FlightState.SKULL.containsKey(p.getId()) && form(p, event.getPartialTick()) >= 0.5F) event.setCanceled(true);
     }
 
+    private static boolean wasClinging;
+
+    /**
+     * Climbing, for the one playing: sprint while climbing and it goes up hand over hand, fast; reach the top
+     * still pressing on and it hauls itself up over the edge onto it, instead of hanging under the lip.
+     */
+    @SubscribeEvent
+    public static void climbTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
+        Minecraft mc = Minecraft.getInstance();
+        var p = mc.player;
+        if (p == null || mc.isPaused()) return;
+        boolean cling = FlightState.clinging(p);
+        boolean forward = p.input != null && p.input.forwardImpulse > 0;
+        if (cling && forward && p.horizontalCollision && mc.options.keySprint.isDown()) {
+            Vec3 v = p.getDeltaMovement();
+            p.setDeltaMovement(v.x, Math.max(v.y, 0.45), v.z);
+        }
+        if (wasClinging && !cling && forward && !p.onGround() && p.isShiftKeyDown()) {
+            // over the top: up and onto it
+            Vec3 look = Vec3.directionFromRotation(0, p.getYRot());
+            p.setDeltaMovement(look.x * 0.32, 0.38, look.z * 0.32);
+        }
+        wasClinging = cling;
+    }
+
     // ================================================================== moving it
 
     private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3, PROWL = 4, CLIMB = 5;
@@ -179,7 +204,8 @@ public final class SkullRenderer {
         boolean grounded = p.onGround() || !flying && !lying && !rig.jumped && rig.airT < 0.6F && !p.isInWater();
         // against a wall: climbing (walk into it; crouch holds on) or running straight up it
         boolean climbing = !flying && !lying && !p.onGround() && (FlightState.clinging(p) || com.breachprotocol.client.SuperFlight.wallRunning(p));
-        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : grounded && (h > 1.2 || st == 6) ? GALLOP : IDLE;
+        // sprinting (or the third running gear and up): down on all fours
+        int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : grounded && (p.isSprinting() && h > 0.05 || h > 1.2 || st == 6) ? GALLOP : IDLE;
         // crouching: moving, a lion's prowl; still, it sits down
         boolean crouch = p.isCrouching() && grounded && move == IDLE;
         if (crouch && h > 0.015) move = PROWL;
