@@ -372,7 +372,9 @@ public final class SkullRenderer {
         }
 
         // model space to entity space: turned to face its way, at its size
-        Matrix4f E = new Matrix4f().rotateY(-bodyYaw * Mth.DEG_TO_RAD).scale(S);
+        // the game lowers a crouching player's body by two of its pixels; this one crouches in its own way, standing on the ground
+        float crouchLift = !fp && p.isCrouching() ? scale * 2 / 16F : 0;
+        Matrix4f E = new Matrix4f().translate(0, crouchLift, 0).rotateY(-bodyYaw * Mth.DEG_TO_RAD).scale(S);
         Vector3f shift = new Vector3f();
         if (fp) {
             // in first person you look out of its head: the body's laid out so the skull's where your eyes are
@@ -425,7 +427,7 @@ public final class SkullRenderer {
                         if (part.kind == Kind.EYE) {
                             fk = 0.8F + Mth.sin(t * 9 + part.x) * 0.2F;
                             w = 2.2F * fk * 1.15F; hh = 4.2F * fk * 1.15F; rise = 0;
-                            if (si < 2) sockets[si++] = new Vec3(ce.x + shift.x, ce.y + shift.y, ce.z + shift.z);
+                            if (si < 2) sockets[si++] = new Vec3(ce.x + shift.x, ce.y + shift.y - crouchLift, ce.z + shift.z);
                             if (hidden) continue;
                         } else {
                             fk = 0.75F + Mth.sin(t * 9 + part.phase) * 0.2F + Mth.sin(t * 15 + part.phase * 2) * 0.08F;
