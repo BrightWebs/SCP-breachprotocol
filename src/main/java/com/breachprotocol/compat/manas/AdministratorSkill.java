@@ -25,10 +25,10 @@ public class AdministratorSkill extends Skill implements io.github.manasmods.man
 
     public int nextMode(LivingEntity e, ManasSkillInstance instance, int mode, boolean reverse) { return reverse ? (mode + 2) % 3 : (mode + 1) % 3; }
 
-    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "autopilot" : mode == 1 ? "heat_vision" : "skull_king"; }
+    public String getModeId(ManasSkillInstance instance, int mode) { return mode == 0 ? "autopilot" : mode == 1 ? "heat_vision" : "true_form"; }
 
     public Component getModeName(ManasSkillInstance instance, int mode) {
-        if (mode == 2) return Component.literal("SCP-Ω: The Skull King").withStyle(ChatFormatting.DARK_PURPLE);
+        if (mode == 2) return Component.literal("True Form").withStyle(ChatFormatting.DARK_PURPLE);
         return mode == 1 ? Component.literal("Heat Vision").withStyle(ChatFormatting.RED) : Component.literal("Autopilot").withStyle(ChatFormatting.LIGHT_PURPLE);
     }
 

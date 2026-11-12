@@ -33,7 +33,7 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * SCP-Ω's other shape: the Skull King. Tap it and the Administrator comes apart into bone, from the feet up,
+ * SCP-Ω's True Form (the Skull King). Tap it and the Administrator comes apart into bone, from the feet up,
  * growing as it goes, the crown catching fire, until the thing stands there whole and roars: everything hostile
  * around it is thrown back, and every creature that hears it is afraid, and runs. Tap again and it's a man again.
  */
@@ -74,7 +74,7 @@ public final class SkullKing {
         send(p, 30);
         l.playSound(null, p.blockPosition(), SoundEvents.WITHER_SPAWN, SoundSource.PLAYERS, 0.5F, 0.5F);
         l.playSound(null, p.blockPosition(), SoundEvents.BONE_BLOCK_BREAK, SoundSource.PLAYERS, 1.5F, 0.5F);
-        tell(p, "SCP-Ω: the Skull King.");
+        tell(p, "SCP-Ω: True Form.");
     }
 
     private static void revert(ServerPlayer p, boolean loud) {
@@ -199,7 +199,7 @@ public final class SkullKing {
                 q.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 20 * 4, 1));
             }
         }
-        tell(p, thrown + scared == 0 ? "The Skull King roars." : "The Skull King roars. " + scared + " creature" + (scared == 1 ? "" : "s") + " flee" + (scared == 1 ? "s" : "") + ".");
+        tell(p, thrown + scared == 0 ? "True Form." : "True Form. " + scared + " creature" + (scared == 1 ? "" : "s") + " flee" + (scared == 1 ? "s" : "") + ".");
     }
 
     private static void flee(Mob m, Vec3 from) {

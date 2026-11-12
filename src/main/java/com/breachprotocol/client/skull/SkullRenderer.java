@@ -56,7 +56,7 @@ public final class SkullRenderer {
     public static final Map<Integer, Vec3[]> SOCKETS = new ConcurrentHashMap<>();
 
     private static final Map<Mat, RenderType> SOLID = new HashMap<>(), GLOW = new HashMap<>();
-    private static final ResourceLocation FLAME = tex("flame"), SOUL = tex("soul_flame"), GROUND = tex("ground"), GROUND_GLOW = tex("ground_glow");
+    private static final ResourceLocation FLAME = tex("flame"), SOUL = tex("soul_flame");
 
     private static ResourceLocation tex(String n) { return ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "textures/entity/skull_king/" + n + ".png"); }
 
@@ -70,6 +70,10 @@ public final class SkullRenderer {
         boolean leftPunch;
         long lastFrame = -1;
         float lastT;
+        // the tail: each vertebra's direction in the world (turn, tilt) and how fast it's swinging
+        final float[] tY = new float[SkullModel.TAIL], tVY = new float[SkullModel.TAIL], tP = new float[SkullModel.TAIL], tVP = new float[SkullModel.TAIL];
+        boolean tailSet;
+        float yawAcc, lastYaw;
     }
 
     private static final Map<Integer, Rig> RIGS = new HashMap<>();
@@ -105,17 +109,50 @@ public final class SkullRenderer {
         boolean real = buf == Minecraft.getInstance().renderBuffers().bufferSource();
         try {
             Rig rig = RIGS.computeIfAbsent(p.getId(), k -> new Rig());
-            draw(p, rig, pt, event.getPoseStack(), buf, event.getPackedLight(), growing || shrinking ? reveal : 1, real);
+            draw(p, rig, pt, event.getPoseStack(), buf, event.getPackedLight(), growing || shrinking ? reveal : 1, real, false);
         } catch (Throwable t) {
             BreachProtocol.LOGGER.debug("Skull King: {}", t.toString());
         }
+    }
+
+    /** First person: you see out of the skull, and looking down, the body you're in. */
+    @SubscribeEvent
+    public static void firstPerson(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
+        if (event.getStage() != net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage.AFTER_ENTITIES || FlightState.SKULL.isEmpty()) return;
+        Minecraft mc = Minecraft.getInstance();
+        Player p = mc.player;
+        if (p == null || !mc.options.getCameraType().isFirstPerson() || p.isSpectator() || p.isSleeping() || !FlightState.SKULL.containsKey(p.getId())) return;
+        float pt = event.getPartialTick().getGameTimeDeltaPartialTick(false);
+        float f = form(p, pt);
+        long[] s = FlightState.SKULL.get(p.getId());
+        if (f < 0.5F && s[0] != 32 || f <= 0) return;
+        float reveal = s[0] == 32 ? f : s[0] == 30 && f < 1 ? Mth.clamp(f * 1.15F, 0, 1) : 1;
+        Vec3 cam = event.getCamera().getPosition();
+        PoseStack ps = event.getPoseStack();
+        ps.pushPose();
+        ps.translate(Mth.lerp(pt, p.xOld, p.getX()) - cam.x, Mth.lerp(pt, p.yOld, p.getY()) - cam.y, Mth.lerp(pt, p.zOld, p.getZ()) - cam.z);
+        MultiBufferSource.BufferSource buf = mc.renderBuffers().bufferSource();
+        try {
+            draw(p, RIGS.computeIfAbsent(p.getId(), k -> new Rig()), pt, ps, buf, mc.getEntityRenderDispatcher().getPackedLightCoords(p, pt), reveal, true, true);
+        } catch (Throwable t) {
+            BreachProtocol.LOGGER.debug("Skull King (first person): {}", t.toString());
+        }
+        ps.popPose();
+        buf.endBatch();
+    }
+
+    /** No man's arm floating in front of you: in this shape your fists are its fists. */
+    @SubscribeEvent
+    public static void hands(net.neoforged.neoforge.client.event.RenderHandEvent event) {
+        Player p = Minecraft.getInstance().player;
+        if (p != null && FlightState.SKULL.containsKey(p.getId()) && form(p, event.getPartialTick()) >= 0.5F) event.setCanceled(true);
     }
 
     // ================================================================== moving it
 
     private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3;
 
-    private static void draw(Player p, Rig rig, float pt, PoseStack ps, MultiBufferSource buf, int light, float reveal, boolean real) {
+    private static void draw(Player p, Rig rig, float pt, PoseStack ps, MultiBufferSource buf, int light, float reveal, boolean real, boolean fp) {
         Minecraft mc = Minecraft.getInstance();
         SkullModel m = rig.model;
         float t = (p.tickCount + pt) / 20F;
@@ -275,6 +312,11 @@ public final class SkullRenderer {
         m.halo.ry = t * 1.5F; m.halo.y = 11 + Mth.sin(t * 2) * 0.6F;
         m.diamond.ry = Mth.sin(t * 0.8F) * 0.25F;
 
+        // ---- the tail, by its physics
+        float restP = move == FLY ? -1.35F : move == GALLOP ? -0.35F : -0.7F;
+        float walkSway = (move == GALLOP ? 0.14F : 0.1F * amt) * Mth.sin(ph * 0.5F) + Mth.sin(t * 0.9F) * 0.05F;
+        tail(rig, dt, -bodyYaw * Mth.DEG_TO_RAD, move == FLY ? rigTilt : 0, restP, walkSway, dx, dy, dz, t);
+
         // ================================================================== laying it out
         float scale = p.getScale();
         float S = 0.85F / 16F * scale / 1.75F;
@@ -298,6 +340,15 @@ public final class SkullRenderer {
 
         // model space to entity space: turned to face its way, at its size
         Matrix4f E = new Matrix4f().rotateY(-bodyYaw * Mth.DEG_TO_RAD).scale(S);
+        Vector3f shift = new Vector3f();
+        if (fp) {
+            // in first person you look out of its head: the body's laid out so the skull's where your eyes are
+            Vector3f ho = E.transformPosition(mats.get(m.head).transformPosition(new Vector3f()));
+            Vector3f up = E.transformDirection(new Vector3f(0, 6.9F, 3));
+            shift.set(-ho.x - up.x, p.getEyeHeight() - ho.y - up.y, -ho.z - up.z);
+            ps.pushPose();
+            ps.translate(shift.x, shift.y, shift.z);
+        }
         PoseStack.Pose base = ps.last();
         Matrix4f B4 = new Matrix4f(base.pose()).mul(E);
         Matrix3f B3 = new Matrix3f(base.normal()).mul(new Matrix3f(E).normal());
@@ -310,7 +361,9 @@ public final class SkullRenderer {
 
         for (Map.Entry<Node, Matrix4f> en : mats.entrySet()) {
             Node n = en.getKey();
+            boolean hidden = fp && m.headNodes.contains(n);
             for (Part part : n.parts) {
+                if (hidden && part.kind != Kind.EYE) continue;
                 // assembling: each piece swells into place in its turn, feet first
                 float grow = reveal >= 1 ? 1 : Mth.clamp((reveal * (N + 24) - part.order) / 24F, 0, 1);
                 if (grow <= 0) continue;
@@ -339,7 +392,8 @@ public final class SkullRenderer {
                         if (part.kind == Kind.EYE) {
                             fk = 0.8F + Mth.sin(t * 9 + part.x) * 0.2F;
                             w = 2.2F * fk * 1.15F; hh = 4.2F * fk * 1.15F; rise = 0;
-                            if (si < 2) sockets[si++] = new Vec3(ce.x, ce.y, ce.z);
+                            if (si < 2) sockets[si++] = new Vec3(ce.x + shift.x, ce.y + shift.y, ce.z + shift.z);
+                            if (hidden) continue;
                         } else {
                             fk = 0.75F + Mth.sin(t * 9 + part.phase) * 0.2F + Mth.sin(t * 15 + part.phase * 2) * 0.08F;
                             boolean wingFlame = part.flameSize == 2.6F;
@@ -358,15 +412,14 @@ public final class SkullRenderer {
             hand(p, main, mainItem, main == A, mats, base, E, buf, light);
             hand(p, off, offItem, off == A, mats, base, E, buf, light);
         }
-        // ---- the ground it stands on burns
-        if (p.onGround() && reveal >= 1) ground(p, ps, buf, scale, t);
         if (real) {
             if (sockets[0] != null && sockets[1] != null) {
                 Vec3 at = new Vec3(Mth.lerp(pt, p.xOld, p.getX()), Mth.lerp(pt, p.yOld, p.getY()), Mth.lerp(pt, p.zOld, p.getZ()));
                 SOCKETS.put(p.getId(), new Vec3[]{at.add(sockets[0]), at.add(sockets[1])});
             }
-            embers(p, reveal);
+            if (!fp) embers(p, reveal);
         }
+        if (fp) ps.popPose();
     }
 
     /** Each pivot's place in model space, parent first. */
@@ -376,21 +429,77 @@ public final class SkullRenderer {
         for (Node k : n.kids) walk(k, m, out);
     }
 
-    /** A wing, folded (0) to spread (1), beating; flat out in flight the beat is up and down across the body. */
+    /** Eases v to a stop at lo, instead of a hard wall. */
+    private static float soft(float v, float lo) { float k = 0.18F; return v > lo + k ? v : lo + k * (float) Math.exp((v - lo - k) / k); }
+
+    /** A wing, folded (0) to spread (1), beating; flat out in flight the beat is up and down above the back. Never through the body. */
     private static void poseWing(SkullModel.Wing w, float open, float beat, float amp, float tilt, boolean fly) {
         int s = w.side;
         float flapY = fly ? beat * 0.75F : 0, inPlane = fly ? 0 : 1;
         float o = open * (1 - 0.3F * Math.max(0, -beat) * Math.min(1, amp - 0.5F));
-        w.root.rot(0.1 * open + 0.45 * (1 - open) + tilt, s * (1.35 - 1.2 * open - beat * 0.18 * amp * open * inPlane + flapY), -s * 0.12 * (1 - open));
-        float ua = -1.45F + 0.85F * o + beat * 0.25F * o * amp * inPlane;
+        float ry = 1.35F - 1.2F * open - beat * 0.18F * amp * open * inPlane + flapY + (fly ? 0.4F * open : 0);
+        ry = soft(ry, 0.22F);
+        w.root.rot(0.1 * open + 0.45 * (1 - open) + tilt, s * ry, -s * 0.12 * (1 - open));
+        float ua = -1.45F + 1.0F * o + beat * 0.25F * o * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.2F * o : 0);
+        if (o > 0.5F) ua = soft(ua, -0.7F);
         w.upper.rz = s * ua;
-        w.fore.rz = s * (1.9F * o + 2.75F * (1 - o) + beat * 0.1F * o);
-        float foreAbs = ua + (1.9F * o + 2.75F * (1 - o));
-        for (Node fp : w.feathers) fp.rz = s * (-1.45F * o - 0.12F * (1 - o));
-        for (int i = 0; i < w.fingers.size(); i++) {
-            double want = SkullModel.SPREAD[i] * o + SkullModel.FOLD[i] * (1 - o) - beat * 0.12 * o * (i / 4.0);
-            w.fingers.get(i).rz = (float) (s * (want - foreAbs));
+        float fr = 1.9F * o + 2.75F * (1 - o) + beat * 0.1F * o - 0.55F * o;
+        w.fore.rz = s * fr;
+        float foreAbs = ua + fr;
+        float handAbs = 0.3F * o - 1.35F * (1 - o) - beat * 0.12F * o;
+        w.hand.rz = s * (handAbs - foreAbs);
+        float[] abs = {ua, foreAbs, handAbs, handAbs - 0.12F};
+        // every feather points where it should whatever its bone's doing: spread, the fan; folded, all hanging straight down
+        for (Node fp : w.feathers) {
+            float want = fp.a * o + fp.fold * (1 - o) - beat * 0.08F * o * (fp.b / 3F);
+            fp.rz = s * (want - abs[fp.b]);
         }
+    }
+
+    private static float wrap(float a) { return (float) Mth.wrapDegrees(a * Mth.RAD_TO_DEG) * Mth.DEG_TO_RAD; }
+
+    /**
+     * The tail: every vertebra a spring hanging off the one before it, in the world. Turn, and it's left pointing
+     * the old way and swings after you, the root first and the tip last and furthest, whipping a little past and
+     * settling. Moving fast, it streams out behind, away from the way you're going (fly straight and it trails
+     * straight back; climb and it hangs down; dive and it lifts). It sways with the stride, and a spine only bends so far.
+     */
+    private static void tail(Rig rig, float dt, float yawNow, float pitch0, float restP, float sway, double dx, double dy, double dz, float t) {
+        SkullModel m = rig.model;
+        int TN = SkullModel.TAIL;
+        if (!rig.tailSet) { rig.yawAcc = yawNow; rig.lastYaw = yawNow; }
+        rig.yawAcc += wrap(yawNow - rig.lastYaw);
+        rig.lastYaw = yawNow;
+        float yaw0 = rig.yawAcc;
+        if (!rig.tailSet || dt > 0.25F) {
+            for (int i = 0; i < TN; i++) { rig.tY[i] = yaw0; rig.tP[i] = pitch0 + restP + 0.05F * i; rig.tVY[i] = rig.tVP[i] = 0; }
+            rig.tailSet = true;
+        }
+        // streaming out behind, the faster the more
+        double sp = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        float drag = (float) Mth.clamp(sp * 20 / 14, 0, 0.88);
+        float trailY = 0, trailP = 0;
+        if (sp > 1e-4) { trailY = (float) Math.atan2(dx, dz); trailP = (float) Math.asin(Mth.clamp(-dy / sp, -1, 1)); }
+        int steps = Math.max(1, Math.min(8, (int) Math.ceil(dt / 0.01F)));
+        float h = dt / steps;
+        for (int n = 0; n < steps && dt > 0; n++) {
+            float parentY = yaw0, parentP = pitch0;
+            for (int i = 0; i < TN; i++) {
+                float k = i / (float) TN;
+                float K = 120 - 90 * k, D = 2 * (float) Math.sqrt(K) * 0.32F;       // stiff at the root, loose at the tip: a whip
+                float wantY = parentY + (i == 0 ? sway : sway * 0.15F * Mth.sin(t * 2 - i * 0.5F));
+                float wantP = parentP + (i == 0 ? restP : 0.05F);
+                float wd = drag * (0.45F + 0.55F * k);
+                if (wd > 0) { wantY += wrap(trailY + rig.yawAcc - yawNow - wantY) * wd; wantP += (trailP - wantP) * wd; }
+                rig.tVY[i] += (K * (wantY - rig.tY[i]) - D * rig.tVY[i]) * h; rig.tY[i] += rig.tVY[i] * h;
+                rig.tVP[i] += (K * (wantP - rig.tP[i]) - D * rig.tVP[i]) * h; rig.tP[i] += rig.tVP[i] * h;
+                rig.tY[i] = parentY + Mth.clamp(rig.tY[i] - parentY, -0.55F, 0.55F);
+                rig.tP[i] = parentP + Mth.clamp(rig.tP[i] - parentP, i == 0 ? -1.6F : -0.9F, 0.6F);
+                parentY = rig.tY[i]; parentP = rig.tP[i];
+            }
+        }
+        float py = yaw0, pp = pitch0;
+        for (int i = 0; i < TN; i++) { Node v = m.tail.get(i); v.ry = rig.tY[i] - py; v.rx = rig.tP[i] - pp; v.rz = 0; py = rig.tY[i]; pp = rig.tP[i]; }
     }
 
     // ================================================================== drawing it
@@ -475,25 +584,6 @@ public final class SkullRenderer {
                 left ? ItemDisplayContext.THIRD_PERSON_LEFT_HAND : ItemDisplayContext.THIRD_PERSON_RIGHT_HAND, left, ps, buf, light);
     }
 
-    /** Cracked obsidian veined with magma, under its feet, lighting itself. */
-    private static void ground(Player p, PoseStack ps, MultiBufferSource buf, float scale, float t) {
-        float r = 1.6F * scale / 1.75F;
-        Matrix4f m = ps.last().pose();
-        float y = 0.02F;
-        float[][] c = {{-r, -r}, {-r, r}, {r, r}, {r, -r}};
-        float[][] uv = {{0, 0}, {0, 1}, {1, 1}, {1, 0}};
-        int a = (int) (200 + Mth.sin(t * 2.3F) * 40);
-        for (int layer = 0; layer < 2; layer++) {
-            VertexConsumer vc = buf.getBuffer(layer == 0 ? RenderType.entityTranslucent(GROUND) : RenderType.eyes(GROUND_GLOW));
-            for (int i = 0; i < 4; i++) {
-                Vector3f v = m.transformPosition(new Vector3f(c[i][0], y, c[i][1]));
-                vc.addVertex(v.x, v.y, v.z).setColor(255, 255, 255, layer == 1 ? a : 255).setUv(uv[i][0], uv[i][1])
-                        .setOverlay(net.minecraft.client.renderer.texture.OverlayTexture.NO_OVERLAY).setLight(LightTexture.FULL_BRIGHT).setNormal(0, 1, 0);
-            }
-            y += 0.01F;
-        }
-    }
-
     /** Embers off it, and flames licking up round its feet. */
     private static void embers(Player p, float reveal) {
         var l = p.level();
@@ -501,9 +591,5 @@ public final class SkullRenderer {
         var rnd = l.random;
         float sc = p.getScale();
         if (rnd.nextInt(3) == 0) l.addParticle(ParticleTypes.SMALL_FLAME, p.getX() + (rnd.nextDouble() - 0.5) * sc, p.getY() + rnd.nextDouble() * sc * 1.6, p.getZ() + (rnd.nextDouble() - 0.5) * sc, 0, 0.02, 0);
-        if (p.onGround() && reveal >= 1 && rnd.nextInt(4) == 0) {
-            double a = rnd.nextDouble() * Math.PI * 2, d = rnd.nextDouble() * 1.4 * sc / 1.75;
-            l.addParticle(rnd.nextInt(3) == 0 ? ParticleTypes.SOUL_FIRE_FLAME : ParticleTypes.FLAME, p.getX() + Math.cos(a) * d, p.getY() + 0.05, p.getZ() + Math.sin(a) * d, 0, 0.03, 0);
-        }
     }
 }

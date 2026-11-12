@@ -78,7 +78,7 @@ public final class Toggles {
     private static final java.util.Set<UUID> RAGING = new java.util.HashSet<>();
 
     public static boolean on(ServerPlayer p, String id) {
-        return switch (id) { case "stasis" -> STOPS.containsKey(p.getUUID()); case "rage" -> RAGING.contains(p.getUUID()); case "skullking" -> SkullKing.in(p); default -> false; };
+        return switch (id) { case "stasis" -> STOPS.containsKey(p.getUUID()); case "rage" -> RAGING.contains(p.getUUID()); default -> false; };
     }
 
     public static boolean raging(Entity e) { return e != null && RAGING.contains(e.getUUID()); }
@@ -87,7 +87,6 @@ public final class Toggles {
         switch (id) {
             case "stasis" -> { if (STOPS.containsKey(p.getUUID())) resume(p); else stop(p, r); }
             case "rage" -> { if (RAGING.contains(p.getUUID())) calm(p); else rage(p); }
-            case "skullking" -> SkullKing.toggle(p);
             default -> { return; }
         }
         Career.sync(p);
@@ -368,7 +367,6 @@ public final class Toggles {
         CompoundTag on = new CompoundTag();
         if (on(p, "stasis")) on.putBoolean("stasis", true);
         if (on(p, "rage")) on.putBoolean("rage", true);
-        if (on(p, "skullking")) on.putBoolean("skullking", true);
         t.put("tog", on);
     }
 }
