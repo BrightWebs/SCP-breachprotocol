@@ -109,7 +109,7 @@ function bone(parent,len,thick,m=M.bone,knob=M.boneD){
   box(parent,thick+1.4,thick*0.9,thick+0.6,0,-thick*0.45,0,knob);
   box(parent,thick+1.2,thick*0.9,thick+0.6,0,-len+thick*0.45,0,knob);
 }
-const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT),gem:mat(gemT,{emissive:0x7a2aff,emissiveIntensity:1}),
+const M={bone:mat(boneT),boneD:mat(boneDarkT),gold:mat(goldT,{emissive:0x6a4a08,emissiveIntensity:.6}),gem:mat(gemT,{emissive:0x7a2aff,emissiveIntensity:1}),
   face:mat(skullFaceT),jaw:mat(jawT),ember:new THREE.MeshBasicMaterial({map:emberT}),
   crack:mat(crackT,{emissive:0xff3a10,emissiveMap:crackMaskT,emissiveIntensity:1.2}),
   horn:mat(hornT),muzzle:mat(muzzleT),dark:new THREE.MeshLambertMaterial({color:0x14060e}),
@@ -137,10 +137,10 @@ const legL=leg(1),legR=leg(-1);
 const pelvis=pivot(king,0,15,0);
 box(pelvis,12,4,7,0,0.5,0,M.bone);
 box(pelvis,4,5,4,6,1.5,-0.5,M.boneD);box(pelvis,4,5,4,-6,1.5,-0.5,M.boneD); // the hip wings
-const spine=pivot(pelvis,0,2.5,-1,0.38,0,0);
+const spine=pivot(pelvis,0,2.5,-1,0.14,0,0);
 for(let k=0;k<4;k++){box(spine,3.2,1.6,3.2,0,k*2.1+0.8,0,M.bone);box(spine,1.2,1.2,2.2,0,k*2.1+0.8,-2.2,M.boneD)}
 // ---- the ribcage: broad as a troll's, bars with gaps, an ember heart inside
-const chest=pivot(spine,0,8.2,0,0.32,0,0);
+const chest=pivot(spine,0,8.2,0,0.16,0,0);
 const CW=23,CH=16,CD=13;
 box(chest,4,CH,4,0,CH/2,-CD/2+1.5,M.boneD);               // the backbone up through it
 box(chest,3.4,CH-3,2,0,CH/2,CD/2-0.6,M.bone);             // sternum
@@ -158,10 +158,10 @@ heartLight.position.set(0,26,4);
 function arm(side){
   const sh=pivot(chest,side*14.5,CH-1,0.5);
   // the shoulder: a great rounded boss of bone, spiked
-  box(sh,11,10,11,side*0.5,1.5,0,M.crack);
-  box(sh,9,2,9,side*0.5,7,0,M.bone);
-  for(const[z,h]of[[-3,5],[0,7],[3,5]]){const sp=box(sh,1.8,h,1.8,side*2,8+h/2-1,z,M.horn);sp.rotation.z=-side*0.4;sp.rotation.x=z*0.08}
-  const upper=pivot(sh,side*1.5,-3,0,-0.7+0.15,0,side*-0.12);   // hangs straight despite the hunch
+  box(sh,10,8,10,side*0.5,1.5,0,[M.bone,M.bone,M.crack,M.boneD,M.bone,M.bone]);
+  box(sh,8,2,8,side*0.5,6,0,M.boneD);
+  for(const[z,h]of[[-3,4],[0,6],[3,4]]){const sp=box(sh,1.8,h,1.8,side*2,6.5+h/2,z,M.horn);sp.rotation.z=-side*0.4;sp.rotation.x=z*0.08}
+  const upper=pivot(sh,side*1.5,-2.5,0,-0.3,0,side*-0.14);   // hangs straight despite the hunch
   bone(upper,14,6);
   const fore=pivot(upper,0,-14,0,-0.15,0,side*0.05);
   box(fore,3,13,3,-1.6,-6.5,0,M.bone);box(fore,2.6,13,2.6,1.7,-6.5,-0.3,M.boneD);   // radius, ulna
@@ -175,9 +175,10 @@ function arm(side){
 }
 const armL=arm(1),armR=arm(-1);
 // ---- the head: low between the shoulders, thrust forward. A horned skull, crowned, cracked with fire.
-const neck=pivot(chest,0,CH-2,CD/2-1,-0.35,0,0);
+const neck=pivot(chest,0,CH-1,CD/2-2,0.1,0,0);
 box(neck,3,4,3,0,1.5,0.5,M.boneD);
-const head=pivot(neck,0,4,2.5,-0.25,0,0);
+const head=pivot(neck,0,3,1.5,-0.2,0,0);
+head.scale.setScalar(1.15);
 const skull=box(head,12,9,11,0,4.5,0,[M.bone,M.bone,M.crack,M.boneD,M.face,M.bone]);
 box(head,14,2.5,3,0,6.6,5.2,M.boneD);                         // the heavy brow
 box(head,8,4,4,0,1.2,6.5,[M.bone,M.bone,M.bone,M.boneD,M.muzzle,M.bone]);   // the muzzle, teeth bared
@@ -312,10 +313,10 @@ function frame(now){
   // breathing, the hunch heaving, wings, the heart's glow
   const br=Math.sin(t*1.6);
   chest.scale.set(1+br*0.012,1+br*0.01,1+br*0.02);
-  chest.rotation.x=0.32+br*0.02;
-  head.rotation.x=-0.25+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
+  chest.rotation.x=0.16+br*0.02;
+  head.rotation.x=-0.2+Math.sin(t*0.7)*0.05;head.rotation.y=Math.sin(t*0.45)*0.18;
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
-  armL.upper.rotation.x=-0.55+Math.sin(t*0.8)*0.05;armR.upper.rotation.x=-0.55-Math.sin(t*0.8)*0.05;
+  armL.upper.rotation.x=-0.3+Math.sin(t*0.8)*0.05;armR.upper.rotation.x=-0.3-Math.sin(t*0.8)*0.05;
   const f=flap?Math.sin(t*1.9):0.3;
   wingL.base.rotation.y=-0.25-f*0.35;wingR.base.rotation.y=0.25+f*0.35;
   wingL.base.rotation.z=-0.1+f*0.12;wingR.base.rotation.z=0.1-f*0.12;
