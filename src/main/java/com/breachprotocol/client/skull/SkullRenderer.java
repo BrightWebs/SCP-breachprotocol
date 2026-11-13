@@ -50,7 +50,7 @@ public final class SkullRenderer {
     private SkullRenderer() {}
 
     /** How long the change takes, and the change back (ticks); the server's own numbers. */
-    public static final int GROW = 70, SHRINK = 24;
+    public static final int GROW = 180, SHRINK = 24;
 
     /** Where each Skull King's eye sockets were drawn this frame (world), for heat vision. */
     public static final Map<Integer, Vec3[]> SOCKETS = new ConcurrentHashMap<>();
@@ -81,7 +81,7 @@ public final class SkullRenderer {
         int wState = -1, wWant = -1;
         float wStateT, wWantT, wTrans = 1, wDur = 1, wPhase;
         final float[] wFrom = new float[6], wNow = new float[6];
-        int burstLeft; float burstFrom, levelT, hoverYaw; boolean hoverInit;
+        int burstLeft; float burstFrom, levelT, hoverYaw, chargeT, launchT; boolean hoverInit;
         int slideSide = 1;
         int flapsLeft; boolean hard, flyInit;
     }
@@ -113,8 +113,16 @@ public final class SkullRenderer {
         if (f <= 0 && s[0] == 32) { FlightState.SKULL.remove(p.getId()); RIGS.remove(p.getId()); SOCKETS.remove(p.getId()); return; }
         // the bones come in from the feet up over the whole change; the man is gone once half of them are there
         boolean growing = s[0] == 30 && f < 1, shrinking = s[0] == 32;
-        float reveal = shrinking ? f : Mth.clamp(f * 1.15F, 0, 1);
-        if (f >= 0.5F || shrinking) event.setCanceled(true);
+        float reveal = shrinking ? f : 1;
+        // changing, all of it is drawn here: the man burning away, and the true form coming up through him
+        if (growing || f >= 0.5F || shrinking) event.setCanceled(true);
+        if (growing && f < 0.56F) {
+            try { BurningMan.draw(p, event.getRenderer(), f, pt, event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight()); }
+            catch (Throwable t) { BreachProtocol.LOGGER.debug("Burning man: {}", t.toString()); }
+            if (f < 0.42F) burning(p, f);
+            if (f < 0.5F) return;
+        }
+        if (!growing && s[0] == 31) BurningMan.forget(p.getUUID());
         // yourself, in first person (some other pass drawing you): that's the first-person view's to draw, from the skull
         Minecraft mc0 = Minecraft.getInstance();
         if (p == mc0.player && mc0.options.getCameraType().isFirstPerson() && !(mc0.screen != null && pt == 1.0F) && f >= 0.5F) return;
@@ -122,10 +130,26 @@ public final class SkullRenderer {
         boolean real = buf == Minecraft.getInstance().renderBuffers().bufferSource();
         try {
             Rig rig = RIGS.computeIfAbsent(p.getId(), k -> new Rig());
-            draw(p, rig, pt, event.getPoseStack(), buf, event.getPackedLight(), growing || shrinking ? reveal : 1, real, false);
+            CHANGE = growing ? f : -1;
+            draw(p, rig, pt, event.getPoseStack(), buf, event.getPackedLight(), reveal, real, false);
+            CHANGE = -1;
         } catch (Throwable t) {
             BreachProtocol.LOGGER.debug("Skull King: {}", t.toString());
         }
+    }
+
+    /** How far through the change the body being drawn is (-1: not changing). */
+    private static float CHANGE = -1;
+
+    /** Fire all over him while he burns, smoke pouring off. */
+    private static void burning(Player p, float f) {
+        var l = p.level();
+        if (Minecraft.getInstance().isPaused()) return;
+        var r = l.random;
+        double h = p.getBbHeight();
+        for (int i = 0; i < 2; i++) l.addParticle(ParticleTypes.FLAME, p.getX() + (r.nextDouble() - 0.5) * 0.7, p.getY() + r.nextDouble() * h, p.getZ() + (r.nextDouble() - 0.5) * 0.7, 0, 0.05, 0);
+        if (r.nextInt(3) == 0) l.addParticle(ParticleTypes.SMOKE, p.getX() + (r.nextDouble() - 0.5) * 0.6, p.getY() + r.nextDouble() * h, p.getZ() + (r.nextDouble() - 0.5) * 0.6, 0, 0.06, 0);
+        if (f > 0.15F && r.nextInt(2) == 0) l.addParticle(ParticleTypes.LARGE_SMOKE, p.getX(), p.getY() + h * 0.6, p.getZ(), (r.nextDouble() - 0.5) * 0.05, 0.08, (r.nextDouble() - 0.5) * 0.05);
     }
 
     /** Where the camera is, from the feet (first person). */
@@ -142,7 +166,8 @@ public final class SkullRenderer {
         float f = form(p, pt);
         long[] s = FlightState.SKULL.get(p.getId());
         if (f < 0.5F && s[0] != 32 || f <= 0) return;
-        float reveal = s[0] == 32 ? f : s[0] == 30 && f < 1 ? Mth.clamp(f * 1.15F, 0, 1) : 1;
+        float reveal = s[0] == 32 ? f : 1;
+        float change = s[0] == 30 && f < 1 ? f : -1;
         Vec3 cam = event.getCamera().getPosition();
         PoseStack ps = event.getPoseStack();
         ps.pushPose();
@@ -150,7 +175,9 @@ public final class SkullRenderer {
         MultiBufferSource.BufferSource buf = mc.renderBuffers().bufferSource();
         FP_CAM.set((float) (cam.x - Mth.lerp(pt, p.xOld, p.getX())), (float) (cam.y - Mth.lerp(pt, p.yOld, p.getY())), (float) (cam.z - Mth.lerp(pt, p.zOld, p.getZ())));
         try {
+            CHANGE = change;
             draw(p, RIGS.computeIfAbsent(p.getId(), k -> new Rig()), pt, ps, buf, mc.getEntityRenderDispatcher().getPackedLightCoords(p, pt), reveal, true, true);
+            CHANGE = -1;
         } catch (Throwable t) {
             BreachProtocol.LOGGER.debug("Skull King (first person): {}", t.toString());
         }
@@ -241,7 +268,7 @@ public final class SkullRenderer {
 
     // ================================================================== moving it
 
-    private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3, PROWL = 4, CLIMB = 5;
+    private static final int IDLE = 0, GALLOP = 1, HOVER = 2, FLY = 3, PROWL = 4, CLIMB = 5, CHARGE = 6;
 
     private static void draw(Player p, Rig rig, float pt, PoseStack ps, MultiBufferSource buf, int light, float reveal, boolean real, boolean fp) {
         Minecraft mc = Minecraft.getInstance();
@@ -268,6 +295,18 @@ public final class SkullRenderer {
         boolean climbing = !flying && !lying && (FlightState.clinging(p) && !(p.onGround() && dy > -0.01 && dy < 0.01 && !p.isCrouching()) || !p.onGround() && com.breachprotocol.client.SuperFlight.wallRunning(p));
         // running: on two legs through the first and second gears; from the third (a block and a half a tick) up, on all fours
         int move = lying ? FLY : flying ? HOVER : climbing ? CLIMB : (grounded || Math.abs(dy) < 0.35 && !rig.jumped) && (h > 1.3 || st == 6) ? GALLOP : IDLE;
+        if (st == 3 && grounded && !flying && CHANGE < 0) move = CHARGE;
+        if (!gui) {
+            if (move == CHARGE) rig.chargeT += dt;
+            else if (rig.chargeT > 0) {
+                if (dy > 0.2) {
+                    rig.launchT = 0.45F;
+                    if (real) { ring(p, 0, 1, 0); p.level().playLocalSound(p.getX(), p.getY(), p.getZ(), net.minecraft.sounds.SoundEvents.ENDER_DRAGON_FLAP, net.minecraft.sounds.SoundSource.PLAYERS, 2F, 0.55F, false); }
+                }
+                rig.chargeT = 0;
+            }
+            rig.launchT = Math.max(0, rig.launchT - dt);
+        }
         // crouching: moving, a lion's prowl; still, it sits down
         boolean crouch = p.isCrouching() && grounded && move == IDLE;
         if (crouch && h > 0.015) move = PROWL;
@@ -498,6 +537,59 @@ public final class SkullRenderer {
             if (sk > 0.5F) { wingO = 0; beat = 0; }
         }
 
+        // ---- the change: agony as it grows, the breath, the roar
+        float raise = 0;
+        if (CHANGE >= 0) {
+            float c = CHANGE;
+            float pain = band(c, 0.52F, 0.56F, 0.8F, 0.84F), wind = band(c, 0.82F, 0.86F, 0.89F, 0.91F), roar = band(c, 0.9F, 0.92F, 0.97F, 0.995F);
+            if (pain > 0) {
+                float j = Mth.sin(t * 23) * 0.12F + Mth.sin(t * 37) * 0.06F;
+                lr(spine, 0.55F + j * 0.5F, 0, j * 0.3F, pain); lr(chest, 0.25F, j, 0, pain); lr(neck, 0.2F, 0, 0, pain); lr(head, 0.35F + j, j * 0.8F, j * 0.5F, pain);
+                m.jaw.rx += (0.1F + Math.max(0, Mth.sin(t * 9)) * 0.55F - m.jaw.rx) * pain;
+                lr(A.upper, -2.3F + j, 0.4F, A.side * 0.3F, pain); lr(A.fore, -1.7F, 0, 0, pain);
+                lr(B.upper, -2.3F - j, -0.4F, B.side * 0.3F, pain); lr(B.fore, -1.7F, 0, 0, pain);
+                for (SkullModel.Leg lg : m.legs) { lr(lg.thigh, -0.55F, 0, lg.side * 0.12F, pain); lr(lg.shin, 0.95F, 0, 0, pain); lr(lg.foot, -0.4F, 0, 0, pain); }
+                lift = -3 * pain + Mth.sin(t * 41) * 0.4F * pain;
+            }
+            if (wind > 0) {
+                lr(spine, -0.18F, 0, 0, wind); lr(chest, -0.25F, 0, 0, wind); lr(neck, -0.3F, 0, 0, wind); lr(head, -0.55F, 0, 0, wind);
+                m.jaw.rx += (0.75F - m.jaw.rx) * wind;
+                lr(A.upper, -0.3F, 0, A.side * 1.35F, wind); lr(A.fore, -0.9F, 0, 0, wind);
+                lr(B.upper, -0.3F, 0, B.side * 1.35F, wind); lr(B.fore, -0.9F, 0, 0, wind);
+                for (SkullModel.Leg lg : m.legs) { lr(lg.thigh, -0.15F, 0, lg.side * 0.28F, wind); lr(lg.shin, 0.3F, 0, 0, wind); lr(lg.foot, -0.15F, 0, 0, wind); }
+                raise = 0.5F * wind;
+            }
+            if (roar > 0) {
+                float tr = Mth.sin(t * 31) * 0.04F;
+                lr(spine, 0.35F, 0, 0, roar); lr(chest, 0.15F + tr, 0, 0, roar); lr(neck, 0.15F, 0, 0, roar); lr(head, 0.05F + tr, tr, 0, roar);
+                m.jaw.rx += (1.0F - m.jaw.rx) * roar;
+                lr(A.upper, -0.9F, 0, A.side * 1.0F, roar); lr(A.fore, -0.5F, 0, 0, roar);
+                lr(B.upper, -0.9F, 0, B.side * 1.0F, roar); lr(B.fore, -0.5F, 0, 0, roar);
+                for (SkullModel.Leg lg : m.legs) { lr(lg.thigh, -0.35F, 0, lg.side * 0.25F, roar); lr(lg.shin, 0.55F, 0, 0, roar); lr(lg.foot, -0.2F, 0, 0, roar); }
+                raise = Math.max(raise, 0.2F * roar);
+            }
+            if (c > 0.81F) wingO = Mth.clamp((c - 0.81F) / 0.05F, 0, 1); else wingO = 0;
+            beat = 0;
+            if (pain <= 0) lift = 0;
+        }
+        // ---- the super jump's wind-up: down on one knee, a fist on the ground, the wings raised high; and the launch,
+        // the wings slamming down to drive it up
+        if (move == CHARGE) {
+            float ck = Math.min(1, rig.chargeT * 4);
+            lr(spine, 0.75F, 0, 0, ck); lr(chest, 0.35F, 0, 0, ck); lr(neck, -0.25F, 0, 0, ck); lr(head, -0.15F, 0, 0, ck);
+            lr(R.thigh, -0.15F, 0, R.side * 0.05F, ck); lr(R.shin, 1.95F, 0, 0, ck); lr(R.foot, 0.9F, 0, 0, ck);
+            lr(L.thigh, -1.35F, 0, L.side * 0.1F, ck); lr(L.shin, 1.45F, 0, 0, ck); lr(L.foot, -0.1F, 0, 0, ck);
+            lr(B.upper, -0.55F, 0, B.side * 0.15F, ck); lr(B.fore, -0.15F, 0, 0, ck);
+            lr(A.upper, 0.55F, 0, A.side * 0.45F, ck); lr(A.fore, -0.4F, 0, 0, ck);
+            wingO = 1; beat = 0; raise = 1.05F * ck + Mth.sin(t * 13) * 0.04F * ck;
+            lift = 0;
+        }
+        if (rig.launchT > 0) {
+            float lt = 1 - rig.launchT / 0.45F;
+            raise = lt < 0.4F ? 1.05F - 1.9F * (lt / 0.4F) : -0.85F * (1 - (lt - 0.4F) / 0.6F);
+            wingO = 1;
+        }
+
         // ---- the wings
         float k = 1 - (float) Math.pow(1 - 0.12, dt * 60);
         // in the air the wings do what their state says (blended from the last); on the ground, what the pose wants
@@ -510,8 +602,18 @@ public final class SkullRenderer {
         // banking into a turn: the outer wing lifts, the inner one straightens and drops
         float bankUp = move == FLY || move == HOVER ? rig.bank * 0.75F : 0;
         float burst = rig.burstLeft > 0 ? 1 : 0, burstU = burst > 0 ? (((rig.wPhase - rig.burstFrom) / Mth.TWO_PI) % 1 + 1) % 1 : 0;
-        poseWing(m.wings[0], rig.open, rig.wPhase, wA, amp, tilt, wingFly, bankUp, noise, t, burst, burstU);
-        poseWing(m.wings[1], rig.open, rig.wPhase + 0.05F, wA, amp, tilt, wingFly, -bankUp, noise, t + 1.7F, burst, burstU);
+        boolean hoverWings = move == HOVER && (rig.wState == W_LIFT || rig.wState == W_GLIDE);
+        for (SkullModel.Wing w : m.wings) w.root.zyx = hoverWings;
+        if (hoverWings) {
+            // hovering: the wings face down, undersides to the ground, and the whole wing beats up and down about the
+            // shoulder like a bird's, a hard push down and a slower lift; gliding, they're held out flat and still
+            float hb = stroke(rig.wPhase) * wA, hl = stroke(rig.wPhase - 0.5F) * wA;
+            poseHoverWing(m.wings[0], hb, hl, rig.wPhase, bankUp);
+            poseHoverWing(m.wings[1], hb, hl, rig.wPhase, -bankUp);
+        } else {
+            poseWing(m.wings[0], rig.open, rig.wPhase, wA, amp, tilt, wingFly, bankUp, noise, t, burst, burstU, raise);
+            poseWing(m.wings[1], rig.open, rig.wPhase + 0.05F, wA, amp, tilt, wingFly, -bankUp, noise, t + 1.7F, burst, burstU, raise);
+        }
 
         // ---- the crown's fire, the halo turning, the gem swaying
         m.halo.ry = t * 1.5F; m.halo.y = 11 + Mth.sin(t * 2) * 0.6F;
@@ -524,7 +626,7 @@ public final class SkullRenderer {
 
         // ================================================================== laying it out
         float scale = p.getScale();
-        float S = 0.85F / 16F * scale / 1.75F;
+        float S = 0.85F / 16F * scale / 1.75F * (CHANGE >= 0 ? 0.7F + 0.3F * Mth.clamp((CHANGE - 0.5F) / 0.04F, 0, 1) : 1);
         Map<Node, Matrix4f> mats = new IdentityHashMap<>();
         Matrix4f rootM = new Matrix4f();
         if (move == CLIMB && rig.slideK > 0.5F) {
@@ -542,7 +644,7 @@ public final class SkullRenderer {
             rootM.translate(0, 30 + lift + rigLiftPx, 0).rotateZ(rig.bank).translate(0, -30, 0);
         } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
-        if (move == GALLOP || move == PROWL || sitK > 0.02F) {
+        if (move == GALLOP || move == PROWL || move == CHARGE || sitK > 0.02F) {
             // on the ground, never in it: every corner of every bone (not the loose feathers) is checked, and the
             // lowest one rests exactly on top of the ground, legs crossed, tail, paws and all
             float low = Float.MAX_VALUE;
@@ -589,7 +691,19 @@ public final class SkullRenderer {
             for (Part part : n.parts) {
                 if (hidden && part.kind != Kind.EYE) continue;
                 // assembling: each piece swells into place in its turn, feet first
-                float grow = reveal >= 1 ? 1 : Mth.clamp((reveal * (N + 24) - part.order) / 24F, 0, 1);
+                float grow;
+                if (CHANGE >= 0) {
+                    // up through the crumbling skeleton: the bones, then the teeth, the horns ridge by ridge, the
+                    // tail bone by bone, the crown, and last the wings
+                    float c = CHANGE;
+                    Integer ti = m.tailIndex.get(n), hi = m.hornIndex.get(n);
+                    if (ti != null) grow = Mth.clamp((c - 0.69F - ti * 0.005F) / 0.01F, 0, 1);
+                    else if (hi != null) grow = Mth.clamp((c - 0.64F - hi * 0.012F) / 0.012F, 0, 1);
+                    else if (m.tuskNodes.contains(n)) grow = Mth.clamp((c - 0.62F) / 0.02F, 0, 1);
+                    else if (m.wingNodes.contains(n)) grow = Mth.clamp((c - 0.81F) / 0.05F, 0, 1);
+                    else if (m.crownNodes.contains(n)) grow = Mth.clamp((c - 0.79F) / 0.03F, 0, 1);
+                    else grow = Mth.clamp((c - 0.5F) / 0.04F, 0, 1);
+                } else grow = reveal >= 1 ? 1 : Mth.clamp((reveal * (N + 24) - part.order) / 24F, 0, 1);
                 if (grow <= 0) continue;
                 if (fp && part.kind == Kind.BOX) {
                     // nothing right up against your eyes: any bone within reach of the camera isn't drawn, so you
@@ -655,7 +769,9 @@ public final class SkullRenderer {
 
     /** Each pivot's place in model space, parent first. */
     private static void walk(Node n, Matrix4f parent, Map<Node, Matrix4f> out) {
-        Matrix4f m = new Matrix4f(parent).translate(n.x, n.y, n.z).rotateXYZ(n.rx, n.ry, n.rz).scale(n.sx, n.sy, n.sz);
+        Matrix4f m = new Matrix4f(parent).translate(n.x, n.y, n.z);
+        if (n.zyx) m.rotateZYX(n.rz, n.ry, n.rx); else m.rotateXYZ(n.rx, n.ry, n.rz);
+        m.scale(n.sx, n.sy, n.sz);
         out.put(n, m);
         for (Node k : n.kids) walk(k, m, out);
     }
@@ -822,7 +938,7 @@ public final class SkullRenderer {
      * outer wing folds a little on the upstroke, the way a bird's does; flat out in flight the beat is up and down
      * above the back. noise: a light flutter in the feathers (gliding, falling). Never through the body.
      */
-    private static void poseWing(SkullModel.Wing w, float open, float phase, float A, float amp, float tilt, boolean fly, float up, float noise, float t, float burst, float burstU) {
+    private static void poseWing(SkullModel.Wing w, float open, float phase, float A, float amp, float tilt, boolean fly, float up, float noise, float t, float burst, float burstU, float raise) {
         int s = w.side;
         // upright, the stroke is a hard, quick push down and a slower, folded recovery up; flat out, an even beat
         float b0 = (fly ? Mth.sin(phase) : stroke(phase)) * A, b1 = (fly ? Mth.sin(phase - 0.6F) : stroke(phase - 0.6F)) * A, b2 = (fly ? Mth.sin(phase - 1.2F) : stroke(phase - 1.2F)) * A;
@@ -841,8 +957,8 @@ public final class SkullRenderer {
             else { float k = (burstU - 0.6F) / 0.4F; sweep = -1.1F * (1 - k * k * (3 - 2 * k)); twist = 0.2F * (1 - k); }
         }
         w.root.rot(0.1 * open + 0.45 * (1 - open) + tilt + twist * burst, s * ry, -s * 0.12 * (1 - open));
-        float ua = -1.45F + 1.0F * open + b0 * 0.38F * open * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.3F * open : 0) + sweep * 0.9F * burst;
-        if (open > 0.5F) ua = soft(ua, -0.7F);
+        float ua = -1.45F + 1.0F * open + b0 * 0.38F * open * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.3F * open : 0) + sweep * 0.9F * burst + raise;
+        if (open > 0.5F) ua = soft(ua, -0.7F - Math.max(0, -raise));
         w.upper.rz = s * ua;
         float fr = 1.9F * o + 2.75F * (1 - o) + b1 * 0.1F * o - 0.55F * o;
         w.fore.rz = s * fr;
@@ -874,6 +990,28 @@ public final class SkullRenderer {
         rig.turnS += (Mth.clamp(rate, -3, 3) - rig.turnS) * (1 - (float) Math.exp(-2.5 * dt));
         float tr = Math.abs(rig.turnS) < 0.35F ? 0 : rig.turnS - Math.copySign(0.35F, rig.turnS);
         rig.bank += (Mth.clamp(tr * 0.3F, -0.45F, 0.45F) - rig.bank) * (1 - (float) Math.exp(-2.5 * dt));
+    }
+
+    /** The hover wing (see the preview): pitched to face down, then swung up and down about the body's line. */
+    private static void poseHoverWing(SkullModel.Wing w, float beat, float lag, float phase, float up) {
+        int s = w.side;
+        w.root.rx = 1.0F + 0.15F * Mth.sin(phase + 1.2F);
+        w.root.ry = s * 0.18F;
+        w.root.rz = s * (beat * 0.75F + up);
+        w.upper.rz = s * -0.35F;
+        float fr = 1.35F + (lag - beat) * 0.3F;
+        w.fore.rz = s * fr;
+        float foreAbs = -0.35F + fr;
+        float handAbs = 0.3F + (lag - beat) * 0.25F;
+        w.hand.rz = s * (handAbs - foreAbs);
+        float[] abs = {-0.35F, foreAbs, handAbs, handAbs - 0.12F};
+        for (Node fp : w.feathers) fp.rz = s * (fp.a - abs[fp.b] + (beat < 0 ? -0.05F : 0.04F) * fp.b / 3F);
+    }
+
+    /** 0 before a, rising to 1 by b, 1 until c, falling to 0 by d (smoothly). */
+    private static float band(float x, float a, float b, float c, float d) {
+        float k = x < a || x > d ? 0 : x < b ? (x - a) / (b - a) : x <= c ? 1 : 1 - (x - c) / (d - c);
+        return k * k * (3 - 2 * k);
     }
 
     static final int W_IDLE = 0, W_LIFT = 1, W_GLIDE = 2, W_FALL = 3, W_LAND = 4;
@@ -945,7 +1083,7 @@ public final class SkullRenderer {
     private static void params(Rig rig, int move, int state, float stateT, float[] o) {
         boolean hover = move == HOVER;
         switch (state) {
-            case W_LIFT -> { o[0] = 1; o[1] = 1; o[2] = hover ? 2.6F : 2.4F; o[3] = hover ? 0.55F : -0.15F; o[4] = Mth.lerp(Math.min(1, stateT / 5F), 7.5F, 4.5F); o[5] = 0; }
+            case W_LIFT -> { o[0] = 1; o[1] = 1; o[2] = hover ? 2.6F : 2.4F; o[3] = hover ? 0.55F : -0.15F; o[4] = hover ? 3.4F : Mth.lerp(Math.min(1, stateT / 5F), 7.5F, 4.5F); o[5] = 0; }
             case W_GLIDE -> { o[0] = 1; o[1] = 0.15F; o[2] = 1.2F; o[3] = hover ? 0.4F : -0.15F; o[4] = 0.9F; o[5] = 0.05F; }
             case W_FALL -> { o[0] = 0.8F; o[1] = 0; o[2] = 1; o[3] = -0.35F; o[4] = 0; o[5] = 0.12F; }
             case W_LAND -> { o[0] = 1; o[1] = 0.9F; o[2] = 2.0F; o[3] = 0.35F; o[4] = 13.4F; o[5] = 0; }

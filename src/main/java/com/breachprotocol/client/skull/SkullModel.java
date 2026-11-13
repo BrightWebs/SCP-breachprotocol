@@ -15,6 +15,8 @@ public final class SkullModel {
         /** A feather's own: the bone it grows from (0 arm, 1 forearm, 2 hand, 3 finger), where it points spread, and folded. */
         public int b;
         public float a, fold;
+        /** Turned Z, then Y, then X (applied to the shape: pitched first, then swung): a hovering wing beats about the body's line this way. */
+        public boolean zyx;
         public final List<Node> kids = new ArrayList<>();
         public final List<Part> parts = new ArrayList<>();
         Node(float x, float y, float z) { this.x = x; this.y = y; this.z = z; }
@@ -70,6 +72,10 @@ public final class SkullModel {
     public final java.util.Set<Node> headNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     /** Everything on the wings (their feathers hang loose: they don't decide where the ground is). */
     public final java.util.Set<Node> wingNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    /** For the change: the tusks, each horn ridge's place along its horn, the crown and all on it, each tail bone's place. */
+    public final List<Node> tusks = new ArrayList<>();
+    public final java.util.Map<Node, Integer> hornIndex = new java.util.IdentityHashMap<>(), tailIndex = new java.util.IdentityHashMap<>();
+    public final java.util.Set<Node> crownNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>()), tuskNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     // ------------------------------------------------------------------ building
 
@@ -210,6 +216,7 @@ public final class SkullModel {
         box(jaw, 11, 2.5, 10, 0, -1.2, 4.5, 0, 0, 0, BD, BD, BD, BD, Mat.JAW, BD);
         for (int sd : new int[]{1, -1}) {
             Node t = pivot(jaw, sd * 4.6, -0.5, 8.5, -0.3, 0, sd * -0.3);
+            tusks.add(t);
             box(t, 1.6, 4, 1.6, 0, 2, 0, H);
             Node t2 = pivot(t, 0, 4, 0, -0.5, 0, sd * 0.2);
             box(t2, 1.2, 3, 1.2, 0, 1.5, 0, H);
@@ -217,7 +224,7 @@ public final class SkullModel {
         for (int sd : new int[]{1, -1}) {
             Node p = pivot(head, sd * 5.6, 7.5, 0.5, 0, 0, sd * -0.9);
             double[][] segs = {{3.2, 4, -0.35}, {2.8, 4, -0.45}, {2.3, 3.6, -0.5}, {1.8, 3.2, -0.5}, {1.2, 3, -0.4}};
-            for (double[] sg : segs) { box(p, sg[0], sg[1], sg[0], 0, sg[1] / 2, 0, H); p = pivot(p, 0, sg[1], 0, sg[2], 0, sd * 0.12); }
+            for (double[] sg : segs) { box(p, sg[0], sg[1], sg[0], 0, sg[1] / 2, 0, H); hornIndex.put(p, hornIndex.size() % 5); p = pivot(p, 0, sg[1], 0, sg[2], 0, sd * 0.12); }
         }
         // the eye sockets' own flames (and where heat vision comes from in this form)
         for (int sd : new int[]{1, -1}) special(head, Kind.EYE, 2.2, 4.2, sd * 2.9, 6, 6.2, null);
@@ -246,7 +253,12 @@ public final class SkullModel {
         for (int i = 0; i < 2; i++) wings[i] = wing(i == 0 ? 1 : -1);
         mark(neck);
         for (Wing w : wings) markWing(w.root);
+        mark(crown, crownNodes);
+        for (Node t : tusks) mark(t, tuskNodes);
+        for (int i = 0; i < tail.size(); i++) tailIndex.put(tail.get(i), i);
     }
+
+    private void mark(Node n, java.util.Set<Node> into) { into.add(n); for (Node k : n.kids) mark(k, into); }
 
     private void markWing(Node n) { wingNodes.add(n); for (Node k : n.kids) markWing(k); }
 
