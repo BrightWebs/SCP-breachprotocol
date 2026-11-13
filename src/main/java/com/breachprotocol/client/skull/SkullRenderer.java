@@ -81,6 +81,7 @@ public final class SkullRenderer {
         int wState = -1, wWant = -1;
         float wStateT, wWantT, wTrans = 1, wDur = 1, wPhase;
         final float[] wFrom = new float[6], wNow = new float[6];
+        int burstLeft; float burstFrom;
         int slideSide = 1;
         int flapsLeft; boolean hard, flyInit;
     }
@@ -876,8 +877,24 @@ public final class SkullRenderer {
         rig.wTrans = Math.min(1, rig.wTrans + dt / rig.wDur);
         float e = rig.wTrans * rig.wTrans * (3 - 2 * rig.wTrans);
         for (int i = 0; i < 6; i++) rig.wNow[i] = rig.wFrom[i] + (live[i] - rig.wFrom[i]) * e;
+        // flat out and speeding up: a burst of hard, deep beats driving it on (each one throwing off a ring of air)
+        if (move == FLY && rig.burstLeft == 0 && rig.accS > 6 && rig.burstCool <= 0) {
+            rig.burstLeft = 3; rig.burstCool = 2F;
+            rig.burstFrom = rig.wPhase - (rig.wPhase % Mth.TWO_PI);      // from the top of a stroke
+            if (real) ring(p, p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
+        }
+        if (move != FLY) rig.burstLeft = 0;
+        if (rig.burstLeft > 0) {
+            rig.wNow[0] = 1; rig.wNow[1] = 1.25F; rig.wNow[2] = 2.9F; rig.wNow[4] = 12.5F;
+            int done = (int) ((rig.wPhase + rig.wNow[4] * dt - rig.burstFrom) / Mth.TWO_PI);
+            int was = (int) ((rig.wPhase - rig.burstFrom) / Mth.TWO_PI);
+            if (done > was) {
+                rig.burstLeft--;
+                if (rig.burstLeft > 0 && real) ring(p, p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
+            }
+        }
         rig.wPhase += rig.wNow[4] * dt;
-        if (rig.wPhase > 1000) rig.wPhase -= Mth.TWO_PI * 150;
+        if (rig.wPhase > 1000) { rig.wPhase -= Mth.TWO_PI * 150; rig.burstFrom -= Mth.TWO_PI * 150; }
     }
 
     private static void params(Rig rig, int move, int state, float stateT, float[] o) {
