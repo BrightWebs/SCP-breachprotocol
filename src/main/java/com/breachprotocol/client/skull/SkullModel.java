@@ -70,9 +70,6 @@ public final class SkullModel {
     public final java.util.Set<Node> headNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     /** Everything on the wings (their feathers hang loose: they don't decide where the ground is). */
     public final java.util.Set<Node> wingNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-    /** The crown and all on it; and each tail vertebra's place along the tail (for the change, which grows them in turn). */
-    public final java.util.Set<Node> crownNodes = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-    public final java.util.Map<Node, Integer> tailIndex = new java.util.IdentityHashMap<>();
 
     // ------------------------------------------------------------------ building
 
@@ -249,11 +246,7 @@ public final class SkullModel {
         for (int i = 0; i < 2; i++) wings[i] = wing(i == 0 ? 1 : -1);
         mark(neck);
         for (Wing w : wings) markWing(w.root);
-        markCrown(crown);
-        for (int i = 0; i < tail.size(); i++) tailIndex.put(tail.get(i), i);
     }
-
-    private void markCrown(Node n) { crownNodes.add(n); for (Node k : n.kids) markCrown(k); }
 
     private void markWing(Node n) { wingNodes.add(n); for (Node k : n.kids) markWing(k); }
 

@@ -45,7 +45,7 @@ public final class FlightState {
         if (p == null) return false;
         if (!p.level().isClientSide) return p instanceof net.minecraft.server.level.ServerPlayer sp && com.breachprotocol.career.SkullKing.whole(sp);
         long[] s = SKULL.get(p.getId());
-        return s != null && (s[0] == 31 || s[0] == 30 && p.level().getGameTime() - s[1] >= 120);
+        return s != null && (s[0] == 31 || s[0] == 30 && p.level().getGameTime() - s[1] >= 70);
     }
 
     /** On a wall (it took hold with W and crouch), and the wall's still there. */
