@@ -159,8 +159,12 @@ final class BurningMan {
         int[] out = new int[64 * 64];
         try {
             AbstractTexture tex = Minecraft.getInstance().getTextureManager().getTexture(loc);
+            RenderSystem.bindTexture(tex.getId());
+            // only a plain 64x64 skin (a bigger one would overrun the image it's read into)
+            int w = com.mojang.blaze3d.platform.GlStateManager._getTexLevelParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL11.GL_TEXTURE_WIDTH);
+            int h = com.mojang.blaze3d.platform.GlStateManager._getTexLevelParameter(org.lwjgl.opengl.GL11.GL_TEXTURE_2D, 0, org.lwjgl.opengl.GL11.GL_TEXTURE_HEIGHT);
+            if (w != 64 || h != 64) throw new IllegalStateException("skin is " + w + "x" + h);
             try (NativeImage img = new NativeImage(64, 64, false)) {
-                RenderSystem.bindTexture(tex.getId());
                 img.downloadTexture(0, false);
                 for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) out[y * 64 + x] = img.getPixelRGBA(x, y);
             }
