@@ -19,6 +19,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.util.Mth;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingChangeTargetEvent;
@@ -45,7 +46,7 @@ public final class SkullKing {
     private static final ResourceLocation SIZE = ResourceLocation.fromNamespaceAndPath(BreachProtocol.MODID, "skull_king_size");
     /** How much bigger than a man it stands (on top of 1). */
     private static final double GROWN = 0.75;
-    private static final int GROW = 70, SHRINK = 24, ROAR = 22, FEAR = 20 * 12;
+    private static final int GROW = 120, SHRINK = 24, ROAR_AT = 96, FEAR = 20 * 12;
 
     /** Who's in the shape, and the game time the change began (the change is done GROW ticks later). */
     private static final Map<UUID, Long> FORM = new HashMap<>();
@@ -124,33 +125,59 @@ public final class SkullKing {
         if (!AFRAID.isEmpty() && srv.getTickCount() % 5 == 0) fearTick(srv);
     }
 
+    /**
+     * The change, over six seconds. It burns: the skin catches and burns off in a sheet of fire, and in a flash
+     * there's only bone. The skeleton grows, in agony (bones cracking, setting, cracking again), the tail growing out
+     * of it vertebra by vertebra; the crown catches; the wings tear open; it throws its head back, mouth wide, arms
+     * flung out like a beast's; and roars.
+     */
     private static void changing(ServerPlayer p, ServerLevel l, int age) {
         float k = age / (float) GROW;
-        // it grows as the bones come, slowly, then all at once
-        double ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-        size(p, GROWN * ease);
         double h = p.getBbHeight();
-        // bone, cracking and setting, from the feet up
-        if (age % 5 == 0) {
-            l.playSound(null, p.blockPosition(), age % 10 == 0 ? SoundEvents.BONE_BLOCK_PLACE : SoundEvents.SKELETON_STEP, SoundSource.PLAYERS, 1.2F, 0.4F + k * 0.4F);
-            double y = p.getY() + h * k;
-            for (int i = 0; i < 10; i++) {
-                double a = (age * 0.6) + i * Math.PI / 5, r = 0.5 + 0.3 * p.getScale();
-                l.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, p.getX() + Math.cos(a) * r, y, p.getZ() + Math.sin(a) * r, 1, 0, 0.05, 0, 0.01);
-            }
-            l.sendParticles(ParticleTypes.ASH, p.getX(), y, p.getZ(), 12, 0.6, 0.3, 0.6, 0.02);
+        var r = p.getRandom();
+        // it only grows once it's bone
+        float g = Mth.clamp((k - 0.36F) / 0.26F, 0, 1);
+        size(p, GROWN * (g < 0.5 ? 2 * g * g : 1 - Math.pow(-2 * g + 2, 2) / 2));
+        if (k < 0.28F) {
+            // burning: flames all over it, smoke pouring off, the skin going
+            for (int i = 0; i < 5; i++) l.sendParticles(ParticleTypes.FLAME, p.getX() + (r.nextDouble() - 0.5) * 0.8, p.getY() + r.nextDouble() * h, p.getZ() + (r.nextDouble() - 0.5) * 0.8, 1, 0, 0.04, 0, 0.01);
+            if (age % 2 == 0) l.sendParticles(ParticleTypes.LARGE_SMOKE, p.getX(), p.getY() + h * 0.6, p.getZ(), 2, 0.3, 0.5, 0.3, 0.02);
+            if (age % 4 == 0) l.sendParticles(ParticleTypes.LAVA, p.getX(), p.getY() + h * 0.5, p.getZ(), 1, 0.3, 0.4, 0.3, 0);
+            if (age % 8 == 0) l.playSound(null, p.blockPosition(), SoundEvents.FIRE_AMBIENT, SoundSource.PLAYERS, 1.6F, 0.7F);
+            if (age % 12 == 0) l.playSound(null, p.blockPosition(), SoundEvents.PLAYER_HURT_ON_FIRE, SoundSource.PLAYERS, 1F, 0.6F);
         }
-        if (age == GROW / 2) {
+        if (age == (int) (GROW * 0.28F)) {
+            // the flash: what's left of the man is gone
+            l.sendParticles(ParticleTypes.FLASH, p.getX(), p.getY() + h * 0.6, p.getZ(), 1, 0, 0, 0, 0);
+            l.sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + h * 0.5, p.getZ(), 80, 0.4, 0.8, 0.4, 0.12);
+            l.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, p.getX(), p.getY() + h * 0.5, p.getZ(), 40, 0.3, 0.6, 0.3, 0.08);
+            l.playSound(null, p.blockPosition(), SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.6F, 0.4F);
+            l.playSound(null, p.blockPosition(), SoundEvents.FIRE_EXTINGUISH, SoundSource.PLAYERS, 1.4F, 0.5F);
+        }
+        if (k > 0.3F && k < 0.62F) {
+            // agony, and growing: bones cracking and setting
+            if (age % 6 == 0) l.playSound(null, p.blockPosition(), r.nextBoolean() ? SoundEvents.BONE_BLOCK_BREAK : SoundEvents.BONE_BLOCK_PLACE, SoundSource.PLAYERS, 1.4F, 0.4F + r.nextFloat() * 0.3F);
+            if (age % 14 == 0) l.playSound(null, p.blockPosition(), SoundEvents.SKELETON_HURT, SoundSource.PLAYERS, 1.2F, 0.4F);
+            if (age % 22 == 0) l.playSound(null, p.blockPosition(), SoundEvents.WITHER_HURT, SoundSource.PLAYERS, 0.7F, 0.5F);
+            if (age % 3 == 0) l.sendParticles(ParticleTypes.ASH, p.getX(), p.getY() + h * 0.5, p.getZ(), 10, 0.5, 0.6, 0.5, 0.02);
+            if (age % 4 == 0) l.sendParticles(ParticleTypes.SOUL_FIRE_FLAME, p.getX(), p.getY() + r.nextDouble() * h, p.getZ(), 2, 0.4, 0.3, 0.4, 0.02);
+        }
+        if (k > 0.45F && k < 0.6F && age % 3 == 0) {
+            // the tail, coming out of it a bone at a time
+            l.playSound(null, p.blockPosition(), SoundEvents.SKELETON_STEP, SoundSource.PLAYERS, 1.2F, 0.5F + (k - 0.45F) * 4);
+        }
+        if (age == (int) (GROW * 0.55F)) {
             // the crown catches
             l.playSound(null, p.blockPosition(), SoundEvents.BLAZE_SHOOT, SoundSource.PLAYERS, 1.2F, 0.5F);
             l.sendParticles(ParticleTypes.FLAME, p.getX(), p.getY() + h, p.getZ(), 40, 0.3, 0.2, 0.3, 0.06);
         }
-        if (age == GROW - ROAR) {
-            // the wings open: a downdraft
+        if (age == (int) (GROW * 0.66F)) {
+            // the wings tear open: a downdraft
             l.playSound(null, p.blockPosition(), SoundEvents.ENDER_DRAGON_FLAP, SoundSource.PLAYERS, 2F, 0.6F);
             l.sendParticles(ParticleTypes.CLOUD, p.getX(), p.getY() + 0.2, p.getZ(), 40, 1.5, 0.1, 1.5, 0.1);
         }
-        if (age == GROW) roar(p, l);
+        if (age == (int) (GROW * 0.7F)) l.playSound(null, p.blockPosition(), SoundEvents.RAVAGER_STUNNED, SoundSource.PLAYERS, 1.2F, 0.5F);   // the breath in
+        if (age == ROAR_AT) roar(p, l);
     }
 
     // ================================================================== the roar
