@@ -81,7 +81,7 @@ public final class SkullRenderer {
         int wState = -1, wWant = -1;
         float wStateT, wWantT, wTrans = 1, wDur = 1, wPhase;
         final float[] wFrom = new float[6], wNow = new float[6];
-        int burstLeft; float burstFrom, levelT, hoverYaw, chargeT, launchT; boolean hoverInit;
+        int burstLeft; float burstFrom, levelT, hoverYaw, chargeT, launchT, hoverPitch; boolean hoverInit;
         int slideSide = 1;
         int flapsLeft; boolean hard, flyInit;
     }
@@ -417,7 +417,7 @@ public final class SkullRenderer {
             // laid out flat like a superhero, a fist out in front, legs straight back, the wings driving up and down
             float b = Mth.sin(rig.wPhase) * rig.wNow[1];
             rigLiftPx = b * -0.5F;
-            rigTilt = 1.35F + rig.diveS * 0.55F;
+            rigTilt = 1.35F + rig.diveS * 0.95F;   // into a dive head-first, climbing nose-up
             spine.rx = 0; chest.rx = 0; neck.rx = -0.6F; head.rx = -0.45F;
             for (SkullModel.Leg lg : m.legs) { lg.thigh.rx = 0.05F; lg.shin.rx = 0.12F; lg.foot.rx = 0.6F; }
             main.upper.rot(-2.9, 0, main.side * 0.05); main.fore.rx = 0;
@@ -642,7 +642,12 @@ public final class SkullRenderer {
             rootM.translate(0, p.getBbHeight() / 2F / S, 0).rotateZ(rig.bank).rotateX(rigTilt).translate(0, -30 + rigLiftPx, 0);
         } else if (move == HOVER) {
             // hovering, it rolls into a turn too, about its middle
-            rootM.translate(0, 30 + lift + rigLiftPx, 0).rotateZ(rig.bank).translate(0, -30, 0);
+            // and it leans into its way like a body in flight: forward the faster it goes, nose-down when it comes
+            // down (head first, straight down when it drops straight down)
+            float want = (float) Mth.clamp(h * 1.6, 0, 1.25);
+            if (dy < -0.06) want += (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, h)), 0, 1.57) * (float) Mth.clamp(-dy * 3, 0, 1);
+            if (!gui) rig.hoverPitch += (Math.min(want, 2.9F) - rig.hoverPitch) * (1 - (float) Math.exp(-3 * dt));
+            rootM.translate(0, 30 + lift + rigLiftPx, 0).rotateZ(rig.bank).rotateX(rig.hoverPitch).translate(0, -30, 0);
         } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
         if (move == GALLOP || move == PROWL || move == CHARGE || sitK > 0.02F) {
@@ -817,7 +822,7 @@ public final class SkullRenderer {
         rig.bank += (Mth.clamp(tr * 0.4F, -0.65F, 0.65F) - rig.bank) * (1 - (float) Math.exp(-2.5 * dt));
         boolean turning = Math.abs(rig.turnS) > 0.5F;
         // climbing and diving, smoothed too
-        float dive = (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, hz)), -1.0, 1.0);
+        float dive = (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, hz)), -1.45, 1.45);
         rig.diveS += (dive - rig.diveS) * (1 - (float) Math.exp(-2.5 * dt));
         // its speed, and whether it's really picking up
         float speed = (float) Math.sqrt(dx * dx + dy * dy + dz * dz) * 20;
