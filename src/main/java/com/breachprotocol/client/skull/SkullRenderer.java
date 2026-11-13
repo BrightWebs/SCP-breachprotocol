@@ -81,7 +81,7 @@ public final class SkullRenderer {
         int wState = -1, wWant = -1;
         float wStateT, wWantT, wTrans = 1, wDur = 1, wPhase;
         final float[] wFrom = new float[6], wNow = new float[6];
-        int burstLeft; float burstFrom;
+        int burstLeft; float burstFrom, levelT;
         int slideSide = 1;
         int flapsLeft; boolean hard, flyInit;
     }
@@ -506,7 +506,7 @@ public final class SkullRenderer {
         float wA = airWings ? rig.wNow[1] : (beat != 0 ? 0.6F : rig.wNow[1]);
         float noise = rig.wNow[5];
         // banking into a turn: the outer wing lifts, the inner one straightens and drops
-        float bankUp = move == FLY ? rig.bank * 0.45F : 0;
+        float bankUp = move == FLY ? rig.bank * 0.75F : 0;
         poseWing(m.wings[0], rig.open, rig.wPhase, wA, amp, tilt, wingFly, bankUp, noise, t);
         poseWing(m.wings[1], rig.open, rig.wPhase + 0.05F, wA, amp, tilt, wingFly, -bankUp, noise, t + 1.7F);
 
@@ -691,7 +691,7 @@ public final class SkullRenderer {
         rig.flyYaw = rig.headS;
         rig.turnS += (Mth.clamp(rate, -3, 3) - rig.turnS) * (1 - (float) Math.exp(-2.5 * dt));
         float tr = Math.abs(rig.turnS) < 0.35F ? 0 : rig.turnS - Math.copySign(0.35F, rig.turnS);
-        rig.bank += (Mth.clamp(tr * 0.3F, -0.5F, 0.5F) - rig.bank) * (1 - (float) Math.exp(-2 * dt));
+        rig.bank += (Mth.clamp(tr * 0.4F, -0.65F, 0.65F) - rig.bank) * (1 - (float) Math.exp(-2.5 * dt));
         boolean turning = Math.abs(rig.turnS) > 0.5F;
         // climbing and diving, smoothed too
         float dive = (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, hz)), -1.0, 1.0);
@@ -857,7 +857,17 @@ public final class SkullRenderer {
     private static void wingState(Rig rig, Player p, int move, float dt, double dy, double h, boolean grounded, boolean real) {
         boolean flying = move == FLY || move == HOVER;
         int want;
-        if (flying) {
+        if (move == FLY) {
+            // flat out: it glides whenever it can. Into a turn it always glides (banked, one wing high); coming
+            // down, it glides; climbing, it beats. Holding a level line it glides a few seconds, gives a few
+            // strokes to keep its speed, and glides again
+            if (dt > 0) rig.levelT += dt;
+            boolean turning = Math.abs(rig.turnS) > 0.45F;
+            if (turning) { want = W_GLIDE; rig.levelT = 0; }
+            else if (dy > 0.06) want = W_LIFT;
+            else if (dy < -0.04) { want = W_GLIDE; rig.levelT = 0; }
+            else want = rig.levelT % 5.3F < 3.5F ? W_GLIDE : W_LIFT;
+        } else if (flying) {
             float path = (float) Math.toDegrees(-Math.atan2(dy, Math.max(1e-4, h)));
             want = dy < -0.02 && p.getXRot() >= path ? W_GLIDE : W_LIFT;
         } else if (!grounded && move != CLIMB && dy < -0.05) want = groundNear(p) ? W_LAND : W_FALL;
@@ -871,7 +881,7 @@ public final class SkullRenderer {
             System.arraycopy(rig.wNow, 0, rig.wFrom, 0, 6);
             if (want == W_LIFT && rig.wState == W_GLIDE && real && h > 0.5) ring(p, p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
             rig.wState = want; rig.wStateT = 0; rig.wTrans = 0;
-            rig.wDur = switch (want) { case W_LAND -> 0.1F; case W_GLIDE -> 3F; case W_IDLE -> 0.9F; case W_LIFT -> 1F; default -> 0.4F; };
+            rig.wDur = switch (want) { case W_LAND -> 0.1F; case W_GLIDE -> move == FLY ? 0.9F : 3F; case W_IDLE -> 0.9F; case W_LIFT -> move == FLY ? 0.5F : 1F; default -> 0.4F; };
         }
         float[] live = new float[6];
         params(rig, move, rig.wState, rig.wStateT, live);
