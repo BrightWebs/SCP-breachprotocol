@@ -801,7 +801,10 @@ public final class SkullRenderer {
         double hz = Math.sqrt(dx * dx + dz * dz);
         float look = Mth.rotLerp(pt, p.yRotO, p.getYRot());
         // where it's heading: along its path when it's really moving, else where it's looking
-        float want = hz > 0.12 ? (float) Math.toDegrees(Math.atan2(-dx, dz)) : look;
+        // (diving steeply there's hardly any sideways movement and its direction flickers: then it holds to where
+        // you're looking, so the body doesn't spin about in the dive)
+        double sp3 = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        float want = hz > 0.12 && hz > sp3 * 0.45 ? (float) Math.toDegrees(Math.atan2(-dx, dz)) : look;
         if (!rig.flyInit) {
             rig.flyInit = true; rig.headS = want; rig.flyYaw = want; rig.turnS = 0; rig.bank = 0;
             rig.diveS = 0; rig.flapsLeft = 2; rig.hard = true; rig.flapPh = 0; rig.burstCool = 0;
