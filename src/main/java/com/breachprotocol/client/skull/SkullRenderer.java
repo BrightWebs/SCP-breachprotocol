@@ -222,7 +222,8 @@ public final class SkullRenderer {
             return;
         }
         if (p.onGround() && !forward && !shift) { climbState(p, false); return; }
-        double vy = forward ? (sprint ? 0.42 : 0.2) : shift ? 0 : -0.16;
+        // letting go: it drops down the wall as fast as any fall (gravity does the rest), hand and foot dragging on it
+        double vy = forward ? (sprint ? 0.42 : 0.2) : shift ? 0 : Math.min(p.getDeltaMovement().y, 0);
         // pressed to the wall, a little sideways if it's steered
         float side = (mc.options.keyLeft.isDown() ? 1 : 0) - (mc.options.keyRight.isDown() ? 1 : 0);
         Vec3 along = new Vec3(wall.z, 0, -wall.x).scale(side * 0.08);
@@ -460,7 +461,7 @@ public final class SkullRenderer {
             lr(ol.thigh, -0.45F, 0, ol.side * -0.08F, sk); lr(ol.shin, 0.7F, 0, 0, sk); lr(ol.foot, -0.25F, 0, 0, sk);
             wingO = 0.35F; beat = 0; lift = 0;
             // sparks off the dragging claws
-            if (real && !gui && p.level().random.nextInt(2) == 0) {
+            if (real && !gui) {
                 Vec3 wd = wallDir(p);
                 if (wd != null) {
                     double hy = p.getY() + p.getBbHeight() * 0.85;
