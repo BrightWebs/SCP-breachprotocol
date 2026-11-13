@@ -295,15 +295,16 @@ box(head,14,2.5,3,0,6.6,5.2,M.boneD);                         // the heavy brow
 box(head,8,4,4,0,1.2,6.5,[M.bone,M.bone,M.bone,M.boneD,M.muzzle,M.bone]);   // the muzzle, teeth bared
 const jaw=pivot(head,0,0.5,-2,0.18,0,0);
 box(jaw,11,2.5,10,0,-1.2,4.5,[M.boneD,M.boneD,M.boneD,M.boneD,M.jaw,M.boneD]);
+const tusks=[],hornSegs=[];
 for(const sd of[1,-1]){                                      // tusks, up from the jaw like the troll's
-  const t=pivot(jaw,sd*4.6,-0.5,8.5,-0.3,0,sd*-0.3);
+  const t=pivot(jaw,sd*4.6,-0.5,8.5,-0.3,0,sd*-0.3);tusks.push(t);
   box(t,1.6,4,1.6,0,2,0,M.horn);const t2=pivot(t,0,4,0,-0.5,0,sd*0.2);box(t2,1.2,3,1.2,0,1.5,0,M.horn);
 }
 // horns sweeping back from the temples, ridged, darkening to the tips
 for(const sd of[1,-1]){
   let p=pivot(head,sd*5.6,7.5,0.5,0,0,sd*-0.9);
   const segs=[[3.2,4,-0.35],[2.8,4,-0.45],[2.3,3.6,-0.5],[1.8,3.2,-0.5],[1.2,3,-0.4]];
-  for(const[th,len,bend]of segs){box(p,th,len,th,0,len/2,0,M.horn);p=pivot(p,0,len,0,bend,0,sd*0.12)}
+  const hs=[];for(const[th,len,bend]of segs){hs.push(box(p,th,len,th,0,len/2,0,M.horn));p=pivot(p,0,len,0,bend,0,sd*0.12)}hornSegs.push(hs);
 }
 // the crown: a gold circlet sat on the horned skull, its spikes uneven, violet stones, one floating above
 const crown=pivot(head,0,9.4,0);
@@ -380,6 +381,24 @@ function wing(side){
 // open: 0 folded down the back, 1 spread wide
 // eases v to a stop at lo, instead of a hard wall
 function soft(v,lo){const k=0.18;return v>lo+k?v:lo+k*Math.exp((v-lo-k)/k)}
+// hovering: a hard, quick push straight down and a slower lift back up; 1 top, -1 bottom
+function hoverStroke(ph){const u=((ph/(Math.PI*2))%1+1)%1;return u<0.4?Math.cos(Math.PI*u/0.4):-Math.cos(Math.PI*(u-0.4)/0.6)}
+// the hover beat: wings held wide open the whole time (no folding, no sweep, no tilt), the whole wing driving down
+// and lifting back, the forearm and hand trailing the stroke a little so it bends like a real wing pushing air
+function poseHoverWing(w,beat,t){
+  const s=w.side;
+  w.root.rotation.set(0.1,s*0.18,0);
+  const ua=-0.35+beat*0.75;                       // up high at the top of the stroke, well down at the bottom
+  w.upper.rotation.z=s*ua;
+  const lag=hoverStroke(t*3.4-0.5);               // the outer wing a moment behind
+  const fr=1.35+(lag-beat)*0.25;
+  w.fore.rotation.z=s*fr;
+  const foreAbs=ua+fr;
+  const handAbs=0.3+(lag-beat)*0.2;
+  w.hand.rotation.z=s*(handAbs-foreAbs);
+  const abs=[ua,foreAbs,handAbs,handAbs-0.12];
+  for(const fp of w.feathers){const u=fp.userData;fp.rotation.z=s*(u.a-abs[u.b]+(beat<0?-0.05:0.04)*u.b/3)}
+}
 function poseWing(w,open,beat,amp=1,tilt=0,fly=false){
   const s=w.side;
   const flapY=fly?beat*0.75:0, inPlane=fly?0:1;
@@ -441,6 +460,62 @@ const floor=new THREE.Mesh(new THREE.PlaneGeometry(1200,1200),new THREE.MeshLamb
 const steve=new THREE.Group();scene.add(steve);steve.visible=false;steve.position.set(30,0,0);
 const sk=mat(tex(4,4,g=>{g.fillStyle='#c8946a';g.fillRect(0,0,4,4)})),sh=mat(tex(4,4,g=>{g.fillStyle='#2a8aa8';g.fillRect(0,0,4,4)})),pa=mat(tex(4,4,g=>{g.fillStyle='#3a3a8a';g.fillRect(0,0,4,4)}));
 box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,sh);box(steve,4,12,4,-6,18,0,sh);box(steve,4,12,4,2,6,0,pa);box(steve,4,12,4,-2,6,0,pa);
+// ---------- the man, in three shells: his skin, the muscle under it, and the bare (Minecraft) skeleton. Each face
+// of each shell is its own little canvas, burned away pixel by pixel along a blotchy front with glowing edges
+const man=new THREE.Group();scene.add(man);man.visible=false;
+const shells=[];   // {mats:[{cv,ctx,base,em,thr,tex,emTex}], kind}
+function blotch(W,H,seed){const r=mulberry(seed),f=new Float32Array(W*H),pts=[];for(let i=0;i<4;i++)pts.push([r()*W,r()*H,1+r()*Math.max(W,H)*0.6]);
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){let v=1e9;for(const[px,py,rad]of pts)v=Math.min(v,Math.hypot(x-px,y-py)/rad);f[y*W+x]=Math.min(1,v*0.55+r()*0.35)}return f}
+function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let seedN=1;
+function shell(parent,w,h,d,x,y,z,paint,kind){
+  const dims=[[d,h],[d,h],[w,d],[w,d],[w,h],[w,h]];   // +x -x +y -y +z -z
+  const mats=dims.map(([W,H],fi)=>{W=Math.max(1,Math.round(W));H=Math.max(1,Math.round(H));
+    const cv=document.createElement('canvas');cv.width=W;cv.height=H;const ctx=cv.getContext('2d');paint(ctx,W,H,fi);
+    const base=ctx.getImageData(0,0,W,H);const ecv=document.createElement('canvas');ecv.width=W;ecv.height=H;
+    const tex=new THREE.CanvasTexture(cv);tex.magFilter=THREE.NearestFilter;tex.minFilter=THREE.NearestFilter;
+    const emTex=new THREE.CanvasTexture(ecv);emTex.magFilter=THREE.NearestFilter;emTex.minFilter=THREE.NearestFilter;
+    const m=new THREE.MeshLambertMaterial({map:tex,transparent:true,alphaTest:0.5,emissive:0xffffff,emissiveMap:emTex});
+    return {cv,ctx,base,ecv,ectx:ecv.getContext('2d'),thr:blotch(W,H,seedN++),tex,emTex,W,H,m,last:-1}});
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mats.map(o=>o.m));mesh.position.set(x,y,z);parent.add(mesh);
+  const sh={mats,kind,mesh};shells.push(sh);return sh}
+// burn a shell to progress p (0 whole, 1 gone): charring ahead of the front, a glowing edge, then nothing
+function burn(sh,p){for(const o of sh.mats){const q=Math.round(p*200);if(q===o.last)continue;o.last=q;
+  const img=o.ctx.createImageData(o.W,o.H),em=o.ectx.createImageData(o.W,o.H),b=o.base.data;
+  for(let i=0;i<o.W*o.H;i++){const th=o.thr[i],f=p*1.25-0.1;const k=i*4;
+    if(f>th){img.data[k+3]=0;continue}
+    const near=th-f,char=Math.max(0,1-near/0.35);
+    img.data[k]=b[k]*(1-char*0.8);img.data[k+1]=b[k+1]*(1-char*0.85);img.data[k+2]=b[k+2]*(1-char*0.9);img.data[k+3]=b[k+3];
+    if(near<0.07&&p>0){em.data[k]=255;em.data[k+1]=near<0.03?220:110;em.data[k+2]=near<0.03?90:20;em.data[k+3]=255}}
+  o.ctx.putImageData(img,0,0);o.ectx.putImageData(em,0,0);o.tex.needsUpdate=true;o.emTex.needsUpdate=true}}
+function px(ctx,c,x,y,w=1,h=1){ctx.fillStyle=c;ctx.fillRect(x,y,w,h)}
+function noisy(ctx,W,H,base,alt,r){const g=mulberry(r);px(ctx,base,0,0,W,H);for(let i=0;i<W*H*0.3;i++)px(ctx,alt[Math.floor(g()*alt.length)],Math.floor(g()*W),Math.floor(g()*H))}
+// the skin: hair, face, shirt, trousers, shoes
+const SKIN={
+  head:(c,W,H,f)=>{noisy(c,W,H,'#c8946a',['#bd8a62','#d29e74'],seedN);if(f===2){px(c,'#4a2e1a',0,0,W,H)}else if(f!==3){px(c,'#4a2e1a',0,0,W,2);if(f!==4)px(c,'#4a2e1a',0,0,W,3)}
+    if(f===4){px(c,'#ffffff',1,4,2,1);px(c,'#3a5aa8',2,4,1,1);px(c,'#ffffff',5,4,2,1);px(c,'#3a5aa8',5,4,1,1);px(c,'#8a5a3a',3,6,2,1)}},
+  body:(c,W,H)=>{noisy(c,W,H,'#2a8aa8',['#257c98','#3096b4'],seedN)},
+  arm:(c,W,H,f)=>{noisy(c,W,H,'#c8946a',['#bd8a62'],seedN);if(f!==3)px(c,'#2a8aa8',0,0,W,Math.min(H,4))},
+  leg:(c,W,H,f)=>{noisy(c,W,H,'#3a3a8a',['#33337c','#42429a'],seedN);if(f!==2&&f!==3)px(c,'#5a5a5a',0,H-2,W,2);if(f===3)px(c,'#5a5a5a',0,0,W,H)}};
+// the muscle: red, striated, the eyes and teeth showing in the face
+const MUSC=(c,W,H,f,face)=>{noisy(c,W,H,'#8a1a1e',['#a0242a','#6a0e12'],seedN);for(let x=0;x<W;x+=2)px(c,'rgba(60,0,8,0.55)',x,0,1,H);
+  if(face&&f===4){px(c,'#f0e8e0',1,4,2,1);px(c,'#f0e8e0',5,4,2,1);px(c,'#f4efe2',2,6,4,1)}};
+// the bare skeleton, as Minecraft's are: a skull, a spine and ribs, thin limbs
+const BONE=(c,W,H,f,face)=>{noisy(c,W,H,'#c8c8c4',['#b4b4ae','#d6d6d2'],seedN);if(face&&f===4){px(c,'#1a1a1a',1,3,2,2);px(c,'#1a1a1a',5,3,2,2);px(c,'#2a2a2a',3,5,2,1);px(c,'#3a3a3a',1,6,6,1)}};
+const manParts={};
+{ // head
+  const hd=new THREE.Group();hd.position.set(0,24,0);man.add(hd);manParts.head=hd;
+  shell(hd,8.6,8.6,8.6,0,4,0,SKIN.head,'skin');shell(hd,8.2,8.2,8.2,0,4,0,(c,W,H,f)=>MUSC(c,W,H,f,true),'muscle');shell(hd,7.8,7.8,7.8,0,4,0,(c,W,H,f)=>BONE(c,W,H,f,true),'bone');
+  const bd=new THREE.Group();bd.position.set(0,18,0);man.add(bd);
+  shell(bd,8.6,12.6,4.6,0,0,0,SKIN.body,'skin');shell(bd,8.2,12.2,4.2,0,0,0,(c,W,H,f)=>MUSC(c,W,H,f,false),'muscle');
+  shell(bd,2,12,2,0,0,-0.5,(c,W,H,f)=>BONE(c,W,H,f),'bone');                                  // spine
+  for(let i=0;i<3;i++)shell(bd,7,1.2,3,0,4-i*2.6,0,(c,W,H,f)=>BONE(c,W,H,f),'bone');             // ribs
+  shell(bd,6,1.5,2.5,0,-5.5,0,(c,W,H,f)=>BONE(c,W,H,f),'bone');                                 // pelvis
+  for(const sd of[1,-1]){const a=new THREE.Group();a.position.set(sd*6,22,0);man.add(a);manParts['arm'+sd]=a;
+    shell(a,4.6,12.6,4.6,0,-4,0,SKIN.arm,'skin');shell(a,4.2,12.2,4.2,0,-4,0,(c,W,H,f)=>MUSC(c,W,H,f,false),'muscle');shell(a,2,12,2,0,-4,0,(c,W,H,f)=>BONE(c,W,H,f),'bone');
+    const l=new THREE.Group();l.position.set(sd*2,12,0);man.add(l);manParts['leg'+sd]=l;
+    shell(l,4.6,12.6,4.6,0,-6,0,SKIN.leg,'skin');shell(l,4.2,12.2,4.2,0,-6,0,(c,W,H,f)=>MUSC(c,W,H,f,false),'muscle');shell(l,2,12,2,0,-6,0,(c,W,H,f)=>BONE(c,W,H,f),'bone')}
+}
 // ---------- the change: the man burning, the flash, the roar's shockwave
 const burnFl=[];for(let i=0;i<46;i++){const f=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));f.userData={x:(R()-.5)*10,y:R()*32,z:(R()-.5)*6,ph:R()*6,sz:3+R()*4};f.visible=false;scene.add(f);burnFl.push(f)}
 const flashS=new THREE.Sprite(new THREE.SpriteMaterial({color:0xffe0b0,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));flashS.visible=false;scene.add(flashS);
@@ -571,30 +646,44 @@ function prowl(t,L,Rg,A,B){
 function band(x,a,b,c,d){let k=x<a||x>d?0:x<b?(x-a)/(b-a):x<=c?1:1-(x-c)/(d-c);return k*k*(3-2*k)}
 function lr(o,x,y,z,k){o.rotation.x+=(x-o.rotation.x)*k;o.rotation.y+=(y-o.rotation.y)*k;o.rotation.z+=(z-o.rotation.z)*k}
 function meshesOf(p){return p.children.filter(c=>c.isMesh)}
-function transformReset(){TF=-1;king.visible=true;king.scale.setScalar(1);steve.visible=false;steve.position.set(30,0,0);for(const f of burnFl)f.visible=false;flashS.visible=false;shock.visible=false;
+function transformReset(){TF=-1;king.visible=true;king.scale.setScalar(1);man.visible=false;for(const f of burnFl)f.visible=false;flashS.visible=false;shock.visible=false;
   crown.visible=true;crown.scale.setScalar(1);for(const w of[wingL,wingR]){w.root.visible=true;w.root.scale.setScalar(1)}for(const p of tail)for(const m of meshesOf(p))m.visible=true;
-  sk.color.copy(sk0);sh.color.copy(sh0);pa.color.copy(pa0);for(const m of[sk,sh,pa])m.emissive&&m.emissive.setHex(0)}
+  for(const t of tusks)t.visible=true;for(const hs of hornSegs)for(const m of hs){m.visible=true;m.scale.setScalar(1)}}
+/**
+ * The change (c: 0..1 over nine seconds). His skin burns off in blotches with glowing edges, the muscle showing
+ * through; the muscle burns off in turn, leaving a bare Minecraft skeleton, which shudders, swells and crumbles
+ * as the true form's bones come up through it at a man's size and grow, in agony, to their own: the teeth bared,
+ * the horns growing out a ridge at a time, the tail a vertebra at a time, the crown catching, the wings tearing
+ * open; a breath; and the roar, its shockwave rolling out.
+ */
 function transformPose(t,c){
   TF=c;
-  // the man, burning: blackening, flames all over him, until the flash
-  const burning=c<0.29;steve.visible=burning;steve.position.set(0,0,0);
-  const ch=Math.min(1,c/0.27);
-  for(const[m,o]of[[sk,sk0],[sh,sh0],[pa,pa0]]){m.color.copy(o).lerp(new THREE.Color(0x1a0805),ch*0.9);m.emissive.setHex(0xff3a08);m.emissiveIntensity=ch*(0.4+Math.sin(t*17)*0.2)}
-  burnFl.forEach((f,i)=>{const u=f.userData;f.visible=burning&&c>0.02;const k=0.7+Math.sin(t*9+u.ph)*0.3;const sz=u.sz*(0.4+ch);f.position.set(u.x,u.y+((t*8+u.ph*5)%6),u.z);f.scale.set(sz*0.55*k,sz*k,1)});
-  // the flash
-  const fl=band(c,0.27,0.29,0.29,0.34);flashS.visible=fl>0;flashS.position.set(0,24,0);flashS.scale.setScalar(80*fl);flashS.material.opacity=fl;fireLight.intensity=1.4+fl*8;
-  // bone: from the flash on, at a man's size, growing (in agony) to its own
-  king.visible=c>=0.28;
-  const g=Math.max(0,Math.min(1,(c-0.36)/0.26)),ge=g<.5?2*g*g:1-Math.pow(-2*g+2,2)/2;
-  const pop=Math.min(1,Math.max(0,(c-0.28)/0.05));
-  king.scale.setScalar((0.56+0.44*ge)*(0.85+0.15*pop));
-  // the tail, a vertebra at a time; the crown catching; the wings tearing open
-  tail.forEach((p,i)=>{const on=c>0.45+i*0.008;for(const m of meshesOf(p))m.visible=on});
-  const cr=Math.max(0,Math.min(1,(c-0.55)/0.04));crown.visible=cr>0;crown.scale.setScalar(Math.max(0.001,cr));
-  const wg=Math.max(0,Math.min(1,(c-0.66)/0.06));for(const w of[wingL,wingR]){w.root.visible=wg>0;w.root.scale.setScalar(Math.max(0.001,wg))}
-  if(c>0.66){openNow=Math.max(openNow,wg)}else openNow=0;
-  // the body: agony, the breath, the roar
-  const pain=band(c,0.29,0.34,0.6,0.66),wind=band(c,0.6,0.68,0.76,0.8),roar=band(c,0.76,0.8,0.9,0.97);
+  // the man: skin, then muscle, then the bones, each burning away
+  man.visible=c<0.56;
+  const skinP=Math.min(1,Math.max(0,c/0.24)),muscP=Math.min(1,Math.max(0,(c-0.17)/0.22)),boneP=Math.min(1,Math.max(0,(c-0.47)/0.09));
+  for(const sh of shells)burn(sh,sh.kind==='skin'?skinP:sh.kind==='muscle'?muscP:boneP);
+  // shaking, more as it goes; the skeleton swelling as it gives way
+  const shake=c<0.47?Math.sin(t*37)*0.25*Math.min(1,c*4):0;
+  man.position.set(shake,0,0);man.scale.setScalar(c<0.47?1:1+(c-0.47)*4);
+  // flames on him while he burns
+  const burning=c<0.42;
+  burnFl.forEach((f,i)=>{const u=f.userData;f.visible=burning&&c>0.01;const k=0.7+Math.sin(t*9+u.ph)*0.3;const sz=u.sz*(0.5+Math.min(1,c*3));f.position.set(u.x*0.9,u.y+((t*8+u.ph*5)%6),u.z);f.scale.set(sz*0.55*k,sz*k,1)});
+  // the flash as the old bones go
+  const fl=band(c,0.5,0.52,0.53,0.58);flashS.visible=fl>0;flashS.position.set(0,22,0);flashS.scale.setScalar(70*fl);flashS.material.opacity=fl;fireLight.intensity=1.4+fl*7;
+  // the true form: up through the crumbling skeleton at a man's size, growing to its own
+  king.visible=c>=0.5;
+  const g=Math.max(0,Math.min(1,(c-0.52)/0.16)),ge=g<.5?2*g*g:1-Math.pow(-2*g+2,2)/2;
+  const pop=Math.min(1,Math.max(0,(c-0.5)/0.04));
+  king.scale.setScalar((0.56+0.44*ge)*(0.7+0.3*pop));
+  // the teeth, the horns (ridge by ridge), the tail (bone by bone), the crown, the wings
+  for(const tk of tusks)tk.visible=c>0.62;
+  hornSegs.forEach(hs=>hs.forEach((m,i)=>{const k=Math.max(0,Math.min(1,(c-0.64-i*0.012)/0.012));m.visible=k>0;m.scale.setScalar(Math.max(0.001,k))}));
+  tail.forEach((p,i)=>{const on=c>0.69+i*0.005;for(const m of meshesOf(p))m.visible=on});
+  const cr=Math.max(0,Math.min(1,(c-0.79)/0.03));crown.visible=cr>0;crown.scale.setScalar(Math.max(0.001,cr));
+  const wg=Math.max(0,Math.min(1,(c-0.81)/0.05));for(const w of[wingL,wingR]){w.root.visible=wg>0;w.root.scale.setScalar(Math.max(0.001,wg))}
+  if(c>0.81)openNow=Math.max(openNow,wg);else openNow=0;
+  // its body: agony as it grows, the breath, the roar
+  const pain=band(c,0.52,0.56,0.8,0.84),wind=band(c,0.82,0.86,0.89,0.91),roar=band(c,0.9,0.92,0.97,0.995);
   const A=armL,B=armR;
   if(pain>0){const j=Math.sin(t*23)*0.12+Math.sin(t*37)*0.06;
     lr(spine,0.55+j*0.5,0,j*0.3,pain);lr(chest,0.25,j,0,pain);lr(neck,0.2,0,0,pain);lr(head,0.35+j,j*0.8,j*0.5,pain);
@@ -613,8 +702,7 @@ function transformPose(t,c){
     lr(A.upper,-0.9,0,A.side*1.0,roar);lr(A.fore,-0.5,0,0,roar);lr(B.upper,-0.9,0,B.side*1.0,roar);lr(B.fore,-0.5,0,0,roar);
     for(const lg of[legL,legR]){lr(lg.thigh,-0.35,0,lg.side*0.25,roar);lr(lg.shin,0.55,0,0,roar);lr(lg.foot,-0.2,0,0,roar)}
     RAISE=Math.max(RAISE,0.2*roar)}
-  // the roar's shockwave, rolling out along the ground
-  const sw=c>0.8&&c<0.98?(c-0.8)/0.18:0;shock.visible=sw>0;shock.scale.setScalar(4+sw*120);shock.material.opacity=(1-sw)*0.9;
+  const sw=c>0.92&&c<1?(c-0.92)/0.08:0;shock.visible=sw>0;shock.scale.setScalar(4+sw*120);shock.material.opacity=(1-sw)*0.9;
 }
 // ---------- the super jump: down on one knee, a fist on the ground, the wings raised high; then the launch, the wings
 // slamming down to drive it up, and the fall back (u: seconds into the loop)
@@ -682,7 +770,7 @@ function animate(t){
     rig.position.y=30+18+beat*-1.6+Math.sin(t*0.5)*2;rig.rotation.x=0;
     for(const lg of[L,Rg]){lg.thigh.rotation.x=0.15+Math.sin(t*1.3+lg.hip.position.x)*0.06;lg.shin.rotation.x=0.45;lg.foot.rotation.x=0.35}
     A.upper.rotation.set(-0.15,0,0.45);B.upper.rotation.set(-0.15,0,-0.45);A.fore.rotation.x=B.fore.rotation.x=-0.25;
-    WING={o:1,beat,amp:2.6,tilt:0.55};}
+    WING={o:1,beat:hoverStroke(t*3.4),amp:2.6,tilt:0,hover:true};}
   // flying: laid out flat like a superhero, a fist out in front, legs straight back, the wings driving down
   else if(move==='fly'){const f=t*2.8;const beat=Math.sin(f-0.35*Math.sin(f));
     rig.position.y=30+26+beat*-1.2;rig.rotation.x=1.35;
@@ -739,6 +827,7 @@ drawRows();
 // ---------- controls
 let yaw=0.6,pitch=0.32,dist=150,drag=null,spin=true,flap=true,spread=true,openNow=1;
 const shot=/^#shot-(\d)$/.exec(location.hash);if(shot&&+shot[1]>=6){window.FEET=true}if(shot){yaw=[0.6,2.4,-0.9,3.14,2.6,-1.2,0.4,1.4][+shot[1]]||0;if(+shot[1]>=4){spread=false;openNow=0}spin=false;flap=false;document.querySelector('.panel').style.display='none'}
+const tfh=/^#tf-([0-9.]+)$/.exec(location.hash);if(tfh){window.TFIX=+tfh[1];move='transform';spin=false;flap=false;yaw=0.5;window.FT=true;document.querySelector('.panel').style.display='none'}
 const ps=/^#pose-([a-z]+)-([a-z]+)$/.exec(location.hash);if(ps){move=ps[1];held=ps[2];hold(held);spin=false;flap=false;spread=false;openNow=0;yaw=(location.hash.includes("sit")?0.5:(location.hash.includes("prowl")?1.57:0.9));document.querySelector('.panel').style.display='none';window.FT=true}
 const el=renderer.domElement;
 el.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)});
@@ -774,7 +863,7 @@ function frame(now){
   const spd=animate(t);
   if(moveT0===null)moveT0=t;
   RAISE=0;
-  if(move==='transform')transformPose(t,Math.min(1,((t-moveT0)%7.5)/6));else if(TF>=0)transformReset();
+  if(move==='transform')transformPose(t,window.TFIX!=null?window.TFIX:Math.min(1,((t-moveT0)%11)/9));else if(TF>=0)transformReset();
   if(move==='superjump')superJump(t,((t-moveT0)%3.2));
   tailPhysics(t);
   if(GROUND){king.updateMatrixWorld(true);let low=1e9;const v=new THREE.Vector3();
@@ -782,7 +871,8 @@ function frame(now){
     for(const ar of[armL,armR]){for(const z of[-4,4]){v.set(0,-6,z);ar.hand.localToWorld(v);low=Math.min(low,v.y)}}
     king.position.y-=low;}
   openNow+=((spread?1:0)-openNow)*0.04;
-  if(WING){openNow+=(WING.o-openNow)*0.12;poseWing(wingL,openNow,WING.beat,WING.amp,WING.tilt,WING.fly);poseWing(wingR,openNow,WING.beat,WING.amp,WING.tilt,WING.fly)}
+  if(WING&&WING.hover){openNow=1;poseHoverWing(wingL,WING.beat,t);poseHoverWing(wingR,WING.beat,t+0.02)}
+  else if(WING){openNow+=(WING.o-openNow)*0.12;poseWing(wingL,openNow,WING.beat,WING.amp,WING.tilt,WING.fly);poseWing(wingR,openNow,WING.beat,WING.amp,WING.tilt,WING.fly)}
   else{const beat=flap&&spread?Math.sin(t*2.4):0;poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat)}
   if(RAISE){wingL.upper.rotation.z+=wingL.side*RAISE;wingR.upper.rotation.z+=wingR.side*RAISE}
   for(const w of[wingL,wingR])w.flames.forEach((fl,i)=>{const k=0.6+Math.sin(t*8+i*1.7)*0.25+Math.sin(t*13+i)*0.1;fl.scale.set(2.6*k,4.2*k,1);fl.material.opacity=0.6+openNow*0.4});
