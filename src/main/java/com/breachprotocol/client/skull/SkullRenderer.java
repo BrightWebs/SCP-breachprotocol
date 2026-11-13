@@ -77,6 +77,10 @@ public final class SkullRenderer {
         float airT; boolean jumped;
         // flight: speed and its change, the turn, the bank; the flaps (how many left, where in one, how hard)
         float speedS, accS, flyYaw, turnS, bank, flapPh, flapAmp, cruiseT, climbK, climbCyc, headS, diveS, burstCool, slideK, slideYaw;
+        // the wings' state (idle, lift, glide, fall, land), how long in it, the one it's waiting to become, the blend from the last
+        int wState = -1, wWant = -1;
+        float wStateT, wWantT, wTrans = 1, wDur = 1, wPhase;
+        final float[] wFrom = new float[6], wNow = new float[6];
         int slideSide = 1;
         int flapsLeft; boolean hard, flyInit;
     }
@@ -280,7 +284,8 @@ public final class SkullRenderer {
         }
         // flying, it holds a steady line: the way it's heading, smoothed (not every twitch of the view)
         float flyBeat = 0;
-        if (move == FLY) { flyBeat = flight(rig, p, dt, dx, dy, dz, pt, real && !gui); bodyYaw = rig.headS; }
+        if (move == FLY) { flyBeat = flight(rig, p, dt, dx, dy, dz, pt, false); bodyYaw = rig.headS; }
+        if (!gui) wingState(rig, p, move, dt, dy, h, grounded, real);
         else rig.flyInit = false;
         float headYaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
         float net = Mth.clamp(Mth.wrapDegrees(headYaw - bodyYaw), -70, 70) * Mth.DEG_TO_RAD;
@@ -356,7 +361,7 @@ public final class SkullRenderer {
             wingO = 0; beat = 0;
         } else if (move == HOVER) {
             // upright in the air, the legs hanging, the wings beating down to hold it up
-            float fq = t * 3.4F, b = Mth.sin(fq - 0.35F * Mth.sin(fq));
+            float b = Mth.sin(rig.wPhase) * rig.wNow[1];
             rigLiftPx = b * -1.6F + Mth.sin(t * 0.5F) * 2;
             for (SkullModel.Leg lg : m.legs) { lg.thigh.rx = 0.15F + Mth.sin(t * 1.3F + lg.hip.x) * 0.06F; lg.shin.rx = 0.45F; lg.foot.rx = 0.35F; }
             A.upper.rot(-0.15, 0, 0.45); B.upper.rot(-0.15, 0, -0.45); A.fore.rx = B.fore.rx = -0.25F;
@@ -366,7 +371,7 @@ public final class SkullRenderer {
             lift = 0;
         } else if (move == FLY) {
             // laid out flat like a superhero, a fist out in front, legs straight back, the wings driving up and down
-            float b = flyBeat;
+            float b = Mth.sin(rig.wPhase) * rig.wNow[1];
             rigLiftPx = b * -0.5F;
             rigTilt = 1.35F + rig.diveS * 0.55F;
             spine.rx = 0; chest.rx = 0; neck.rx = -0.6F; head.rx = -0.45F;
@@ -491,11 +496,17 @@ public final class SkullRenderer {
 
         // ---- the wings
         float k = 1 - (float) Math.pow(1 - 0.12, dt * 60);
-        rig.open += (wingO - rig.open) * k;
+        // in the air the wings do what their state says (blended from the last); on the ground, what the pose wants
+        boolean airWings = rig.wState != W_IDLE;
+        float wantOpen = airWings ? rig.wNow[0] : wingO;
+        rig.open += (wantOpen - rig.open) * k;
+        if (airWings || rig.wTrans < 1) { amp = rig.wNow[2]; tilt = rig.wNow[3]; wingFly = move == FLY; }
+        float wA = airWings ? rig.wNow[1] : (beat != 0 ? 0.6F : rig.wNow[1]);
+        float noise = rig.wNow[5];
         // banking into a turn: the outer wing lifts, the inner one straightens and drops
         float bankUp = move == FLY ? rig.bank * 0.45F : 0;
-        poseWing(m.wings[0], rig.open, beat, amp, tilt, wingFly, bankUp);
-        poseWing(m.wings[1], rig.open, beat, amp, tilt, wingFly, -bankUp);
+        poseWing(m.wings[0], rig.open, rig.wPhase, wA, amp, tilt, wingFly, bankUp, noise, t);
+        poseWing(m.wings[1], rig.open, rig.wPhase + 0.05F, wA, amp, tilt, wingFly, -bankUp, noise, t + 1.7F);
 
         // ---- the crown's fire, the halo turning, the gem swaying
         m.halo.ry = t * 1.5F; m.halo.y = 11 + Mth.sin(t * 2) * 0.6F;
@@ -798,28 +809,97 @@ public final class SkullRenderer {
     /** Eases v to a stop at lo, instead of a hard wall. */
     private static float soft(float v, float lo) { float k = 0.18F; return v > lo + k ? v : lo + k * (float) Math.exp((v - lo - k) / k); }
 
-    /** A wing, folded (0) to spread (1), beating; flat out in flight the beat is up and down above the back. Never through the body. */
-    private static void poseWing(SkullModel.Wing w, float open, float beat, float amp, float tilt, boolean fly, float up) {
+    /**
+     * A wing, folded (0) to spread (1). The beat runs down it as a wave (the tip a beat behind the root) and the
+     * outer wing folds a little on the upstroke, the way a bird's does; flat out in flight the beat is up and down
+     * above the back. noise: a light flutter in the feathers (gliding, falling). Never through the body.
+     */
+    private static void poseWing(SkullModel.Wing w, float open, float phase, float A, float amp, float tilt, boolean fly, float up, float noise, float t) {
         int s = w.side;
-        float flapY = fly ? beat * 0.75F : 0, inPlane = fly ? 0 : 1;
-        float o = open * (1 - 0.3F * Math.max(0, -beat) * Math.min(1, amp - 0.5F));
-        float ry = 1.35F - 1.2F * open - beat * 0.18F * amp * open * inPlane + flapY + (fly ? 0.4F * open : 0);
+        float b0 = Mth.sin(phase) * A, b1 = Mth.sin(phase - 0.6F) * A, b2 = Mth.sin(phase - 1.2F) * A;
+        float flapY = fly ? b0 * 0.75F : 0, inPlane = fly ? 0 : 1;
+        float o = open * (1 - 0.3F * Math.max(0, -b2) * Math.min(1, amp - 0.5F));
+        float ry = 1.35F - 1.2F * open - b0 * 0.18F * amp * open * inPlane + flapY + (fly ? 0.4F * open : 0);
         ry = soft(ry + up, 0.22F);
         w.root.rot(0.1 * open + 0.45 * (1 - open) + tilt, s * ry, -s * 0.12 * (1 - open));
-        float ua = -1.45F + 1.0F * o + beat * 0.25F * o * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.2F * o : 0);
-        if (o > 0.5F) ua = soft(ua, -0.7F);
+        float ua = -1.45F + 1.0F * open + b0 * 0.25F * open * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.2F * open : 0);
+        if (open > 0.5F) ua = soft(ua, -0.7F);
         w.upper.rz = s * ua;
-        float fr = 1.9F * o + 2.75F * (1 - o) + beat * 0.1F * o - 0.55F * o;
+        float fr = 1.9F * o + 2.75F * (1 - o) + b1 * 0.1F * o - 0.55F * o;
         w.fore.rz = s * fr;
         float foreAbs = ua + fr;
-        float handAbs = 0.3F * o - 1.35F * (1 - o) - beat * 0.12F * o;
+        float handAbs = 0.3F * o - 1.35F * (1 - o) - b2 * 0.12F * o;
         w.hand.rz = s * (handAbs - foreAbs);
         float[] abs = {ua, foreAbs, handAbs, handAbs - 0.12F};
-        // every feather points where it should whatever its bone's doing: spread, the fan; folded, all hanging straight down
+        int i = 0;
         for (Node fp : w.feathers) {
-            float want = fp.a * o + fp.fold * (1 - o) - beat * 0.08F * o * (fp.b / 3F);
+            float want = fp.a * o + fp.fold * (1 - o) - b2 * 0.08F * o * (fp.b / 3F);
+            if (noise > 0) want += noise * (Mth.sin(t * 7.3F + i * 1.31F) * 0.6F + Mth.sin(t * 11.1F + i * 0.77F) * 0.4F) * (0.3F + fp.b * 0.25F);
             fp.rz = s * (want - abs[fp.b]);
+            i++;
         }
+    }
+
+    static final int W_IDLE = 0, W_LIFT = 1, W_GLIDE = 2, W_FALL = 3, W_LAND = 4;
+
+    /**
+     * The wings' state, the way a bird (and the Wings mod) does it. Flying and rising or holding level: LIFT, beating
+     * hard at first, settling to a steadier beat over a few seconds. Flying and coming down with the nose down past
+     * the line of descent: GLIDE, held out, barely moving, the feathers rippling. Off the ground without flight,
+     * falling: FALL (raised, fluttering) or, near the ground, LAND (fast braking beats). Otherwise IDLE. A change
+     * only happens once it's held a moment (so it never flickers), and each blends into the next with an ease
+     * (a glide takes a good three seconds to settle in). The beat itself never jumps: its phase runs on at a speed
+     * blended between states.
+     * Parameters: {open, beat strength, sweep, tilt, beats per second (radians), flutter}.
+     */
+    private static void wingState(Rig rig, Player p, int move, float dt, double dy, double h, boolean grounded, boolean real) {
+        boolean flying = move == FLY || move == HOVER;
+        int want;
+        if (flying) {
+            float path = (float) Math.toDegrees(-Math.atan2(dy, Math.max(1e-4, h)));
+            want = dy < -0.02 && p.getXRot() >= path ? W_GLIDE : W_LIFT;
+        } else if (!grounded && move != CLIMB && dy < -0.05) want = groundNear(p) ? W_LAND : W_FALL;
+        else want = W_IDLE;
+        if (rig.wState < 0) { rig.wState = want; rig.wWant = want; params(rig, move, want, 0, rig.wNow); System.arraycopy(rig.wNow, 0, rig.wFrom, 0, 6); }
+        if (dt <= 0) return;
+        rig.wStateT += dt;
+        if (want != rig.wWant) { rig.wWant = want; rig.wWantT = 0; } else rig.wWantT += dt;
+        float hold = rig.wState == W_GLIDE && want == W_LIFT ? 0.3F : 0.1F;
+        if (want != rig.wState && rig.wWantT >= hold) {
+            System.arraycopy(rig.wNow, 0, rig.wFrom, 0, 6);
+            if (want == W_LIFT && rig.wState == W_GLIDE && real && h > 0.5) ring(p, p.getX() - p.xo, p.getY() - p.yo, p.getZ() - p.zo);
+            rig.wState = want; rig.wStateT = 0; rig.wTrans = 0;
+            rig.wDur = switch (want) { case W_LAND -> 0.1F; case W_GLIDE -> 3F; case W_IDLE -> 0.9F; case W_LIFT -> 1F; default -> 0.4F; };
+        }
+        float[] live = new float[6];
+        params(rig, move, rig.wState, rig.wStateT, live);
+        rig.wTrans = Math.min(1, rig.wTrans + dt / rig.wDur);
+        float e = rig.wTrans * rig.wTrans * (3 - 2 * rig.wTrans);
+        for (int i = 0; i < 6; i++) rig.wNow[i] = rig.wFrom[i] + (live[i] - rig.wFrom[i]) * e;
+        rig.wPhase += rig.wNow[4] * dt;
+        if (rig.wPhase > 1000) rig.wPhase -= Mth.TWO_PI * 150;
+    }
+
+    private static void params(Rig rig, int move, int state, float stateT, float[] o) {
+        boolean hover = move == HOVER;
+        switch (state) {
+            case W_LIFT -> { o[0] = 1; o[1] = 1; o[2] = hover ? 2.6F : 2.4F; o[3] = hover ? 0.55F : -0.15F; o[4] = Mth.lerp(Math.min(1, stateT / 5F), 7.5F, 4.5F); o[5] = 0; }
+            case W_GLIDE -> { o[0] = 1; o[1] = 0.15F; o[2] = 1.2F; o[3] = hover ? 0.4F : -0.15F; o[4] = 0.9F; o[5] = 0.05F; }
+            case W_FALL -> { o[0] = 0.8F; o[1] = 0; o[2] = 1; o[3] = -0.35F; o[4] = 0; o[5] = 0.12F; }
+            case W_LAND -> { o[0] = 1; o[1] = 0.9F; o[2] = 2.0F; o[3] = 0.35F; o[4] = 13.4F; o[5] = 0; }
+            default -> { o[0] = 0; o[1] = 0.06F; o[2] = 1; o[3] = 0; o[4] = 0.7F; o[5] = 0; }
+        }
+    }
+
+    /** Ground within a few blocks below: close enough to be landing, not just falling. */
+    private static boolean groundNear(Player p) {
+        var l = p.level();
+        net.minecraft.core.BlockPos.MutableBlockPos q = p.blockPosition().mutable();
+        for (int i = 0; i < 4; i++) {
+            q.move(0, -1, 0);
+            if (!l.getBlockState(q).getCollisionShape(l, q).isEmpty()) return true;
+        }
+        return false;
     }
 
     private static float wrap(float a) { return (float) Mth.wrapDegrees(a * Mth.RAD_TO_DEG) * Mth.DEG_TO_RAD; }
