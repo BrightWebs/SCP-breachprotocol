@@ -41,7 +41,7 @@
     <button id="bScale">Beside a player</button>
   </div>
   <div class="row" id="moves">
-    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button><button data-m="gallop">Run on all fours</button><button data-m="hover">Rise (hover)</button><button data-m="fly">Fly</button><button data-m="prowl">Crouch-walk (prowl)</button><button data-m="sit">Crouch still (sit)</button>
+    <button data-m="idle" class="on">Stand</button><button data-m="walk">Walk</button><button data-m="run">Run</button><button data-m="gallop">Run on all fours</button><button data-m="hover">Rise (hover)</button><button data-m="fly">Fly</button><button data-m="transform">Transform (True Form)</button><button data-m="superjump">Super jump</button><button data-m="prowl">Crouch-walk (prowl)</button><button data-m="sit">Crouch still (sit)</button>
     <button data-m="swing">Swing / punch</button><button data-m="bow">Draw bow</button><button data-m="block">Shield up</button><button data-m="eat">Eat</button>
   </div>
   <div class="row" id="items">
@@ -441,6 +441,11 @@ const floor=new THREE.Mesh(new THREE.PlaneGeometry(1200,1200),new THREE.MeshLamb
 const steve=new THREE.Group();scene.add(steve);steve.visible=false;steve.position.set(30,0,0);
 const sk=mat(tex(4,4,g=>{g.fillStyle='#c8946a';g.fillRect(0,0,4,4)})),sh=mat(tex(4,4,g=>{g.fillStyle='#2a8aa8';g.fillRect(0,0,4,4)})),pa=mat(tex(4,4,g=>{g.fillStyle='#3a3a8a';g.fillRect(0,0,4,4)}));
 box(steve,8,8,8,0,28,0,sk);box(steve,8,12,4,0,18,0,sh);box(steve,4,12,4,6,18,0,sh);box(steve,4,12,4,-6,18,0,sh);box(steve,4,12,4,2,6,0,pa);box(steve,4,12,4,-2,6,0,pa);
+// ---------- the change: the man burning, the flash, the roar's shockwave
+const burnFl=[];for(let i=0;i<46;i++){const f=new THREE.Sprite(new THREE.SpriteMaterial({map:flameTex,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));f.userData={x:(R()-.5)*10,y:R()*32,z:(R()-.5)*6,ph:R()*6,sz:3+R()*4};f.visible=false;scene.add(f);burnFl.push(f)}
+const flashS=new THREE.Sprite(new THREE.SpriteMaterial({color:0xffe0b0,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));flashS.visible=false;scene.add(flashS);
+const shock=new THREE.Mesh(new THREE.RingGeometry(0.9,1,64),new THREE.MeshBasicMaterial({color:0xff60ff,transparent:true,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,depthWrite:false}));shock.rotation.x=-Math.PI/2;shock.position.y=1;shock.visible=false;scene.add(shock);
+const sk0=sk.color.clone(),sh0=sh.color.clone(),pa0=pa.color.clone();
 
 
 // ---------- placement adjustments, per item (your own, from the panel): moved in pixels, turned in degrees
@@ -452,7 +457,7 @@ function applyOff(obj,id,basePos,baseQ){const o=off(id);
   obj.quaternion.copy(baseQ).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(o.rx*Math.PI/180,o.ry*Math.PI/180,o.rz*Math.PI/180)));
   obj.position.copy(basePos).add(new THREE.Vector3(o.px,o.py,o.pz))}
 // ---------- what's in its hands, and how it moves
-let sitK=0,FDT=0.016,move='idle',held='sword',heldR=null,heldL=null,WING=null,GROUND=false;
+let TF=-1,moveT0=null,RAISE=0,sitK=0,FDT=0.016,move='idle',held='sword',heldR=null,heldL=null,WING=null,GROUND=false;
 const ITEM_SCALE=1.3;
 function hold(id){
   for(const h of[heldR,heldL])if(h)h.parent.remove(h);
@@ -483,7 +488,7 @@ function hold(id){
   if(id==='shield'){heldL=itemModel('shield');heldL.scale.setScalar(ITEM_SCALE);armL.grip.add(heldL)}
 }
 hold('sword');
-document.querySelectorAll('#moves button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#moves button').forEach(x=>x.classList.remove('on'));b.classList.add('on');move=b.dataset.m;
+document.querySelectorAll('#moves button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('#moves button').forEach(x=>x.classList.remove('on'));b.classList.add('on');move=b.dataset.m;moveT0=null;
   if(move==='bow'){hold('bow');setOn('#items','bow')} if(move==='block'){hold('shield');setOn('#items','shield')} }));
 document.querySelectorAll('#items button').forEach(b=>b.addEventListener('click',()=>{setOn('#items',b.dataset.i);held=b.dataset.i;hold(held);setTimeout(drawRows,0)}));
 function setOn(sel,v){document.querySelectorAll(sel+' button').forEach(x=>x.classList.toggle('on',x.dataset.i===v||x.dataset.m===v))}
@@ -561,6 +566,71 @@ function prowl(t,L,Rg,A,B){
     ar.upper.getWorldPosition(_v);king.worldToLocal(_v);
     const r=ik2({y:_v.y,z:_v.z},{y:ground+fy+0.3,z:_v.z+1+fz},14,20,pitch,false);
     ar.upper.rotation.set(r[0],0,ar.side*-0.06);ar.fore.rotation.set(r[1],0,0);}
+}
+// ---------- the change, step by step (c: 0..1 over six seconds)
+function band(x,a,b,c,d){let k=x<a||x>d?0:x<b?(x-a)/(b-a):x<=c?1:1-(x-c)/(d-c);return k*k*(3-2*k)}
+function lr(o,x,y,z,k){o.rotation.x+=(x-o.rotation.x)*k;o.rotation.y+=(y-o.rotation.y)*k;o.rotation.z+=(z-o.rotation.z)*k}
+function meshesOf(p){return p.children.filter(c=>c.isMesh)}
+function transformReset(){TF=-1;king.visible=true;king.scale.setScalar(1);steve.visible=false;steve.position.set(30,0,0);for(const f of burnFl)f.visible=false;flashS.visible=false;shock.visible=false;
+  crown.visible=true;crown.scale.setScalar(1);for(const w of[wingL,wingR]){w.root.visible=true;w.root.scale.setScalar(1)}for(const p of tail)for(const m of meshesOf(p))m.visible=true;
+  sk.color.copy(sk0);sh.color.copy(sh0);pa.color.copy(pa0);for(const m of[sk,sh,pa])m.emissive&&m.emissive.setHex(0)}
+function transformPose(t,c){
+  TF=c;
+  // the man, burning: blackening, flames all over him, until the flash
+  const burning=c<0.29;steve.visible=burning;steve.position.set(0,0,0);
+  const ch=Math.min(1,c/0.27);
+  for(const[m,o]of[[sk,sk0],[sh,sh0],[pa,pa0]]){m.color.copy(o).lerp(new THREE.Color(0x1a0805),ch*0.9);m.emissive.setHex(0xff3a08);m.emissiveIntensity=ch*(0.4+Math.sin(t*17)*0.2)}
+  burnFl.forEach((f,i)=>{const u=f.userData;f.visible=burning&&c>0.02;const k=0.7+Math.sin(t*9+u.ph)*0.3;const sz=u.sz*(0.4+ch);f.position.set(u.x,u.y+((t*8+u.ph*5)%6),u.z);f.scale.set(sz*0.55*k,sz*k,1)});
+  // the flash
+  const fl=band(c,0.27,0.29,0.29,0.34);flashS.visible=fl>0;flashS.position.set(0,24,0);flashS.scale.setScalar(80*fl);flashS.material.opacity=fl;fireLight.intensity=1.4+fl*8;
+  // bone: from the flash on, at a man's size, growing (in agony) to its own
+  king.visible=c>=0.28;
+  const g=Math.max(0,Math.min(1,(c-0.36)/0.26)),ge=g<.5?2*g*g:1-Math.pow(-2*g+2,2)/2;
+  const pop=Math.min(1,Math.max(0,(c-0.28)/0.05));
+  king.scale.setScalar((0.56+0.44*ge)*(0.85+0.15*pop));
+  // the tail, a vertebra at a time; the crown catching; the wings tearing open
+  tail.forEach((p,i)=>{const on=c>0.45+i*0.008;for(const m of meshesOf(p))m.visible=on});
+  const cr=Math.max(0,Math.min(1,(c-0.55)/0.04));crown.visible=cr>0;crown.scale.setScalar(Math.max(0.001,cr));
+  const wg=Math.max(0,Math.min(1,(c-0.66)/0.06));for(const w of[wingL,wingR]){w.root.visible=wg>0;w.root.scale.setScalar(Math.max(0.001,wg))}
+  if(c>0.66){openNow=Math.max(openNow,wg)}else openNow=0;
+  // the body: agony, the breath, the roar
+  const pain=band(c,0.29,0.34,0.6,0.66),wind=band(c,0.6,0.68,0.76,0.8),roar=band(c,0.76,0.8,0.9,0.97);
+  const A=armL,B=armR;
+  if(pain>0){const j=Math.sin(t*23)*0.12+Math.sin(t*37)*0.06;
+    lr(spine,0.55+j*0.5,0,j*0.3,pain);lr(chest,0.25,j,0,pain);lr(neck,0.2,0,0,pain);lr(head,0.35+j,j*0.8,j*0.5,pain);
+    jaw.rotation.x+=(0.1+Math.max(0,Math.sin(t*9))*0.55-jaw.rotation.x)*pain;
+    lr(A.upper,-2.3+j,0.4,A.side*0.3,pain);lr(A.fore,-1.7,0,0,pain);lr(B.upper,-2.3-j,-0.4,B.side*0.3,pain);lr(B.fore,-1.7,0,0,pain);
+    for(const lg of[legL,legR]){lr(lg.thigh,-0.55,0,lg.side*0.12,pain);lr(lg.shin,0.95,0,0,pain);lr(lg.foot,-0.4,0,0,pain)}
+    king.position.y=-30-3*pain+Math.sin(t*41)*0.4*pain;king.position.x=Math.sin(t*33)*0.3*pain}
+  if(wind>0){lr(spine,-0.18,0,0,wind);lr(chest,-0.25,0,0,wind);lr(neck,-0.3,0,0,wind);lr(head,-0.55,0,0,wind);
+    jaw.rotation.x+=(0.75-jaw.rotation.x)*wind;
+    lr(A.upper,-0.3,0,A.side*1.35,wind);lr(A.fore,-0.9,0,0,wind);lr(B.upper,-0.3,0,B.side*1.35,wind);lr(B.fore,-0.9,0,0,wind);
+    for(const lg of[legL,legR]){lr(lg.thigh,-0.15,0,lg.side*0.28,wind);lr(lg.shin,0.3,0,0,wind);lr(lg.foot,-0.15,0,0,wind)}
+    RAISE=0.5*wind}
+  if(roar>0){const tr=Math.sin(t*31)*0.04;
+    lr(spine,0.35,0,0,roar);lr(chest,0.15+tr,0,0,roar);lr(neck,0.15,0,0,roar);lr(head,0.05+tr,tr,0,roar);
+    jaw.rotation.x+=(1.0-jaw.rotation.x)*roar;
+    lr(A.upper,-0.9,0,A.side*1.0,roar);lr(A.fore,-0.5,0,0,roar);lr(B.upper,-0.9,0,B.side*1.0,roar);lr(B.fore,-0.5,0,0,roar);
+    for(const lg of[legL,legR]){lr(lg.thigh,-0.35,0,lg.side*0.25,roar);lr(lg.shin,0.55,0,0,roar);lr(lg.foot,-0.2,0,0,roar)}
+    RAISE=Math.max(RAISE,0.2*roar)}
+  // the roar's shockwave, rolling out along the ground
+  const sw=c>0.8&&c<0.98?(c-0.8)/0.18:0;shock.visible=sw>0;shock.scale.setScalar(4+sw*120);shock.material.opacity=(1-sw)*0.9;
+}
+// ---------- the super jump: down on one knee, a fist on the ground, the wings raised high; then the launch, the wings
+// slamming down to drive it up, and the fall back (u: seconds into the loop)
+function superJump(t,u){
+  const A=armL,B=armR;
+  const ck=band(u,0,0.35,1.55,1.75);
+  lr(spine,0.75,0,0,ck);lr(chest,0.35,0,0,ck);lr(neck,-0.25,0,0,ck);lr(head,-0.15,0,0,ck);
+  lr(legR.thigh,-0.15,0,legR.side*0.05,ck);lr(legR.shin,1.95,0,0,ck);lr(legR.foot,0.9,0,0,ck);
+  lr(legL.thigh,-1.35,0,legL.side*0.1,ck);lr(legL.shin,1.45,0,0,ck);lr(legL.foot,-0.1,0,0,ck);
+  lr(B.upper,-0.55,0,B.side*0.15,ck);lr(B.fore,-0.15,0,0,ck);lr(A.upper,0.55,0,A.side*0.45,ck);lr(A.fore,-0.4,0,0,ck);
+  if(ck>0){GROUND=true;openNow+=(1-openNow)*0.2;RAISE=1.05*ck+Math.sin(t*13)*0.04*ck}
+  if(u>=1.6){const lt=Math.min(1,(u-1.6)/0.45);GROUND=false;
+    RAISE=lt<0.4?1.05-1.9*(lt/0.4):-0.85*(1-(lt-0.4)/0.6);openNow=1;
+    const up=u<2.4?(u-1.6)/0.8:1-(u-2.4)/0.8;rig.position.y=30+Math.sin(Math.max(0,Math.min(1,up))*Math.PI/2)*70;
+    for(const lg of[legL,legR]){lr(lg.thigh,0.1,0,0,1);lr(lg.shin,0.35,0,0,1);lr(lg.foot,0.3,0,0,1)}
+    lr(A.upper,-0.2,0,A.side*0.25,1);lr(B.upper,-2.9,0,-0.05,1)}
 }
 // one step of the pose, every frame
 function animate(t){
@@ -702,6 +772,10 @@ function frame(now){
   jaw.rotation.x=0.18+Math.max(0,Math.sin(t*0.9))*0.12;
   if(turning){const k=Math.sin(t*0.8);king.rotation.y=Math.sign(k)*Math.pow(Math.abs(k),0.4)*1.1}else king.rotation.y*=0.9;
   const spd=animate(t);
+  if(moveT0===null)moveT0=t;
+  RAISE=0;
+  if(move==='transform')transformPose(t,Math.min(1,((t-moveT0)%7.5)/6));else if(TF>=0)transformReset();
+  if(move==='superjump')superJump(t,((t-moveT0)%3.2));
   tailPhysics(t);
   if(GROUND){king.updateMatrixWorld(true);let low=1e9;const v=new THREE.Vector3();
     for(const lg of[legL,legR]){v.set(0,-2.4,1.5);lg.foot.localToWorld(v);low=Math.min(low,v.y);v.set(0,-2.4,6);lg.foot.localToWorld(v);low=Math.min(low,v.y)}
@@ -710,6 +784,7 @@ function frame(now){
   openNow+=((spread?1:0)-openNow)*0.04;
   if(WING){openNow+=(WING.o-openNow)*0.12;poseWing(wingL,openNow,WING.beat,WING.amp,WING.tilt,WING.fly);poseWing(wingR,openNow,WING.beat,WING.amp,WING.tilt,WING.fly)}
   else{const beat=flap&&spread?Math.sin(t*2.4):0;poseWing(wingL,openNow,beat);poseWing(wingR,openNow,beat)}
+  if(RAISE){wingL.upper.rotation.z+=wingL.side*RAISE;wingR.upper.rotation.z+=wingR.side*RAISE}
   for(const w of[wingL,wingR])w.flames.forEach((fl,i)=>{const k=0.6+Math.sin(t*8+i*1.7)*0.25+Math.sin(t*13+i)*0.1;fl.scale.set(2.6*k,4.2*k,1);fl.material.opacity=0.6+openNow*0.4});
   halo.rotation.y=t*1.5;diamond.rotation.y=Math.sin(t*0.8)*0.25;M.gem.emissiveIntensity=1+Math.sin(t*2.2)*0.25;halo.position.y=11+Math.sin(t*2)*0.6;
   for(const f of crownFire){const u=f.userData,k=0.75+Math.sin(t*9+u.ph)*0.2+Math.sin(t*15+u.ph*2)*0.08;f.scale.set(u.size*0.55*k,u.size*k,1);f.position.y=u.y+u.size*0.4*k}
