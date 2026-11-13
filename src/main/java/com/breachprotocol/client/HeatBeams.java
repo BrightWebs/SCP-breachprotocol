@@ -35,7 +35,6 @@ public final class HeatBeams {
         Minecraft mc = Minecraft.getInstance();
         if (mc.level == null) return;
         float pt = event.getPartialTick().getGameTimeDeltaPartialTick(false);
-        EyeGlowLayer.frame++;
         Vec3 cam = event.getCamera().getPosition();
         MultiBufferSource.BufferSource buf = mc.renderBuffers().bufferSource();
         VertexConsumer vc = buf.getBuffer(RenderType.lightning());
@@ -71,14 +70,11 @@ public final class HeatBeams {
             boolean king = FlightState.SKULL.containsKey(id) && com.breachprotocol.client.skull.SkullRenderer.form(p, pt) >= 0.5F;
             Vec3[] sock = king ? com.breachprotocol.client.skull.SkullRenderer.SOCKETS.get(id) : null;
             if (sock != null) { eyeL = sock[0]; eyeR = sock[1]; }
-            // a man's eyes, as the head drew them this frame (they lean and turn with it): the glow's already on the face
-            Vec3[] drawn = !king && !me && EyeGlowLayer.FRAME.getOrDefault(id, -1L) == EyeGlowLayer.frame - 1 ? EyeGlowLayer.EYES.get(id) : null;
-            if (drawn != null) { eyeL = drawn[0]; eyeR = drawn[1]; }
             float cr = 1F, cg = king ? 0.13F : 0.1F, cb = king ? 0.88F : 0.02F;      // the glow round it
             float kr = 1F, kg = king ? 0.5F : 0.55F, kb = king ? 1F : 0.35F;       // the core
             if (king && beaming == null) continue;
             if (beaming == null) {
-                if (!me && drawn == null) for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
+                if (!me) for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
                     glow(m, vc, ey, cam, 0.03F, 1F, 0.75F, 0.6F, 1F);
                     glow(m, vc, ey, cam, 0.07F, 1F, 0.12F, 0.05F, 0.5F * flick);
                 }
@@ -92,7 +88,7 @@ public final class HeatBeams {
                 if (hit.getType() != HitResult.Type.MISS) end = hit.getLocation();
             }
             float w = WIDTH[tier] * flick;
-            if (!me && !king && drawn == null) {
+            if (!me && !king) {
                 for (Vec3 ey : new Vec3[]{eyeL, eyeR}) {
                     glow(m, vc, ey, cam, king ? 0.06F : 0.03F, 1F, king ? 0.88F : 0.75F, king ? 1F : 0.6F, 1F);                        // the lit pixel
                     glow(m, vc, ey, cam, (king ? 0.16F : 0.11F) + tier * 0.02F, cr, cg, cb, 0.65F);    // its bloom
