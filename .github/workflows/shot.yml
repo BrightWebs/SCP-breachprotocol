@@ -13,7 +13,7 @@ jobs:
       - name: Shots
         run: |
           mkdir -p shots
-          for h in tf-0.1 tf-0.25 tf-0.42 tf-0.6 tf-0.75 tf-0.93 pose-hover-none; do
+          for h in pose-hover-none shot-1; do
             google-chrome --headless=new --no-sandbox --use-angle=swiftshader --enable-unsafe-swiftshader --window-size=1000,900 \
               --virtual-time-budget=6000 --screenshot=shots/$h.png "file://$PWD/preview/index.html#$h" || true
           done

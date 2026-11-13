@@ -387,7 +387,8 @@ function hoverStroke(ph){const u=((ph/(Math.PI*2))%1+1)%1;return u<0.4?Math.cos(
 // and lifting back, the forearm and hand trailing the stroke a little so it bends like a real wing pushing air
 function poseHoverWing(w,beat,t){
   const s=w.side;
-  w.root.rotation.set(0.1,s*0.18,0);
+  // the wings face down, their undersides to the ground, pressing the air down: flattest on the downstroke
+  w.root.rotation.set(1.0+0.15*Math.sin(t*3.4+1.2),s*0.18,0);
   const ua=-0.35+beat*0.75;                       // up high at the top of the stroke, well down at the bottom
   w.upper.rotation.z=s*ua;
   const lag=hoverStroke(t*3.4-0.5);               // the outer wing a moment behind
