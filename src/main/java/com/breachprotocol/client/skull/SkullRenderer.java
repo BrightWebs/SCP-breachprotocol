@@ -326,8 +326,9 @@ public final class SkullRenderer {
         // flying, it holds a steady line: the way it's heading, smoothed (not every twitch of the view)
         float flyBeat = 0;
         if (move == FLY) { flyBeat = flight(rig, p, dt, dx, dy, dz, pt, false); bodyYaw = rig.headS; }
-        else if (move == HOVER && !gui) hoverTurn(rig, bodyYaw, dt);
-        else if (!gui) { rig.bank *= Math.max(0, 1 - dt * 4); rig.turnS *= Math.max(0, 1 - dt * 4); }
+        else if (move == HOVER && !gui) hoverTurn(rig, bodyYaw, dt, h);
+        else if (!gui) { rig.bank *= Math.max(0, 1 - dt * 4); rig.turnS *= Math.max(0, 1 - dt * 4); rig.hoverInit = false; }
+        if (move != HOVER && !gui) rig.hoverInit = false;
         if (!gui) wingState(rig, p, move, dt, dy, h, grounded, real);
         else rig.flyInit = false;
         float headYaw = Mth.rotLerp(pt, p.yHeadRotO, p.yHeadRot);
@@ -982,14 +983,16 @@ public final class SkullRenderer {
     }
 
     /** Hovering: how fast it's turning, and the roll into it (as in flight, gentler). */
-    private static void hoverTurn(Rig rig, float yawDeg, float dt) {
+    private static void hoverTurn(Rig rig, float yawDeg, float dt, double h) {
         if (dt <= 0) return;
-        if (!rig.hoverInit) { rig.hoverYaw = yawDeg; rig.hoverInit = true; }
+        if (!rig.hoverInit) { rig.hoverYaw = yawDeg; rig.hoverInit = true; rig.turnS = 0; }
         float rate = Mth.wrapDegrees(yawDeg - rig.hoverYaw) * Mth.DEG_TO_RAD / dt;
         rig.hoverYaw = yawDeg;
+        // only a real turn on the move tips it over; standing still in the air (looking about) it stays level
+        if (h < 0.1) rate = 0;
         rig.turnS += (Mth.clamp(rate, -3, 3) - rig.turnS) * (1 - (float) Math.exp(-2.5 * dt));
         float tr = Math.abs(rig.turnS) < 0.35F ? 0 : rig.turnS - Math.copySign(0.35F, rig.turnS);
-        rig.bank += (Mth.clamp(tr * 0.3F, -0.45F, 0.45F) - rig.bank) * (1 - (float) Math.exp(-2.5 * dt));
+        rig.bank += (Mth.clamp(tr * 0.3F, -0.45F, 0.45F) - rig.bank) * (1 - (float) Math.exp(-(h < 0.1 ? 5 : 2.5) * dt));
     }
 
     /** The hover wing (see the preview): pitched to face down, then swung up and down about the body's line. */
