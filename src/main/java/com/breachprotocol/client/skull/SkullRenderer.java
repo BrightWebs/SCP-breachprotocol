@@ -821,10 +821,11 @@ public final class SkullRenderer {
         float b0 = Mth.sin(phase) * A, b1 = Mth.sin(phase - 0.6F) * A, b2 = Mth.sin(phase - 1.2F) * A;
         float flapY = fly ? b0 * 0.75F : 0, inPlane = fly ? 0 : 1;
         float o = open * (1 - 0.3F * Math.max(0, -b2) * Math.min(1, amp - 0.5F));
-        float ry = 1.35F - 1.2F * open - b0 * 0.18F * amp * open * inPlane + flapY + (fly ? 0.4F * open : 0);
+        // upright (hovering), the beat is up and down, pushing down on the air; only a touch of sweep
+        float ry = 1.35F - 1.2F * open - b0 * 0.04F * amp * open * inPlane + flapY + (fly ? 0.4F * open : 0);
         ry = soft(ry + up, 0.22F);
         w.root.rot(0.1 * open + 0.45 * (1 - open) + tilt, s * ry, -s * 0.12 * (1 - open));
-        float ua = -1.45F + 1.0F * open + b0 * 0.25F * open * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.2F * open : 0);
+        float ua = -1.45F + 1.0F * open + b0 * 0.38F * open * amp * inPlane + (inPlane > 0 && amp > 1.5F ? 0.3F * open : 0);
         if (open > 0.5F) ua = soft(ua, -0.7F);
         w.upper.rz = s * ua;
         float fr = 1.9F * o + 2.75F * (1 - o) + b1 * 0.1F * o - 0.55F * o;
