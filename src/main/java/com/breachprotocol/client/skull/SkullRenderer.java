@@ -642,12 +642,8 @@ public final class SkullRenderer {
             rootM.translate(0, p.getBbHeight() / 2F / S, 0).rotateZ(rig.bank).rotateX(rigTilt).translate(0, -30 + rigLiftPx, 0);
         } else if (move == HOVER) {
             // hovering, it rolls into a turn too, about its middle
-            // and it leans into its way like a body in flight: forward the faster it goes, nose-down when it comes
-            // down (head first, straight down when it drops straight down)
-            float want = (float) Mth.clamp(h * 1.6, 0, 1.25);
-            if (dy < -0.06) want += (float) Mth.clamp(Math.atan2(-dy, Math.max(0.05, h)), 0, 1.57) * (float) Mth.clamp(-dy * 3, 0, 1);
-            if (!gui) rig.hoverPitch += (Math.min(want, 2.9F) - rig.hoverPitch) * (1 - (float) Math.exp(-3 * dt));
-            rootM.translate(0, 30 + lift + rigLiftPx, 0).rotateZ(rig.bank).rotateX(rig.hoverPitch).translate(0, -30, 0);
+            // hovering it stays upright (diving head-first is for flight proper)
+            rootM.translate(0, 30 + lift + rigLiftPx, 0).rotateZ(rig.bank).translate(0, -30, 0);
         } else rootM.translate(0, lift + rigLiftPx - dropPx, 0);
         walk(m.root, rootM, mats);
         if (move == GALLOP || move == PROWL || move == CHARGE || sitK > 0.02F) {
