@@ -1029,19 +1029,16 @@ public final class SkullRenderer {
     private static void wingState(Rig rig, Player p, int move, float dt, double dy, double h, boolean grounded, boolean real) {
         boolean flying = move == FLY || move == HOVER;
         int want;
-        if (move == FLY) {
-            // flat out: it glides whenever it can. Into a turn it always glides (banked, one wing high); coming
-            // down, it glides; climbing, it beats. Holding a level line it glides a few seconds, gives a few
-            // strokes to keep its speed, and glides again
-            if (dt > 0) rig.levelT += dt;
-            boolean turning = Math.abs(rig.turnS) > 0.45F;
-            if (turning) { want = W_GLIDE; rig.levelT = 0; }
-            else if (dy > 0.06) want = W_LIFT;
-            else if (dy < -0.04) { want = W_GLIDE; rig.levelT = 0; }
-            else want = rig.levelT % 5.3F < 3.5F ? W_GLIDE : W_LIFT;
-        } else if (flying) {
-            // hovering: it beats to hold itself up; sinking or turning, it spreads and glides
-            want = dy < -0.03 || Math.abs(rig.turnS) > 0.45F ? W_GLIDE : W_LIFT;
+        if (flying) {
+            // in the air it beats, up and down, all the time. It glides only when it's moving and easing down, when
+            // it banks into a turn (flat out), or once it's held a straight line a while: then three seconds of
+            // glide, a few strong beats to keep going, and glide again
+            boolean moving = h > 0.15, turning = move == FLY && Math.abs(rig.turnS) > 0.45F;
+            if (dt > 0) { if (moving && Math.abs(dy) < 0.06 && !turning) rig.levelT += dt; else rig.levelT = 0; }
+            if (turning) want = W_GLIDE;
+            else if (moving && dy < -0.03 && dy > -0.4) want = W_GLIDE;
+            else if (rig.levelT > 3) want = (rig.levelT - 3) % 4.5F < 3 ? W_GLIDE : W_LIFT;
+            else want = W_LIFT;
         } else if (!grounded && move != CLIMB && dy < -0.05) want = groundNear(p) ? W_LAND : W_FALL;
         else want = W_IDLE;
         if (rig.wState < 0) { rig.wState = want; rig.wWant = want; params(rig, move, want, 0, rig.wNow); System.arraycopy(rig.wNow, 0, rig.wFrom, 0, 6); }
